@@ -6,6 +6,7 @@
     <meta name="color-scheme" content="light dark">
     <meta name="description" content="Learn and practise Russian with stories, sentence games and your vocabulary library.">
     <title>Russian Arcade{% if view == 'catalogue' %} · Components{% endif %}</title>
+    {% include '_favicon.html' %}
     {% for filename in assets.styles %}
     <link rel="stylesheet" href="{{ url_for('word_post.assets', filename=filename) }}">
     {% endfor %}

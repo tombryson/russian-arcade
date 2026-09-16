@@ -2,6 +2,7 @@
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark">
   <title>Russian Arcade · Our household</title>
+    {% include '_favicon.html' %}
   {% for filename in assets.styles %}<link rel="stylesheet" href="{{ url_for('word_post.assets', filename=filename) }}">{% endfor %}
   <link rel="stylesheet" href="/static/css/profile_skill_progress.css?v=1">
 </head>

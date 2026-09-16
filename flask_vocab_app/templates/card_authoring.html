@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="{{ ui_lang }}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>Edit flashcards · Russian Arcade</title>
+    {% include '_favicon.html' %}
 {% for filename in assets.styles %}<link rel="stylesheet" href="{{ url_for('word_post.assets', filename=filename) }}">{% endfor %}</head>
 <body><a class="skip-link" href="#main">Skip to cards</a>
 <header class="top"><a class="brand" href="/post/"><span class="mark" lang="ru" aria-hidden="true">Я</span><span><span class="brand-name">Russian Arcade</span><span class="origin">Learn and practise Russian</span></span></a><nav class="nav"><a href="/post/#flashcards">Flashcards</a><a href="/post/#generate">Generate cards</a><a href="/vocab">Vocabulary</a><a href="/">Anki tools</a></nav></header>
