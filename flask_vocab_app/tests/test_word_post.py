@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 import tempfile
 import unittest
+from flask.testing import FlaskClient
 
 from blueprints.word_post import build_assets, BuildUnavailable
 from tests.support import isolated_app
@@ -33,6 +34,21 @@ class WordPostTests(unittest.TestCase):
 
     def write_manifest(self):
         (self.dist / '.vite/manifest.json').write_text(json.dumps(self.manifest))
+
+    def test_brand_icons_load_without_a_profile_cookie_but_private_media_stays_protected(self):
+        # Browsers can request favicons separately from the page session.
+        for household in (False, True):
+            self.app.config.update(WORD_POST_HOUSEHOLD_ENABLED=household, SECRET_KEY='test-only-' * 4)
+            client = FlaskClient(self.app)
+            for filename, mimetypes in (('favicon.svg', ('image/svg+xml',)),
+                                       ('favicon.ico', ('image/x-icon', 'image/vnd.microsoft.icon')),
+                                       ('apple-touch-icon.png', ('image/png',))):
+                with client.get('/static/images/' + filename) as response:
+                    self.assertEqual(response.status_code, 200)
+                    self.assertIn(response.mimetype, mimetypes)
+                    self.assertNotIn('Set-Cookie', response.headers)
+            self.assertEqual(client.get('/static/media/private.mp3').status_code, 302)
+            self.assertEqual(client.get('/static/images/private.png').status_code, 302)
 
     def test_page_owns_its_document_and_assets_without_initializing_services(self):
         response = self.client.get('/post/', headers={'HX-Request': 'true'})

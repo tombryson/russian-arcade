@@ -85,7 +85,10 @@ def install_household_policy(app):
             role = 'public'
         if request.endpoint == 'static':
             filename = request.view_args.get('filename', '')
-            if filename.startswith(('css/','js/')) or filename == 'images/barsik-running-v1.webp':
+            if filename.startswith(('css/','js/')) or filename in {
+                'images/barsik-running-v1.webp', 'images/favicon.svg',
+                'images/favicon.ico', 'images/apple-touch-icon.png',
+            }:
                 role = 'public'
         # Unknown routes retain their normal 404/405 behavior without creating a session.
         if view is None:
