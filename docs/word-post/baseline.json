@@ -1,0 +1,427 @@
+{
+  "observed_on": "2026-09-08",
+  "description": "Read-only local baseline; source has pre-existing staged and unstaged changes. Git HEAD alone does not describe the working application.",
+  "git_head": "c3d93ba4d865b3b95513b5ddc0d9dd71f16a6b7f",
+  "tests": {
+    "command": "python -m unittest discover -s flask_vocab_app/tests -t flask_vocab_app -v",
+    "passed": 38,
+    "run_date": "2026-09-08",
+    "uses": "isolated temporary databases and blocked external sockets"
+  },
+  "database": {
+    "path": "flask_vocab_app/vocab.db",
+    "read_mode": "ro",
+    "table_counts": {
+      "words": 1233,
+      "forms": 16049,
+      "saved_stories": 8,
+      "writing_exercises": 2,
+      "lessons": 5,
+      "word_jumble_games": 6,
+      "sentences": 21,
+      "users": 1,
+      "anki_cards": 192,
+      "sync_runs": 0,
+      "reward_events": 21,
+      "schema_migrations": 3
+    },
+    "quick_check": "ok",
+    "foreign_key_violations": 0
+  },
+  "declared_route_count": 47,
+  "routes": [
+    {
+      "path": "/",
+      "methods": [
+        "GET"
+      ],
+      "source": "flask_vocab_app/blueprints/flashcards.py",
+      "line": 17
+    },
+    {
+      "path": "/add-vocab/<lemma>",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/blueprints/vocab.py",
+      "line": 555
+    },
+    {
+      "path": "/add_word",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/blueprints/vocab.py",
+      "line": 262
+    },
+    {
+      "path": "/apply_sanitization",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/blueprints/vocab.py",
+      "line": 468
+    },
+    {
+      "path": "/comprehension",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source": "flask_vocab_app/blueprints/comprehension.py",
+      "line": 31
+    },
+    {
+      "path": "/comprehension/answer",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/blueprints/comprehension.py",
+      "line": 128
+    },
+    {
+      "path": "/comprehension/generate_more_questions",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/blueprints/comprehension.py",
+      "line": 344
+    },
+    {
+      "path": "/comprehension/load/<story_id>",
+      "methods": [
+        "GET"
+      ],
+      "source": "flask_vocab_app/blueprints/comprehension.py",
+      "line": 296
+    },
+    {
+      "path": "/comprehension/save",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/blueprints/comprehension.py",
+      "line": 252
+    },
+    {
+      "path": "/delete_word",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/blueprints/vocab.py",
+      "line": 352
+    },
+    {
+      "path": "/edit_word",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/blueprints/vocab.py",
+      "line": 331
+    },
+    {
+      "path": "/generate",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/blueprints/flashcards.py",
+      "line": 35
+    },
+    {
+      "path": "/generate_word_forms",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/blueprints/flashcards.py",
+      "line": 101
+    },
+    {
+      "path": "/lessons",
+      "methods": [
+        "GET"
+      ],
+      "source": "flask_vocab_app/app.py",
+      "line": 280
+    },
+    {
+      "path": "/lessons/create",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/app.py",
+      "line": 286
+    },
+    {
+      "path": "/lessons/generate/<lesson_id>",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/app.py",
+      "line": 318
+    },
+    {
+      "path": "/lessons/load/<lesson_id>",
+      "methods": [
+        "GET"
+      ],
+      "source": "flask_vocab_app/app.py",
+      "line": 305
+    },
+    {
+      "path": "/lessons/mark/<lesson_id>",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/app.py",
+      "line": 331
+    },
+    {
+      "path": "/metrics",
+      "methods": [
+        "GET"
+      ],
+      "source": "flask_vocab_app/blueprints/vocab.py",
+      "line": 88
+    },
+    {
+      "path": "/review_cards",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/blueprints/flashcards.py",
+      "line": 137
+    },
+    {
+      "path": "/sanitize_vocab",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/blueprints/vocab.py",
+      "line": 443
+    },
+    {
+      "path": "/sentence/add",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/blueprints/sentences.py",
+      "line": 233
+    },
+    {
+      "path": "/sentence/assess",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/blueprints/sentences.py",
+      "line": 41
+    },
+    {
+      "path": "/sentence/generate",
+      "methods": [
+        "GET"
+      ],
+      "source": "flask_vocab_app/blueprints/sentences.py",
+      "line": 28
+    },
+    {
+      "path": "/sentence/save",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/blueprints/sentences.py",
+      "line": 177
+    },
+    {
+      "path": "/sentences",
+      "methods": [
+        "GET"
+      ],
+      "source": "flask_vocab_app/blueprints/sentences.py",
+      "line": 18
+    },
+    {
+      "path": "/sentences/saved",
+      "methods": [
+        "GET"
+      ],
+      "source": "flask_vocab_app/blueprints/sentences.py",
+      "line": 334
+    },
+    {
+      "path": "/sentences/saved/<sentence_id>",
+      "methods": [
+        "GET"
+      ],
+      "source": "flask_vocab_app/blueprints/sentences.py",
+      "line": 283
+    },
+    {
+      "path": "/static/media/<path:filename>",
+      "methods": [
+        "GET"
+      ],
+      "source": "flask_vocab_app/app.py",
+      "line": 75
+    },
+    {
+      "path": "/static/uploads/<path:filename>",
+      "methods": [
+        "GET"
+      ],
+      "source": "flask_vocab_app/app.py",
+      "line": 79
+    },
+    {
+      "path": "/sync",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/blueprints/vocab.py",
+      "line": 391
+    },
+    {
+      "path": "/sync/history",
+      "methods": [
+        "GET"
+      ],
+      "source": "flask_vocab_app/blueprints/vocab.py",
+      "line": 414
+    },
+    {
+      "path": "/sync/preview",
+      "methods": [
+        "GET"
+      ],
+      "source": "flask_vocab_app/blueprints/vocab.py",
+      "line": 372
+    },
+    {
+      "path": "/sync_vocab",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source": "flask_vocab_app/blueprints/vocab.py",
+      "line": 420
+    },
+    {
+      "path": "/ui-language",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/app.py",
+      "line": 67
+    },
+    {
+      "path": "/user/stats",
+      "methods": [
+        "GET"
+      ],
+      "source": "flask_vocab_app/blueprints/user.py",
+      "line": 16
+    },
+    {
+      "path": "/vocab",
+      "methods": [
+        "GET"
+      ],
+      "source": "flask_vocab_app/blueprints/vocab.py",
+      "line": 149
+    },
+    {
+      "path": "/word-details/<lemma>",
+      "methods": [
+        "GET"
+      ],
+      "source": "flask_vocab_app/blueprints/vocab.py",
+      "line": 523
+    },
+    {
+      "path": "/word_jumble",
+      "methods": [
+        "GET"
+      ],
+      "source": "flask_vocab_app/app.py",
+      "line": 352
+    },
+    {
+      "path": "/word_jumble/create",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/app.py",
+      "line": 359
+    },
+    {
+      "path": "/word_jumble/load/<game_id>",
+      "methods": [
+        "GET"
+      ],
+      "source": "flask_vocab_app/app.py",
+      "line": 371
+    },
+    {
+      "path": "/word_jumble/mark/<game_id>",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/app.py",
+      "line": 384
+    },
+    {
+      "path": "/writing",
+      "methods": [
+        "GET"
+      ],
+      "source": "flask_vocab_app/app.py",
+      "line": 134
+    },
+    {
+      "path": "/writing/assess",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/app.py",
+      "line": 151
+    },
+    {
+      "path": "/writing/generate",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/app.py",
+      "line": 139
+    },
+    {
+      "path": "/writing/load/<int:exercise_id>",
+      "methods": [
+        "GET"
+      ],
+      "source": "flask_vocab_app/app.py",
+      "line": 269
+    },
+    {
+      "path": "/writing/save",
+      "methods": [
+        "POST"
+      ],
+      "source": "flask_vocab_app/app.py",
+      "line": 208
+    }
+  ],
+  "source_sha256": {
+    "flask_vocab_app/app.py": "899e5be7ecb30e465e3835f4f46bba902e0a57dd2ec619cf2aaa8d487e59eb4d",
+    "flask_vocab_app/blueprints/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "flask_vocab_app/blueprints/comprehension.py": "8b5ca4fc79c05cdf82f964c8b1a9ed8c05113e3c8d5ba5b3467aafb3052f5a47",
+    "flask_vocab_app/blueprints/flashcards.py": "68b2122cc86712cbfe23eff68202fcac723cfe603c685021c3a9ecf3a77e41e3",
+    "flask_vocab_app/blueprints/sentences.py": "732405d256195dde8b280ac0c042fa4b6c7aa3a461c39c7d52c04a09c41f1559",
+    "flask_vocab_app/blueprints/user.py": "1dc3a81f2aa3c95d8873e5ba7805988fa7f728e181ca98fdf8d4103a61563df0",
+    "flask_vocab_app/blueprints/vocab.py": "24042cc4943578e24c3c34e4026478b4ec39690f5d6194ec43e5fdae2b8488fc",
+    "flask_vocab_app/static/js/app_shell.js": "c21177ce278f495aece5318880eecd2fa02480e6c061b0f2ee4e67a27c4e2f87",
+    "flask_vocab_app/static/css/style.css": "c4d3f808bd70bc5c67c6285f6d2f8c50610305a3c65bd4c644d6d9ff56fb06b6",
+    "flask_vocab_app/migrations/001_baseline.sql": "044efb9845ec190a3ee349d6984da3999834f36220ef8afdb96be485b667ed1b",
+    "flask_vocab_app/migrations/002_sync_runs.sql": "81bb9c8e19007ec19bbecd956a75b61c13aea283f505e65413bb6d8396e1d651",
+    "flask_vocab_app/migrations/003_reward_events.sql": "79d6767c950740e4ec150813d6b63be090f6a4d0368819b21e15d95d0a218ff4",
+    "flask_vocab_app/requirements.lock": "d2cf8c7619db6d7c1b61f20ba82ea61996f4a4abcf84e60fab8e15316464b9d6"
+  }
+}

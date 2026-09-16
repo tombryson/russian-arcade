@@ -1,0 +1,31 @@
+import 'vite/modulepreload-polyfill';
+import '@fontsource/golos-text/latin-400.css';
+import '@fontsource/golos-text/latin-500.css';
+import '@fontsource/golos-text/cyrillic-400.css';
+import '@fontsource/golos-text/cyrillic-500.css';
+import '@fontsource/unbounded/latin-500.css';
+import '@fontsource/unbounded/cyrillic-500.css';
+import './styles/tokens.generated.css';
+import './styles/word-post.css';
+import './styles/flashcards.css';
+import './styles/activity-workspace.css';
+import { render, type ComponentChild } from 'preact';
+import { App } from './App';
+import { bindUserSession } from './learning-api';
+
+const root = document.getElementById('word-post');
+if (root) {
+  const mount = (view: ComponentChild) => {
+    root.replaceChildren();
+    render(view, root);
+  };
+  if (root.dataset.view === 'catalogue') {
+    void import('./Catalogue').then(({ Catalogue }) => mount(<Catalogue />)).catch(() => {
+      mount(<main class="page"><h1>The component guide could not open.</h1><p>Try reloading, or <a href="/post/">open Russian Arcade</a>.</p></main>);
+    });
+  } else {
+    const profile=JSON.parse(root.dataset.profile ?? 'null');
+    bindUserSession(root.dataset.household === 'true' ? undefined : profile?.id ?? '',root.dataset.csrf ?? '');
+    mount(<App initialOnboarding={JSON.parse(root.dataset.onboarding ?? 'null') ?? undefined} initialProfile={JSON.parse(root.dataset.profile ?? 'null')} householdEnabled={root.dataset.household === 'true'} nativeEnabled={root.dataset.native !== 'false'} language={root.dataset.language === 'ru' ? 'ru' : 'en'} csrfToken={root.dataset.csrf ?? ''} navigation={JSON.parse(root.dataset.navigation ?? 'null')} />);
+  }
+}

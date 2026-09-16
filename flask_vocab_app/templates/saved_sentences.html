@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% set page_title = ui_t('sentences.saved_title') %}
+{% block main_content %}
+<main class="main-content" id="mainContent" data-page="sentences_saved">
+  <div class="sentence-page translation-page">
+    <header class="sentence-heading"><div><p class="sentence-eyebrow">{{ ui_t('translation.library_eyebrow') }}</p><h1 id="sentence-page-title" tabindex="-1">{{ ui_t('sentences.saved_title') }}</h1><p>{{ ui_t('translation.library_help') }}</p></div><a class="sentence-text-link" href="/sentences">{{ ui_t('sentences.back') }} <span aria-hidden="true">↗</span></a></header>
+    {% if error %}<p class="alert alert-warning" role="alert">{{ error }}</p>{% endif %}
+    <details class="sentence-library translation-create" {% if add_open %}open{% endif %}><summary><span>{{ ui_t('sentences.add_new') }}</span><span class="sentence-disclosure-icon" aria-hidden="true">+</span></summary>
+      <form action="/sentence/add" method="post" data-translation-prepare data-ready="{{ ui_t('translation.prepared_link') }}" data-pending="{{ ui_t('translation.adding') }}" data-error="{{ ui_t('translation.add_failed') }}">
+        <p class="sentence-muted">{{ ui_t('translation.add_help') }}</p>
+        <label for="add-russian">{{ ui_t('sentences.russian_sentence') }}</label><textarea name="sentence" id="add-russian" class="form-control" lang="ru" rows="2" required maxlength="1000">{{ added_russian|default('') }}</textarea>
+        <label for="add-english">{{ ui_t('translation.add_english') }}</label><textarea name="english" id="add-english" class="form-control" lang="en" rows="2" maxlength="1000">{{ added_english|default('') }}</textarea>
+        <div class="translation-settings"><div><label for="add-topic">{{ ui_t('sentences.topic') }}</label><select name="topic" id="add-topic" class="form-select"><option value="general">{{ ui_t('topic.generic') }}</option>{% for topic in topics %}<option value="{{ topic.value }}">{{ topic.label }}</option>{% endfor %}</select></div><div><label for="add-level">{{ ui_t('translation.level') }}</label><select id="add-level" name="difficulty" class="form-select">{% for level in range(1,6) %}<option value="{{ level }}">{{ ui_t('translation.level_' + level|string) }}</option>{% endfor %}</select></div></div>
+        <button class="btn btn-primary" type="submit">{{ ui_t('sentences.save') }}</button><p data-prepare-status role="status" aria-live="polite"></p>
+      </form>
+    </details>
+    <form class="translation-filter" action="/sentences/saved" method="get"><label for="library-topic">{{ ui_t('sentences.topic') }}</label><select class="form-select" id="library-topic" name="topic"><option value="">{{ ui_t('translation.all_topics') }}</option>{% for topic in topics %}<option value="{{ topic.value }}" {% if selected_topic == topic.value %}selected{% endif %}>{{ topic.label }}</option>{% endfor %}</select><button class="btn btn-outline-secondary" type="submit">{{ ui_t('translation.filter') }}</button></form>
+    <div class="translation-saved-list">{% for item in sentences %}<article class="sentence-paper translation-saved-item"><div><p class="translation-saved-english" lang="en">{{ item.english }}</p><p class="sentence-muted">{{ item.level_label }} · {{ item.topic_label }}</p><details class="sentence-suggestion"><summary>{{ ui_t('translation.reference') }}</summary><p lang="ru">{{ item.sentence }}</p>{% if item.audio_url %}{% with audio_url=item.audio_url %}{% include '_translation_audio.html' %}{% endwith %}{% endif %}</details></div><a class="btn btn-primary" href="/sentences/practice/{{ item.id }}">{{ ui_t('translation.practise') }}</a></article>{% else %}<p class="sentence-paper">{{ ui_t('translation.no_matches') }}</p>{% endfor %}</div>
+  </div>
+</main>
+{% endblock %}

@@ -1,0 +1,97 @@
+import sqlite3
+import logging
+import json
+
+db_path = "vocab.db"  # Adjust if needed
+logger = logging.getLogger('SanitationScript')
+logging.basicConfig(level=logging.DEBUG)
+
+def sanitize_forms():
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row  # Return dictionaries
+    cursor = conn.cursor()
+
+    # Verify column names
+    cursor.execute("PRAGMA table_info(words)")
+    word_columns = [col[1] for col in cursor.fetchall()]
+    cursor.execute("PRAGMA table_info(forms)")
+    form_columns = [col[1] for col in cursor.fetchall()]
+    if 'lemma_difficulty' not in word_columns or 'form_difficulty' not in form_columns:
+        logger.error("Database schema mismatch: Expected lemma_difficulty in words and form_difficulty in forms")
+        conn.close()
+        return
+
+    # Update form_difficulty for all forms by looping
+    try:
+        cursor.execute("""
+            SELECT f.id, f.word_id, f.tags
+            FROM forms f
+        """)  # Update all forms
+        forms = cursor.fetchall()
+
+        updated_count = 0
+        for form in forms:
+            form_id = form['id']
+            word_id = form['word_id']
+            tags_json = form['tags']
+            try:
+                tags = json.loads(tags_json) if tags_json else {}
+                modifier = 0
+                if 'pos' in tags and tags['pos'] in ('participle', 'PRTF', 'PRTS', 'GRND'):
+                    modifier += 2
+                if 'number' in tags and tags['number'] == 'plur':
+                    modifier += 1
+
+                # Fetch lemma_difficulty
+                cursor.execute(
+                    "SELECT lemma_difficulty FROM words WHERE id = ?",
+                    (word_id,)
+                )
+                lemma_difficulty = cursor.fetchone()['lemma_difficulty']
+                # Calculate new form_difficulty as the sum
+                new_form_difficulty = lemma_difficulty + modifier
+
+                # Force update to the new sum
+                cursor.execute(
+                    "UPDATE forms SET form_difficulty = ? WHERE id = ?",
+                    (new_form_difficulty, form_id)
+                )
+                updated_count += 1
+                logger.debug(f"Updated form_id={form_id} with form_difficulty={new_form_difficulty}, tags={tags_json}")
+
+                # Log the original lemma_difficulty
+                logger.debug(f"Form_id={form_id} original lemma_difficulty={lemma_difficulty}")
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid JSON in tags for form_id={form_id}: {str(e)}")
+                continue
+            except Exception as e:
+                logger.error(f"Unexpected error processing form_id={form_id}: {str(e)}")
+                continue
+
+        conn.commit()
+        logger.info(f"Sanitation completed. Updated {updated_count} forms with new form_difficulty (sum of lemma_difficulty and modifier)")
+
+        # Verify the update
+        cursor.execute("SELECT COUNT(*) FROM forms WHERE form_difficulty > 0")
+        count_modified = cursor.fetchone()[0]
+        logger.info(f"Number of forms with modified difficulty: {count_modified}")
+
+        # Log a sample of updated forms for debugging
+        cursor.execute("""
+            SELECT form, form_difficulty, tags
+            FROM forms
+            WHERE form_difficulty > 0
+            ORDER BY form_difficulty DESC
+            LIMIT 20
+        """)
+        samples = cursor.fetchall()
+        for sample in samples:
+            logger.debug(f"Sample: form={sample['form']}, form_difficulty={sample['form_difficulty']}, tags={sample['tags']}")
+    except sqlite3.Error as e:
+        logger.error(f"Failed to sanitize forms: {str(e)}")
+        conn.rollback()
+    finally:
+        conn.close()
+
+if __name__ == "__main__":
+    sanitize_forms()

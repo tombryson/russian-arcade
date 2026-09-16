@@ -1,0 +1,9 @@
+{% if onboarding_state and onboarding_state.progress_introduced %}
+<div class="skill-rail is-unavailable" data-skill-rail data-language="{{ ui_lang | default('en') }}">
+  <a class="skill-rail-link" href="{{ '/post/household#skill-progress' if household_enabled else '/post/profiles#skill-progress' }}" hx-boost="false" aria-label="{{ 'Загружаем прогресс навыков. Открыть профиль и прогресс навыков' if ui_lang == 'ru' else 'Loading skill progress. View your profile and skill progress' }}">
+    <span class="skill-rail-track" aria-hidden="true"><span class="skill-rail-fill"></span></span>
+    <span class="skill-rail-runner" aria-hidden="true" hidden><img src="/static/images/barsik-running-v1.webp" alt="" width="46" height="34" /></span>
+    <span class="sr-only" data-skill-bar role="progressbar" aria-label="{{ 'Прогресс на этом этапе навыка' if ui_lang == 'ru' else 'Progress through this skill stage' }}" aria-valuemin="0" aria-valuemax="100" hidden></span>
+  </a>
+</div>
+{% endif %}

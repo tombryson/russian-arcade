@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% set page_title = ui_t('comprehension.title') %}
+
+{% block main_content %}
+<main class="main-content" id="mainContent" data-page="comprehension">
+    <div class="reading-workspace" data-leave-message="{{ ui_t('comprehension.leave_draft') }}" hx-sync="closest .reading-workspace:drop">
+        <header class="reading-intro">
+            <h1>{{ ui_t('comprehension.title') }}</h1>
+            <p>{{ ui_t('comprehension.intro') }}</p>
+        </header>
+        <details id="saved-stories" class="reading-disclosure" {% if not story %}open{% endif %}>
+            <summary>{{ ui_t('comprehension.saved') }} <span class="reading-count">{{ saved_stories|length }}</span></summary>
+            {% if saved_stories %}
+            <ul class="reading-library">
+                {% for saved in saved_stories %}
+                <li>
+                    <a href="/comprehension/load/{{ saved.id }}"
+                       hx-get="/comprehension/load/{{ saved.id }}" hx-target="#mainContent"
+                       hx-swap="outerHTML show:top" hx-push-url="true"
+                       {% if story and story.id == saved.id %}aria-current="page"{% endif %}>
+                        <span class="reading-story-title" lang="{{ saved.display_title_lang if saved.display_title else ui_lang }}">{{ saved.display_title or ui_t('comprehension.untitled') }}</span>
+                        <span class="reading-meta">
+                            {% if saved.level_key %}<span>{{ ui_t(saved.level_key) }}</span>{% endif %}
+                            {% if saved.display_topic %}<span>{{ saved.display_topic }}</span>{% endif %}
+                            {% if saved.question_count is not none %}<span>{{ ui_t('comprehension.question_count') }}: {{ saved.question_count }}</span>{% endif %}
+                        </span>
+                        {% if story and story.id == saved.id %}<span class="reading-current">{{ ui_t('comprehension.current') }}</span>{% endif %}
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="reading-empty">{{ ui_t('comprehension.none_saved') }}</p>
+            {% endif %}
+        </details>
+        <details id="new-story" class="reading-disclosure comprehension-panel" {% if not story and not saved_stories %}open{% endif %}>
+            <summary>{{ ui_t('comprehension.create') }}</summary>
+            <p>{{ ui_t('comprehension.create_help') }}</p>
+                <form
+                    id="comprehension-form"
+                    action="/comprehension" method="post"
+                    hx-post="/comprehension"
+                    hx-target="#comprehension-content"
+                    hx-swap="innerHTML"
+                >
+                    <div class="mb-3">
+                        <label for="topic" class="form-label">{{ ui_t('comprehension.topic') }}</label>
+                        <select id="topic" name="topic" class="form-select">
+                            <option value="any">{{ ui_t('comprehension.any_topic') }}</option>
+                            {% for topic in topics %}
+                            <option value="{{ topic }}">{{ topic }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="difficulty" class="form-label">{{ ui_t('comprehension.level') }}</label>
+                        <select
+                            id="difficulty"
+                            name="difficulty"
+                            class="form-select"
+                        >
+                            <option value="beginner">{{ ui_t('comprehension.beginner') }}</option>
+                            <option value="intermediate">{{ ui_t('comprehension.intermediate') }}</option>
+                            <option value="advanced">{{ ui_t('comprehension.advanced') }}</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="custom_story" class="form-label">{{ ui_t('comprehension.custom_story') }}</label>
+                        <textarea
+                            id="custom_story"
+                            name="custom_story"
+                            class="form-control"
+                            rows="5"
+                            placeholder="{{ ui_t('comprehension.custom_placeholder') }}"
+                        ></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        {{ ui_t('comprehension.create') }}
+                    </button>
+                </form>
+        </details>
+        <div id="reading-action-feedback" role="status"></div>
+        <div id="comprehension-content" class="reading-active">
+            {% if story or error %}{% include '_comprehension_content.html' %}{% endif %}
+        </div>
+    </div>
+</main>
+{% endblock %}

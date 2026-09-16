@@ -1,0 +1,134 @@
+import {readFileSync} from 'node:fs';
+import {JSDOM} from 'jsdom';
+import {afterEach,describe,expect,it,vi} from 'vitest';
+import {waitFor} from '@testing-library/preact';
+const script=readFileSync('../static/js/progression.js','utf8');
+const template=readFileSync('../templates/_skill_progress.html','utf8');
+let dom;
+afterEach(()=>dom?.window.close());
+const skill=(patch={})=>({id:'reading',label:'Reading',label_ru:'Чтение',status:'provisional',rating:1040,stage:1,stage_end:1200,progress:.2,observations:3,points_to_next:160,...patch});
+const data=(patch={})=>({profile_id:'personal',balance:42,skill:{status:'provisional',policy_version:'practice-elo-v1',active_skill:'reading',skills:[skill()]},...patch});
+const rated=(patch={},extra={})=>data({skill:{status:'provisional',policy_version:'practice-elo-v1',active_skill:'reading',skills:[skill(patch)]},...extra});
+async function setup(initial=data(),{household=false,language='en'}={}) {
+  const markup=template.replace(/\{%[\s\S]*?%\}/g,'').replace(/\{\{[\s\S]*?\}\}/g,expression=>expression.includes('household_enabled') ? household ? '/post/household#skill-progress' : '/post/profiles#skill-progress' : language);
+  dom=new JSDOM(`<header class="arcade-header"><a data-progression-badge data-language="${language}"><strong data-progression-balance>—</strong></a>${markup}</header><textarea aria-label="Draft">Я читаю.</textarea>`,{url:'http://localhost/writing',runScripts:'outside-only'});
+  const state={data:initial,fail:false,status:503};
+  const savedResponse={ok:true,json:async()=>({saved:true})};
+  const fetch=vi.fn(async(url)=>url==='/api/v1/progression' ? {ok:!state.fail,status:state.fail ? state.status : 200,json:async()=>state.data} : savedResponse);
+  dom.window.fetch=fetch;dom.window.Request=class Request {};
+  dom.window.setInterval=()=>0;
+  dom.window.eval(script);
+  const document=dom.window.document;
+  const rail=document.querySelector('[data-skill-rail]');
+  await waitFor(()=>expect(rail.style.getPropertyValue('--skill-progress')).not.toBe(''));
+  async function refresh() {
+    const requests=fetch.mock.calls.filter(([url])=>url==='/api/v1/progression').length;
+    const returned=await dom.window.fetch('/save-answer',{method:'POST',body:'original'});
+    await waitFor(()=>expect(fetch.mock.calls.filter(([url])=>url==='/api/v1/progression')).toHaveLength(requests+1));
+    return returned;
+  }
+  return {state,fetch,savedResponse,document,rail,link:rail.querySelector('.skill-rail-link'),refresh};
+}
+
+describe('Shared progress in existing activities',()=>{
+  it.each([false,true])('links the uncluttered rail to the profile skill section (household=%s)',async household=>{
+    const {rail,link}=await setup(data(),{household});
+    expect(rail.tagName).toBe('DIV');expect(link.tagName).toBe('A');
+    expect(link.getAttribute('href')).toBe(household ? '/post/household#skill-progress' : '/post/profiles#skill-progress');
+    expect(link.getAttribute('hx-boost')).toBe('false');
+    expect(link.getAttribute('aria-label')).toBe('Reading · Stage 1. 1,040 provisional Elo; next stage at 1,200. View your profile and skill progress');
+    expect(rail.textContent.trim()).toBe('');
+    expect(rail.querySelector('summary,details,.skill-rail-caption,.skill-progress-panel,[data-skill-content]')).toBeNull();
+    expect(rail.getAttribute('open')).toBeNull();
+    expect(rail.style.getPropertyValue('--skill-progress')).toBe('0.2');
+    expect(rail.querySelector('[data-skill-bar]').getAttribute('aria-valuenow')).toBe('20');
+  });
+
+  it('updates after a saved answer without changing its response, activity draft or focused field',async()=>{
+    const {state,document,rail,link,savedResponse,refresh}=await setup();
+    expect(document.querySelector('[data-progression-balance]').textContent).toBe('42');
+    const draft=document.querySelector('textarea');draft.focus();draft.setSelectionRange(2,5);
+    state.data=rated({rating:1050,progress:.25},{balance:45});
+    expect(await refresh()).toBe(savedResponse);
+    expect(document.querySelector('[data-progression-balance]').textContent).toBe('45');
+    expect(draft.value).toBe('Я читаю.');expect(document.activeElement).toBe(draft);
+    expect([draft.selectionStart,draft.selectionEnd]).toEqual([2,5]);
+    expect(rail.style.getPropertyValue('--skill-progress')).toBe('0.25');
+    expect(rail.querySelector('[data-skill-bar]').getAttribute('aria-valuenow')).toBe('25');
+    expect(link.getAttribute('aria-label')).toContain('1,050 provisional Elo');
+    expect(rail.classList.contains('is-moving')).toBe(true);
+    document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape'}));
+    expect(document.activeElement).toBe(draft);
+  });
+
+  it('shows an unmeasured start without empty-state copy or a made-up rating',async()=>{
+    const {document,rail,link}=await setup(rated({rating:null,observations:0,progress:0}));
+    expect(link.getAttribute('aria-label')).toContain('no checked activities yet');
+    expect(link.getAttribute('aria-label')).not.toContain('1,000');
+    expect(rail.style.getPropertyValue('--skill-progress')).toBe('0');
+    expect(document.querySelector('[data-skill-bar]').hidden).toBe(true);
+    expect(document.querySelector('.skill-rail-runner').hidden).toBe(false);
+    expect(rail.textContent.trim()).toBe('');
+    expect(rail.innerHTML).not.toContain('Getting started');
+  });
+
+  it.each([[-.2,'0'],[1.2,'1'],[Number.NaN,'0']])('bounds bar progress %s to %s',async(progress,expected)=>{
+    const {rail}=await setup(rated({progress}));
+    expect(rail.style.getPropertyValue('--skill-progress')).toBe(expected);
+    expect(rail.querySelector('[data-skill-bar]').getAttribute('aria-valuenow')).toBe(String(Number(expected)*100));
+  });
+
+  it('keeps saved progress on a temporary failure but clears it when the session expires',async()=>{
+    const {state,document,rail,link,refresh}=await setup();
+    state.fail=true;
+    await refresh();
+    expect(link.getAttribute('aria-label')).toContain('1,040 provisional Elo');
+    expect(link.getAttribute('aria-label')).toContain('Showing your last saved progress');
+    expect(rail.style.getPropertyValue('--skill-progress')).toBe('0.2');
+    expect(rail.querySelector('.skill-rail-runner').hidden).toBe(false);
+    state.status=403;
+    await refresh();
+    expect(link.getAttribute('aria-label')).toContain('Skill progress unavailable');
+    expect(link.getAttribute('aria-label')).not.toContain('1,040');
+    expect(rail.style.getPropertyValue('--skill-progress')).toBe('0');
+    expect(rail.querySelector('.skill-rail-runner').hidden).toBe(true);
+    expect(rail.querySelector('[data-skill-bar]').hasAttribute('aria-valuenow')).toBe(false);
+    expect(document.querySelector('[data-progression-balance]').textContent).toBe('—');
+    expect(rail.classList.contains('is-moving')).toBe(false);
+  });
+
+  it('clears stale progress on an explicit profile-change response',async()=>{
+    const {state,rail,link,refresh}=await setup();
+    state.fail=true;state.status=409;state.data={error:{code:'profile_changed'}};
+    await refresh();
+    expect(link.getAttribute('aria-label')).toContain('unavailable');
+    expect(rail.style.getPropertyValue('--skill-progress')).toBe('0');
+    expect(rail.querySelector('.skill-rail-runner').hidden).toBe(true);
+  });
+
+  it.each([
+    ['profile',rated({rating:1050,progress:.25},{profile_id:'different'})],
+    ['policy',data({skill:{status:'provisional',policy_version:'practice-elo-v2',active_skill:'reading',skills:[skill({rating:1050,progress:.25})]}})],
+    ['skill',data({skill:{status:'provisional',policy_version:'practice-elo-v1',active_skill:'writing',skills:[skill({id:'writing',label:'Writing',rating:1050,progress:.25})]}})],
+    ['stage',rated({rating:1205,stage:2,stage_end:1400,progress:.025})],
+    ['lower rating',rated({rating:1020,progress:.1})],
+  ])('does not animate a %s change as earned progress',async(_change,next)=>{
+    const {state,rail,refresh}=await setup();state.data=next;await refresh();
+    expect(rail.style.getPropertyValue('--skill-progress')).toBe(String(next.skill.skills[0].progress));
+    expect(rail.classList.contains('is-moving')).toBe(false);
+  });
+
+  it('sets skill names as accessible text rather than executable markup',async()=>{
+    const {link,rail}=await setup(rated({label:'<img src=x onerror=alert(1)>'}));
+    expect(link.getAttribute('aria-label')).toContain('<img src=x onerror=alert(1)>');
+    expect(rail.querySelectorAll('img')).toHaveLength(1);
+    expect(rail.querySelector('img').getAttribute('src')).toBe('/static/images/barsik-running-v1.webp');
+  });
+
+  it('provides the rating and profile destination in Russian',async()=>{
+    const {link}=await setup(data(),{language:'ru'});
+    expect(link.getAttribute('aria-label')).toContain('Чтение · Этап 1');
+    expect(link.getAttribute('aria-label')).toContain('предварительный рейтинг Эло');
+    expect(link.getAttribute('aria-label')).toContain('Открыть профиль и прогресс навыков');
+  });
+});

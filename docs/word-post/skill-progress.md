@@ -1,0 +1,79 @@
+# The header progress line
+
+Implemented 15 September 2026. This extends [levels and progression](levels-and-progression.md) with a visible, provisional practice rating. It does not revive the old additive `users.elo_rating`.
+
+## Experience
+
+A thin line spans the bottom of the sticky header in both the main app and the older activity pages. A small running Barsik sits at its leading edge. The header contains no visible caption or dropdown card. Selecting Barsik or the line opens **Skill progress** in the selected learner's profile, where separate skill ratings, stages and checked-attempt counts are listed. The link's accessible name identifies the current skill, stage and provisional rating when measured.
+
+The header shows the most recently assessed skill. It does not combine unrelated scores into an overall Russian rating. With no qualifying assessments, Barsik stays at the beginning of the line. Unmeasured skills in the profile show a dash and **Not started**, without an introductory card or **Getting started** heading. A starting prior is not displayed as a measured ability score.
+
+Barsik moves briefly when the same learner's displayed skill improves. Reloading, changing learners or switching between skills must not look like earned progress. He stays still between updates, and reduced-motion preferences disable animation. His feet stay aligned with the line, including at either edge on a narrow screen.
+
+Lingo coins still recognise participation and open permanent journey stops. The rating estimates performance within a particular activity. Neither the rating nor this line locks ordinary activities, assigns a TORFL qualification, changes card schedules or spends coins. A lower rating can reduce the line's fill; it cannot remove a completed journey stop.
+
+## Separate evidence
+
+The skill families are Reading, Listening, Sentence practice, Word Jumble, Writing, Speaking grammar and Speaking fluency. Speaking keeps its two dimensions separate: a recording can contain enough evidence for one and not the other.
+
+Only new, successfully saved assessments can carry the new versioned rating receipt. Their task difficulty and normalised performance are frozen inside the existing `progression_events.evidence_json` in the same transaction as the activity save. Later edits to a task's difficulty cannot rewrite an earlier result.
+
+The projection excludes old Elo totals, imported balances, earlier unversioned grades, cached reading feedback, lesson completion, journey choices and self-reported flashcard ratings. Existing FSRS review evidence remains useful for memory scheduling, but is not an objective cross-activity language score. Unsupported scores and unknown task difficulties earn no rating observation; their normal participation rules still apply. Reading additionally requires its submitted passage, questions and task settings to match the saved or server-generated task, so an edited easier question cannot inherit the original difficulty.
+
+Within a skill, only the first qualifying assessment of a task counts. The saved attempt history also excludes tasks with recorded feedback before this rollout. Nonzero legacy Sentence practice scores are excluded as evidence of earlier grading, even without a modern attempt row. Speaking can supply fresh speech on later sessions: it counts at most one supported assessment per variation, skill and recorded local study day. Reassessing or rehearsing the same variation repeatedly that day does not multiply its rating observations.
+
+Speaking observations come from the independent audio review, never from live captions or the speaking agent's own conversational response. They require the expected rubric, Russian speech and supporting evidence for a valid score. Short successful exchanges can still earn participation coins without generating a fluency rating. Grammar measures accuracy in the forms actually attempted; a correct simple reply does not prove a broader grammatical range merely because its scenario has an A2 target.
+
+Legacy activities follow their selected profile in personal mode; historical records belong to “Me”. In optional household mode, the shared adult workspace cannot supply a selected child's rating. Learner-owned Speaking evidence follows the saved session owner.
+
+The [first delivery](first-delivery.md) teaches three Russian words, then asks three recall questions with Russian choices drawn only from those taught words. Its saved unhinted first answers supply one Reading observation using the fraction correct among unhinted answers, with task prior 1000 and the existing update strength. This measures recall after teaching, not broad reading ability. Hinted answers are excluded; wrong unhinted answers remain evidence. Teaching cards stay outside the model. A fully supported completion still earns its participation bonus without manufacturing a measured rating. Replaying or completing the same attempt cannot replace first answers, erase support history or create extra observations. An explicit restart from v1 archives the earlier activity; its already-saved evidence remains unchanged.
+
+## Explicit pilot model
+
+Policy identifier: `practice-elo-v1`. Each skill has a separate prior `R = 1000`.
+
+```
+expected = 1 / (1 + 10 ** ((task_rating - R) / 400))
+R_next   = R + 24 * (observed - expected)
+```
+
+`observed` is the saved score normalised within that activity's rubric. The model uses conservative fixed updates and fixed task priors; it does not try to learn item difficulty and learner ability from a single household simultaneously.
+
+| Task metadata | Initial task rating |
+|---|---|
+| Existing beginner / intermediate / advanced choices | 1000 / 1200 / 1400 |
+| Sentence practice difficulty 1–5 | 1000 / 1200 / 1400 / 1600 / 1800 |
+| Authored Speaking A1 / A2 / B1 / B2 target | 1000 / 1200 / 1400 / 1600 |
+
+These are **uncalibrated task priors**, not equivalent proficiency levels across games. A score of 1200 does not mean A2. Each displayed estimate remains labelled provisional, regardless of observation count. The model needs evaluation against actual learner performance before it recommends difficulty automatically.
+
+The visual stages are internal 200-point intervals starting at 1000. At 1200, Stage 2 begins. Ratings below 1000 remain at the beginning of Stage 1, with their real rating and remaining gap available in the skill summary. These visual thresholds are a product setting, not an educational standard.
+
+The API replays qualifying receipts in saved chronological order and ignores reversed events. Reading progress cannot award coins, modify the database or make ratings grow. The initial rating projection required no schema migration or historical grade backfill. Migration 027 adds persistence for the first-delivery activity; it does not backfill historical skill evidence. The old rating is preserved separately.
+
+## Integration and assets
+
+`GET /api/v1/progression` includes a `skill` object with the model version, active skill and independent skill summaries. Each summary contains its status, nullable rating, stage bounds, normalised progress, points to the next stage, observation count and most recent observation time. Existing wallet and journey fields retain their meanings.
+
+The shared header illustration is `flask_vocab_app/static/images/barsik-running-v1.webp`, copied from the established transparent setting-off artwork. Keeping the original pose and character preserves the application's visual identity. The exact public illustration path is available in optional household mode; private uploads and media retain their existing access rules.
+
+## Limits and next work
+
+- Validate the score rubrics, fixed difficulty priors and update strength using real attempts. The current number is an explainable pilot estimate.
+- Extend the first delivery's explicit support records to other activities that offer hints or answers before a first assessment. A first saved attempt alone does not prove that work was unaided. Very old Sentence practice records with a zero score cannot distinguish an ungraded task from an old zero-mark attempt because that history was never stored.
+- Expand Speaking variations and evaluate repeated exposure. Same-day repetition remains useful even when it no longer supplies another rating observation.
+- Introduce evaluated difficulty recommendations only after the evidence supports them. Keep recommendations optional and retain independent card scheduling and journey progression.
+
+## Local verification
+
+The backend passed 67 focused model, activity, progression, Reading and Speaking checks, followed by 32 affected tests after adding the legacy Translation exclusion. The UI passed 35 focused tests; TypeScript, JavaScript syntax validation and the production build passed. Browser checks covered both header shells, a narrow phone viewport, keyboard dismissal, sticky positioning and preservation of a Writing draft while the panel was open. A scrollbar-related panel overflow found during this check was fixed.
+
+Seven synthetic first assessments on an isolated database produced a rating of 1146 and a 73% Stage 1 fill, with Barsik aligned at the leading edge. The real preview received no test assessments. The preview was restarted on port 5052 with the same configuration and schema 24; the QA server was stopped. Protected configuration/key files and the separate canonical database matched their recorded hashes. The preview backup and verification receipt are under `instance/skill-rail-20260915/`.
+
+## Profile placement update
+
+The caption and header popup were removed after review. Skill details now live in the selected profile, for both personal and optional household modes, and stay hidden until the progress introduction. Validation passed 49 focused UI tests, 27 backend tests, TypeScript and the production build. Browser checks covered both header shells, the profile link and the narrow profile layout. No stored ratings or balances were changed.
+
+## Journey game evidence
+
+Post Office Radio and vocabulary-based A Letter Back add provisional Listening observations from saved playback receipts and first answers without transcript or requested English-hint support. A Letter Back supplies English context and word tiles: this measures supported listening/reconstruction, not independent Writing. Reading the transcript remains a supported practice route with normal participation rewards. Other games supply Reading evidence; matching receives partial credit. Vocabulary difficulty bands are local, uncalibrated task priors, not an A1 label or TORFL placement. Replaying a game with the same saved content identity cannot replace its first completed observation. See [journey games](journey-games.md).

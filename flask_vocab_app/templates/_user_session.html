@@ -1,0 +1,6 @@
+{% set current_profile = user_session_profile | default(none) %}
+{% set profile_label = ('Профили семьи' if ui_lang == 'ru' else 'Household profiles') if household_enabled else (('Профиль: ' if ui_lang == 'ru' else 'Profile: ') ~ current_profile.display_name if current_profile else ('Выбрать профиль' if ui_lang == 'ru' else 'Choose a profile')) %}
+<a class="user-session-link" href="{{ '/post/household' if household_enabled else '/post/profiles' }}" hx-boost="false" aria-label="{{ profile_label }}" title="{{ profile_label }}"{% if not household_enabled %} data-user-session data-profile-id="{{ current_profile.id if current_profile else '' }}"{% endif %}>
+  {% if current_profile %}<span class="user-session-initial" aria-hidden="true">{{ current_profile.display_name[0] | upper }}</span>
+  {% else %}<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 21v-2a7.5 7.5 0 0 1 15 0v2"/></svg>{% endif %}
+</a>

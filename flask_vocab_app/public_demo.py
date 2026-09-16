@@ -1,0 +1,156 @@
+"""Disposable public preview: authored samples, isolated visitors, no providers."""
+import json
+import hashlib
+import os
+from pathlib import Path
+import tempfile
+
+from flask import jsonify, redirect, request, session
+
+from repositories.learning_repository import transaction, LearningError
+from services.personal_learning import PersonalSessions, personal_access
+from services.demo_limits import DemoLimits
+from utils.household_access import csrf_token
+
+MESSAGE = 'This public preview includes First steps, sample vocabulary and flashcard practice. AI generation, uploads and editing are available in your own installation.'
+
+# New endpoints stay private even when added to an existing public blueprint.
+READ_ENDPOINTS = frozenset({
+    'word_post.home', 'word_post.assets', 'word_post.licenses', 'static',
+    'vocab.vocab_list', 'vocab.inventory', 'learning.state', 'learning.asset',
+    'live_conversation.scenarios', 'live_conversation.options', 'user_sessions.read',
+    'onboarding.read', 'onboarding.practice_read', 'first_steps.chapter', 'first_steps.lesson',
+    'progression.read', 'progression.world', 'native_review.overview', 'native_review.read',
+    'native_review.history', 'journey_games.catalogue',
+})
+WRITE_ENDPOINTS = frozenset({
+    'onboarding.introduce', 'onboarding.practice_write', 'first_steps.command',
+    'progression.preferences', 'progression.answer', 'native_review.start',
+    'native_review.command', 'native_review.suspension', 'set_ui_language',
+})
+
+
+def prepare_demo():
+    # Always create a NEW sandbox. Never reset a configured or personal DB.
+    root = Path(tempfile.mkdtemp(prefix='russian-arcade-demo-'))
+    paths = {'VOCAB_DB_PATH': 'vocab.db', 'VOCAB_SESSION_DIR': 'sessions',
+             'VOCAB_UPLOAD_DIR': 'uploads', 'APP_MEDIA_DIR': 'media',
+             'WORD_POST_ASSET_DIR': 'assets', 'ANKI_MEDIA_DIR': 'anki-media'}
+    for name, relative in paths.items():
+        os.environ[name] = str(root / relative)
+    from migrations import upgrade_database
+    from services.first_steps import HELLO, chapter_content
+    from services.learning_assets import LocalAssetStore
+    from services.learning_content import ContentService
+    db = os.environ['VOCAB_DB_PATH']
+    upgrade_database(db, backup=False)
+    items = []
+    with transaction(db, write=True) as conn:
+        for lesson in [HELLO, *chapter_content()['lessons']]:
+            for word in lesson['vocabulary']:
+                existing = conn.execute('SELECT id FROM words WHERE lemma=?', (word['lemma'],)).fetchone()
+                if existing:
+                    word_id = existing['id']
+                else:
+                    word_id = conn.execute("INSERT INTO words(lemma,pos,count,lemma_difficulty,topic,date_added) VALUES (?,?,0,1,?,date('now'))",
+                        (word['lemma'], word['pos'], json.dumps(['First steps']))).lastrowid
+                tags = json.dumps(word.get('grammar', {}))
+                conn.execute('INSERT OR IGNORE INTO forms(word_id,form,count,tags,form_difficulty) VALUES (?,?,0,?,1)',
+                    (word_id, word['form'], tags))
+                form_id = conn.execute('SELECT id FROM forms WHERE word_id=? AND form=? AND tags=?',
+                    (word_id, word['form'], tags)).fetchone()['id']
+                context, answer = word['sentence'], word['form']
+                if answer not in context:
+                    continue
+                identifier = f'demo-{len(items) + 1}'
+                items.append(dict(id=identifier, card_id=identifier, word_id=word_id, form_id=form_id,
+                    type='cloze', direction='ru-cloze', sense_key=identifier, sense_label=lesson['title'],
+                    context=context, prompt=context.replace(answer, '[[blank]]', 1), answer=answer,
+                    cue_en=word['target_meaning'], context_meaning=word['translation'],
+                    topic='First steps', difficulty=1))
+    credential = personal_access(db)
+    content = ContentService(db, LocalAssetStore(os.environ['WORD_POST_ASSET_DIR']))
+    version = content.import_draft(dict(schema_version=2, id='public-demo', kind='deck',
+        title='First Russian words · sample cards', source='Authored First steps content; synthetic public demo, no personal records.', items=items))
+    content.publish(credential, version, 'Russian Arcade demo')
+    with transaction(db, write=True) as conn:
+        conn.execute("UPDATE learning_profiles SET archived=1 WHERE id='personal-learning'")
+        conn.execute('DELETE FROM household_access')
+    return root
+
+
+def install_demo(app):
+    database = app.config['DB_PATH']
+    sessions = PersonalSessions(database)
+    limits = DemoLimits(database)
+
+    def rate_limited(seconds):
+        return jsonify(error={'code': 'rate_limited', 'message': 'The demo is busy. Please try again later.'}), 429, {'Retry-After': str(seconds)}
+
+    def limited():
+        if request.path.startswith('/api/'):
+            return jsonify(error={'code': 'demo_limit', 'message': MESSAGE}), 403
+        return (f'<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width"><title>Russian Arcade preview</title>'
+                '<link rel="stylesheet" href="/static/css/public_demo.css?v=2"></head><body class="demo-unavailable">'
+                f'<main class="demo-unavailable-content">'
+                f'<h1>Explore the public preview</h1><p>{MESSAGE}</p>'
+                '<p><a href="/post/#first-delivery">Try First steps</a> · <a href="/post/#flashcards">Try flashcards</a> · '
+                '<a href="/post/#home">Home</a></p></main></body></html>'), 403
+
+    def boundary():
+        if request.endpoint is None:
+            return None
+        if request.path == '/':
+            return redirect('/post/')
+        if request.path == '/post/profiles' and request.method == 'GET':
+            return redirect('/post/#home')
+        read = request.method in ('GET', 'HEAD')
+        allowed = ((read and request.endpoint in READ_ENDPOINTS)
+                   or (request.method == 'POST' and request.endpoint in WRITE_ENDPOINTS))
+        if not allowed:
+            return limited()
+        if request.blueprint == 'vocab' and request.args.get('source', 'db') != 'db':
+            return limited()
+        if request.endpoint == 'static' or request.endpoint in {'word_post.assets', 'word_post.licenses'}:
+            return None
+        # Global limits cannot be bypassed by resetting a cookie. No IPs stored.
+        admission = [('requests', 60, 1200)]
+        if not read:
+            visitor = hashlib.sha256(str(session.get('personal_access_id', 'new')).encode()).hexdigest()
+            admission += [('writes', 60, 600), ('writes', 86400, 10000),
+                          ('visitor:' + visitor, 60, 60), ('visitor:' + visitor, 86400, 300)]
+        retry = limits.consume(admission)
+        if retry:
+            return rate_limited(retry)
+        state = sessions.state(session.get('personal_access_id'))
+        if not state['profile']:
+            retry = limits.consume([('new-visitors', 60, 30), ('new-visitors', 3600, 120)])
+            if retry:
+                return rate_limited(retry)
+            session['personal_access_id'] = sessions.create('Demo visitor', max_profiles=2000)
+            session.permanent = True
+
+    # Run before local profile selection and provider-backed route handlers.
+    app.before_request_funcs.setdefault(None, []).insert(0, boundary)
+
+    def visitor_state():
+        state = sessions.state(session.get('personal_access_id'))
+        state['profiles'] = [state['profile']] if state['profile'] else []
+        return jsonify(state | {'csrf_token': csrf_token(), 'public_demo': True,
+                               'configured': True, 'adult': False})
+
+    app.view_functions['user_sessions.read'] = visitor_state
+    app.view_functions['learning.state'] = visitor_state
+    visitor_state.household_policy = 'public'
+
+    @app.after_request
+    def banner(response):
+        if response.mimetype == 'text/html' and not response.direct_passthrough:
+            body = response.get_data(as_text=True)
+            notice = ('<details class="demo-notice"><summary>Public demo</summary>'
+                      '<p>Try First steps and sample flashcards. AI generation and uploads need a local installation. '
+                      'Demo progress is temporary.</p></details>')
+            if '<body>' in body:
+                body = body.replace('</head>', '<link rel="stylesheet" href="/static/css/public_demo.css?v=2"></head>', 1)
+                response.set_data(body.replace('</body>', notice + '</body>', 1))
+        return response

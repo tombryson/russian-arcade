@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="{{ ui_lang | default('en') }}">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="csrf-token" content="{{ csrf_token() }}" />
+        {% if user_session_profile %}<meta name="learning-profile" content="{{ user_session_profile.id }}" />{% endif %}
+        <script src="/static/js/household_security.js"></script>
+        <title>{{ page_title | default(ui_t('app.title')) }}</title>
+        <link
+            href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+            rel="stylesheet"
+        />
+        <link rel="stylesheet" href="/static/css/style.css?v=17" />
+        <link rel="stylesheet" href="/static/css/lessons.css?v=3" />
+        <link rel="stylesheet" href="/static/css/vocabulary.css?v=1" />
+        <script src="/static/js/lessons.js?v=4" defer></script>
+        <script src="/static/js/lesson_word_selection.js?v=3" defer></script>
+        {% block page_styles %}{% endblock %}
+        {% set shared_styles = arcade_styles() %}
+        {% for filename in shared_styles %}<link rel="stylesheet" href="{{ url_for('word_post.assets', filename=filename) }}">{% endfor %}
+        <link rel="stylesheet" href="/static/css/language_picker.css?v=1" />
+        <link rel="stylesheet" href="/static/css/progression.css?v=3" />
+        <script src="/static/js/progression.js?v=3" defer></script>
+        <link rel="stylesheet" href="/static/css/skill_progress.css?v=2" />
+        <link rel="stylesheet" href="/static/css/user_sessions.css?v=1" />
+        <script src="/static/js/user_sessions.js?v=1" defer></script>
+        <script src="/static/js/language_picker.js?v=1" defer></script>
+        <script src="/static/js/activity_editor.js?v=3" defer></script>
+        <script src="/static/js/translation.js?v=2" defer></script>
+        <script src="/static/js/writing_tools.js?v=1" defer></script>
+        <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    </head>
+    <body class="{% if shared_styles %}arcade-workspace{% endif %}" hx-history="false">
+        {% if shared_styles %}
+        <a class="arcade-skip" href="#mainContent">Skip to activity</a>
+        <header class="arcade-header"><a class="arcade-brand" href="/post/" hx-boost="false"><span lang="ru" aria-hidden="true">Я</span><strong>{{ ui_t('app.title') }}<small>{{ ui_t('app.tagline') }}</small></strong></a>
+          <div class="arcade-header-actions">
+            <nav aria-label="{{ ui_t('nav.main') }}"><a href="/post/" hx-boost="false">{{ ui_t('nav.home') }}</a><a href="/post/#activities" hx-boost="false">{{ ui_t('nav.activities') }}</a><a href="/vocab" hx-boost="false">{{ ui_t('nav.my_words') }}</a></nav>
+            {% include '_progression.html' %}
+            {% include '_language_picker.html' %}
+            {% include '_user_session.html' %}
+          </div>
+          {% include '_skill_progress.html' %}
+        </header>
+        {% endif %}
+        <div class="app-shell">
+            {% include '_sidebar.html' %}
+            {% block main_content %}{% endblock %}
+        </div>
+        {% block page_scripts %}{% endblock %}
+    </body>
+</html>

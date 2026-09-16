@@ -1,0 +1,63 @@
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+{% if story %}
+<article class="reading-story" data-story-loaded>
+    <header class="reading-story-heading">
+        <h2 id="reading-story-title" tabindex="-1" lang="{{ story.display_title_lang if story.display_title else ui_lang }}">{{ story.display_title or ui_t('comprehension.untitled') }}</h2>
+        <p>{{ ui_t('comprehension.read_help') }}</p>
+    </header>
+    <div class="row">
+        <div class="col-md-9">
+            <div id="story-container" class="story-text-mount" data-words='{{ story.words | tojson | safe }}' data-visibility='{{ visibility | default('revealed') }}'><p lang="ru">{{ story.text }}</p></div>
+        </div>
+        <div class="col-md-3">
+            {% if story.image_url %}
+            <img
+                src="{{ story.image_url }}"
+                alt="{{ ui_t('comprehension.story_image_alt') }}"
+                class="img-fluid story-illustration"
+            />
+            {% endif %}
+        </div>
+    </div>
+    <div id="modal-container" class="d-none"></div>
+    <div id="notification" class="mt-2"></div>
+    {% if story.audio_url %}
+    <div class="audio-player">
+        <audio controls>
+            <source src="{{ story.audio_url }}" type="audio/mpeg" />
+            {{ ui_t('comprehension.audio_unsupported') }}
+        </audio>
+    </div>
+    {% endif %}
+    <h3 class="qa-heading">{{ ui_t('comprehension.questions') }}</h3>
+    <div id="questions-section" class="questions-container">
+        {% include '_questions_partial.html' %}
+    </div>
+    <button
+        id="generate-more-questions"
+        class="btn btn-info mt-3"
+        hx-post="/comprehension/generate_more_questions"
+        hx-target="#questions-section"
+        hx-include="#question-form"
+        hx-swap="innerHTML"
+    >
+        {{ ui_t('comprehension.more_questions') }}
+    </button>
+    <button
+        id="save-story"
+        class="btn btn-success mt-3"
+        hx-post="/comprehension/save"
+        hx-target="#save-feedback"
+        hx-include="#question-form"
+    >
+        {{ ui_t('comprehension.save_story') }}
+    </button>
+    <div id="save-feedback" role="status" class="mt-2"></div>
+</article>
+{% elif not error %}
+<div class="alert alert-danger">
+    {{ ui_t('comprehension.not_loaded') }}
+</div>
+{% endif %}
