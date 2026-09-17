@@ -77,11 +77,12 @@ describe('Your first words',()=>{
   });
   it('teaches all three words before Russian-only choices and continues without changing activities',async()=>{
     const api=server();render(<FirstDelivery next={next} />);await start();
-    const heading=screen.getByRole('heading',{name:'Your first words'});
+    const heading=screen.getByRole('heading',{name:words[0].title,level:1});
+    await waitFor(()=>expect(document.activeElement).toBe(heading));
     expect(screen.getByText('Привет!',{exact:true}).getAttribute('lang')).toBe('ru');
     expect(screen.queryByRole('button',{name:'Привет!'})).toBeNull();
     await learnWords();
-    expect(screen.getByRole('heading',{name:'Your first words'})).toBe(heading);
+    expect(screen.getByRole('heading',{name:words[0].prompt,level:1})).toBe(heading);
     expect(screen.queryByText('Use this greeting with a friend.')).toBeNull();
     expect(document.querySelector('.tutorial-word-card')).toBeNull();
     for(const choice of choices) expect(screen.getByRole('button',{name:choice.text}).getAttribute('lang')).toBe('ru');
@@ -131,7 +132,7 @@ describe('Your first words',()=>{
     render(<FirstDelivery next={next} />);await waitFor(()=>expect(api.fetch).toHaveBeenCalledOnce());
     expect(screen.queryByText('Saying hello')).toBeNull();expect(api.posts()).toHaveLength(0);
     await start();expect(JSON.parse(api.posts()[0][1]?.body as string)).toEqual({restart:true});
-    expect(screen.getByRole('heading',{name:'Your first words'})).toBeTruthy();
+    expect(screen.getByRole('heading',{name:words[0].title,level:1})).toBeTruthy();
   });
   it('shows the completion reward only after saving and does not award again when revisiting',async()=>{
     const api=server({...empty(),attempt:attempt({phase:'feedback',question_index:2,question:question(2),answers:[answer(0,{acknowledged:true}),answer(1,{acknowledged:true}),answer(2)]})});api.state.failNext='complete';

@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState} from 'preact/hooks';
+import type {Ref} from 'preact';
 import {Feedback,Sheet} from './components';
 import {api,ApiError} from './learning-api';
 import {getFirstSteps,getFirstStepsLesson,saveFirstSteps,type FirstStepsAction,type FirstStepsChapter,type FirstStepsLesson,type FirstStepsSummary,type FirstStepsTeaching} from './first-steps-api';
@@ -76,8 +77,8 @@ function FirstStepsOverview({profileHref}:{profileHref:string}) {
   </section>;
 }
 
-function TeachingCard({teaching}:{teaching:FirstStepsTeaching}) {
-  return <div class="first-steps-teaching"><div class="first-steps-card-head"><div><h2>{teaching.title}</h2><p class="first-steps-word" lang="ru">{teaching.word}</p><p class="first-steps-meaning">{teaching.meaning}</p></div><LessonVisual kind={teaching.visual} /></div>
+function TeachingCard({teaching,headingRef}:{teaching:FirstStepsTeaching;headingRef:Ref<HTMLHeadingElement>}) {
+  return <div class="first-steps-teaching"><div class="first-steps-card-head"><div><h1 class="lesson-task-heading" ref={headingRef} tabIndex={-1}>{teaching.title}</h1><p class="first-steps-word" lang="ru">{teaching.word}</p><p class="first-steps-meaning">{teaching.meaning}</p></div><LessonVisual kind={teaching.visual} /></div>
     <p>{teaching.explanation}</p>{teaching.example && <div class="first-steps-context"><p lang="ru">{teaching.example}</p>{teaching.translation && <p>{teaching.translation}</p>}</div>}
   </div>;
 }
@@ -127,11 +128,12 @@ function FirstStepsPlayer({lessonId,profileHref}:{lessonId:string;profileHref:st
     }catch(cause){report(cause);}finally{inFlight.current=false;if(mounted.current)setBusy(false);}
   }
   function retry(){const request=retryRequest.current;request.action==='load' ? void load() : void save(request.action,request.body);}
-  return <section class="page first-steps">
-    <div class="lesson-head"><a class="text-link" href="#first-steps">All five lessons</a>{state && <span class="quiet">Lesson {state.lesson.position} of {state.lesson.total_lessons}</span>}</div>
-    <p class="kicker">First steps{attempt?.phase==='completed' ? ' · Lesson complete' : ''}</p><h1 ref={heading} tabIndex={-1}>{state?.lesson.title ?? 'First steps with Barsik'}</h1>
+  return <section class="page first-steps lesson-player">
+    <div class="lesson-player-nav"><div class="lesson-head"><a class="text-link" href="#first-steps">All five lessons</a>{state && <span class="quiet lesson-name">{state.lesson.title} · Lesson {state.lesson.position} of {state.lesson.total_lessons}</span>}</div></div>
+    {!attempt && <h1 ref={heading} tabIndex={-1}>{state?.lesson.title ?? 'First steps with Barsik'}</h1>}
     {!attempt && !error && <p role="status" class="first-steps-empty">Opening your lesson…</p>}
     {state && attempt && (attempt.phase==='completed' ? <>
+      <p class="kicker">First steps · Lesson complete</p><h1 ref={heading} tabIndex={-1}>{state.lesson.title}</h1>
       <p class="intro">{state.resolution ?? 'You’ve finished this lesson. Ready for the next part?'}</p>
       <Sheet>
         {state.reward && state.reward.amount>0 ? <div class="first-steps-reward" role="status"><p><strong>{state.reward.awarded_now && state.reward.status==='credited' ? `+${state.reward.amount} Lingocoins` : `${state.reward.amount} Lingocoins earned`}</strong></p>{state.reward.status==='credited' && <p>{state.reward.awarded_now ? 'Your lesson and coins are saved.' : 'Your lesson and reward are already saved.'}</p>}<ProfileSave profileHref={profileHref} pending={state.reward.status==='pending' ? state.pending_reward : 0}/></div> : <p>Your lesson is complete. No coins were added.</p>}
@@ -141,15 +143,15 @@ function FirstStepsPlayer({lessonId,profileHref}:{lessonId:string;profileHref:st
       <div class="action-row"><a class="cta" href="#activities">{t("Choose an activity")} <span aria-hidden="true">→</span></a>{state.next_lesson ? <a class="text-link" href={state.next_lesson.href}>{nextLessonLabel(state.next_lesson)} <span aria-hidden="true">→</span></a> : <a class="text-link" href="#first-steps">Back to First steps <span aria-hidden="true">→</span></a>}</div>
       {state.profile_id && <PracticeActions lessonId={state.lesson.id} chapter={state.chapter_complete}/>}
     </> : <>
-      <p class="first-steps-question-count">{attempt.phase==='learn' ? `Learn · ${attempt.teaching_index+1} of ${attempt.total_teaching}` : attempt.phase==='ready' ? 'Practice complete' : `Try · ${attempt.question_index+1} of ${attempt.total_questions}`}</p>
-      <Sheet>{attempt.phase==='learn' && teaching ? <><TeachingCard teaching={teaching}/><button class="cta" disabled={busy} onClick={()=>void save('learn',{teaching_id:teaching.id})}>{busy ? 'Saving…' : attempt.teaching_index+1===attempt.total_teaching ? 'Try what you’ve learned' : 'Continue'} <span aria-hidden="true">→</span></button></> : question ? <>
-        {question.visual && <LessonVisual kind={question.visual} decorative={false}/>} {question.passage && <p class="first-steps-passage" lang="ru">{question.passage}</p>}<h2 class="practice-prompt">{question.prompt}</h2>
+      <Sheet>{attempt.phase!=='ready' && <p class="lesson-counter">{attempt.phase==='learn' ? `Learn · ${attempt.teaching_index+1} of ${attempt.total_teaching}` : `Try · ${attempt.question_index+1} of ${attempt.total_questions}`}</p>}
+        {attempt.phase==='learn' && teaching ? <><TeachingCard teaching={teaching} headingRef={heading}/><button class="cta" disabled={busy} onClick={()=>void save('learn',{teaching_id:teaching.id})}>{busy ? 'Saving…' : attempt.teaching_index+1===attempt.total_teaching ? 'Try what you’ve learned' : 'Continue'} <span aria-hidden="true">→</span></button></> : question ? <>
+        {question.visual && <LessonVisual kind={question.visual} decorative={false}/>} {question.passage && <p class="first-steps-passage" lang="ru">{question.passage}</p>}<h1 class="lesson-task-heading" ref={heading} tabIndex={-1}>{question.prompt}</h1>
         {attempt.phase==='feedback' && feedback ? <><p class="answer-label">{feedback.correct ? 'That’s right.' : 'Here’s the answer.'}</p><p class="answer-text" lang="ru">{feedback.correct_answer}</p><Feedback>{feedback.feedback}</Feedback><button class="cta" disabled={busy} onClick={()=>void save('continue',{question_id:question.id})}>{busy ? 'Saving…' : attempt.question_index+1===attempt.total_questions ? 'Finish lesson' : 'Continue'} <span aria-hidden="true">→</span></button></> : <>
           <div class="options">{question.choices.map(choice=><button key={choice.id} class="word" lang="ru" disabled={busy} onClick={()=>void save('answer',{question_id:question.id,answer:choice.id})}>{choice.text}</button>)}</div>
           {question.hint ? <Feedback>{question.hint}</Feedback> : <button class="text-link" disabled={busy} onClick={()=>void save('hint',{question_id:question.id})}>Show a hint</button>}
           {busy && <p class="quiet" role="status">Saving…</p>}
         </>}
-      </> : <><p>You’ve finished every question. Let’s see how Barsik is getting on.</p><button class="cta" disabled={busy} onClick={()=>void save('complete')}>{busy ? 'Saving…' : 'Finish lesson'} <span aria-hidden="true">→</span></button></>}
+      </> : <><h1 class="lesson-task-heading" ref={heading} tabIndex={-1}>Practice complete</h1><p>You’ve finished every question. Let’s see how Barsik is getting on.</p><button class="cta" disabled={busy} onClick={()=>void save('complete')}>{busy ? 'Saving…' : 'Finish lesson'} <span aria-hidden="true">→</span></button></>}
       </Sheet>
     </>)}
     {error && (locked ? <div class="first-steps-error" role="alert"><p>{error}</p><a class="text-link" href="#first-steps">See your next lesson <span aria-hidden="true">→</span></a></div> : <RetryNotice message={error} onRetry={retry} busy={busy}/>)}

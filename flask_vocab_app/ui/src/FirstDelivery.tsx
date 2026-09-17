@@ -71,11 +71,13 @@ export function FirstDelivery({ next, onIntroduce, profileHref='/post/profiles' 
     else void save('start',attempt ? {restart:true} : {});
   }
 
-  return <section class="page first-delivery">
-    <div class="lesson-head"><a class="text-link" href="#first-steps">All five lessons</a><span class="quiet">First steps · Lesson 1 of 5</span></div>
+  return <section class="page first-delivery lesson-player">
+    <div class="lesson-player-nav">
+    <div class="lesson-head"><a class="text-link" href="#first-steps">All five lessons</a><span class="quiet">Lesson 1 of 5</span></div>
     <ol class="tutorial-steps" aria-label="Tutorial progress">
-      {['Lingocoins', 'Your progress', 'Your first words', 'Complete'].map((label, index) => <li key={label} aria-current={tutorialStep === index ? 'step' : undefined}><span aria-hidden="true">{index + 1}</span>{label}</li>)}
+      {['Lingocoins', 'Your progress', 'Your first words', 'Complete'].map((label, index) => <li key={label} aria-current={tutorialStep === index ? 'step' : undefined}><span aria-hidden="true">{index + 1}</span><span class="tutorial-step-label">{label}</span></li>)}
     </ol>
+    </div>
     {step === 0 ? <>
       <div class="tutorial-welcome">
         <div><p class="kicker">Your first delivery</p><h1 ref={heading} tabIndex={-1}>Before we set off…</h1>
@@ -100,17 +102,15 @@ export function FirstDelivery({ next, onIntroduce, profileHref='/post/profiles' 
       </Sheet>
       <div class="action-row"><button class="cta" disabled={busy} onClick={openActivity}>Learn your first words <span aria-hidden="true">→</span></button><button class="text-link" onClick={() => setStep(0)}>Back to Lingocoins</button></div>
     </> : step === 2 ? <>
-      <p class="kicker">{question ? `${attempt!.phase==='learn' ? 'Learn' : 'Try'} · Word ${attempt!.question_index+1} of ${attempt!.total_questions}` : 'Your first delivery'}</p>
-      <h1 ref={heading} tabIndex={-1}>Your first words</h1>
       {question ? <Sheet>
+        <p class="lesson-counter">{`${attempt!.phase==='learn' ? 'Learn' : 'Try'} · Word ${attempt!.question_index+1} of ${attempt!.total_questions}`}</p>
+        <h1 class="lesson-task-heading" ref={heading} tabIndex={-1}>{attempt?.phase==='learn' && question.lesson ? question.title : question.prompt}</h1>
         {attempt?.phase==='learn' && question.lesson ? <div class="tutorial-word-card">
-          <h2>{question.title}</h2>
           <p class="tutorial-new-word" lang="ru">{question.lesson.word}</p>
           <p class="tutorial-word-meaning">{question.lesson.meaning}</p>
           <p>{question.lesson.explanation}</p>
           <button class="cta" disabled={busy} onClick={()=>void save('learn',{question_id:question.id})}>{busy ? 'Saving…' : attempt.question_index+1===attempt.total_questions ? 'Try these words' : 'Next word'} <span aria-hidden="true">→</span></button>
         </div> : <>
-          <h2 class="practice-prompt">{question.prompt}</h2>
           {attempt?.phase==='feedback' && feedback ? <>
             <p class="answer-label">{feedback.correct ? 'That’s right.' : 'Here’s the word you need.'}</p>
             <p class="answer-text" lang="ru">{feedback.correct_answer}</p>
@@ -122,7 +122,7 @@ export function FirstDelivery({ next, onIntroduce, profileHref='/post/profiles' 
             {busy && <p class="quiet" role="status">Saving…</p>}
           </>}
         </>}
-      </Sheet> : <Sheet><p>You’ve practised all three words.</p><button class="cta" disabled={busy} onClick={()=>void save('complete')}>{busy ? 'Saving…' : 'Finish activity'} <span aria-hidden="true">→</span></button></Sheet>}
+      </Sheet> : <Sheet><h1 class="lesson-task-heading" ref={heading} tabIndex={-1}>Your first words</h1><p>You’ve practised all three words.</p><button class="cta" disabled={busy} onClick={()=>void save('complete')}>{busy ? 'Saving…' : 'Finish activity'} <span aria-hidden="true">→</span></button></Sheet>}
       <button class="text-link tutorial-back" disabled={busy} onClick={replay}>Back to the introduction</button>
     </> : <>
       <p class="kicker">Hello, Barsik!</p><h1 ref={heading} tabIndex={-1}>Your first lesson is complete.</h1>

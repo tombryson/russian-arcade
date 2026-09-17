@@ -23,6 +23,7 @@ import { ActivitiesMenu } from './ActivitiesMenu';
 import { ActivityHeader } from './ActivityHeader';
 import type { Language } from './review-types';
 import sleepingBarsik from './assets/barsik-sleeping-v1.webp';
+import './styles/lesson-player.css';
 
 type Page = 'home' | 'activities' | 'words' | 'practice' | 'first-delivery' | 'first-steps' | 'flashcards' | 'review' | 'generate' | 'conversation' | 'speech-lab' | 'speaking' | 'journey' | 'game' | 'games' | 'shop';
 type Route = { page: Page; gameId?:string; sessionId?: string; worldId?:string; wordId?: number; lessonId?: string; topic?:string; scenarioId?:string; canonicalHash?: string };
@@ -92,6 +93,7 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
   const workspace = useRef<HTMLDivElement>(null);
   const header = useRef<HTMLElement>(null);
   const activityWorkspace = Boolean(navigation && navigationLayout === 'sidebar');
+  const lessonWorkspace = location.page === 'first-delivery' || location.page === 'first-steps' && !!location.lessonId;
   const activeNavigationPage = ['flashcards','review','generate'].includes(location.page) ? 'native_flashcards'
     : ['conversation','speech-lab','speaking'].includes(location.page) ? 'speaking'
     : location.page === 'words' ? 'vocab'
@@ -236,7 +238,7 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
     </>;
   }
 
-  return <GameLanguage.Provider value={language}><div ref={workspace} class={`navigation-layout-${navigationLayout}${activityWorkspace ? ' activity-workspace' : ''}`}>
+  return <GameLanguage.Provider value={language}><div ref={workspace} class={`navigation-layout-${navigationLayout}${activityWorkspace ? ' activity-workspace' : ''}${lessonWorkspace ? ' lesson-workspace' : ''}`}>
     <a class="skip-link" href="#main">Skip to content</a>
     {!activityWorkspace && <header ref={header} class="top"><a class="brand" href="#home" aria-label="Russian Arcade home"><span class="mark" lang="ru" aria-hidden="true">Я</span><span><span class="brand-name">Russian Arcade</span><span class="origin">Learn and practise Russian</span></span></a>
       <nav class="nav" aria-label={language === 'ru' ? 'Главное меню' : 'Main navigation'}>

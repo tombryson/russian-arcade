@@ -115,13 +115,18 @@ describe('First steps lesson player',()=>{
   it('teaches every word before asking Russian-choice questions, with context and a light illustration',async()=>{
     const api=server();render(<FirstSteps lessonId="bag"/>);
     expect(await screen.findByText('a bag')).toBeTruthy();expect(screen.getByText('Это сумка.').getAttribute('lang')).toBe('ru');
+    const teachingHeading=screen.getByRole('heading',{level:1,name:cards[0].title});
+    expect(screen.getAllByRole('heading',{level:1})).toHaveLength(1);
+    await waitFor(()=>expect(document.activeElement).toBe(teachingHeading));
     expect(screen.getByText('This is a bag.')).toBeTruthy();expect(screen.queryByRole('button',{name:'сумка'})).toBeNull();
     expect(document.querySelector('.first-steps-art svg')).toBeTruthy();
     expect(screen.queryByRole('button',{name:'Let’s begin'})).toBeNull();
     expect(screen.queryByText('A few useful words, then your turn.')).toBeNull();
     await click('Continue');expect(await screen.findByText('a letter')).toBeTruthy();
     expect(screen.queryByRole('button',{name:'письмо'})).toBeNull();await click('Try what you’ve learned');
-    expect(await screen.findByRole('heading',{name:questions[0].prompt})).toBeTruthy();
+    const questionHeading=await screen.findByRole('heading',{level:1,name:questions[0].prompt});
+    expect(screen.getAllByRole('heading',{level:1})).toHaveLength(1);
+    await waitFor(()=>expect(document.activeElement).toBe(questionHeading));
     expect(screen.queryByText('The letter is for you.')).toBeNull();expect(screen.queryByText('a bag')).toBeNull();
     expect(screen.getByRole('button',{name:'сумка'}).getAttribute('lang')).toBe('ru');
     expect(api.posts().map(([url,request])=>[url,JSON.parse(request?.body as string)])).toEqual([[root+'/bag/start',{}],[root+'/bag/learn',{teaching_id:'bag-word'}],[root+'/bag/learn',{teaching_id:'letter-word'}]]);
@@ -129,9 +134,11 @@ describe('First steps lesson player',()=>{
 
   it('shows optional hints only on click and saves wrong answers before moving on',async()=>{
     const api=server(lesson({attempt:attempt({phase:'question',teaching_index:2,teaching:null,question:questions[0]})}));render(<FirstSteps lessonId="bag"/>);
-    await screen.findByRole('heading',{name:questions[0].prompt});expect(screen.queryByText(/starts with су/)).toBeNull();
+    const heading=await screen.findByRole('heading',{level:1,name:questions[0].prompt});expect(screen.queryByText(/starts with су/)).toBeNull();
     await click('Show a hint');expect(await screen.findByText('The word for a bag starts with су.')).toBeTruthy();
     await click('письмо');expect(await screen.findByText('Here’s the answer.')).toBeTruthy();expect(screen.getByText('Сумка means a bag.')).toBeTruthy();
+    expect(screen.getByRole('heading',{level:1,name:questions[0].prompt})).toBe(heading);
+    await waitFor(()=>expect(document.activeElement).toBe(heading));
     expect(screen.queryByRole('button',{name:'сумка'})).toBeNull();expect(screen.queryByRole('heading',{name:questions[1].prompt})).toBeNull();
     await click('Continue');expect(await screen.findByRole('heading',{name:questions[1].prompt})).toBeTruthy();
     expect(api.state.lesson.attempt?.answers[0]).toMatchObject({correct:false,hint_used:true,acknowledged:true});
