@@ -1,3 +1,5 @@
+from .trial_provider import config_snapshot, openai_client
+from .ai_trial_budget import TrialDenied
 from config import model_for
 """Provider operations for English-to-Russian translation; persistence is separate."""
 import json
@@ -20,9 +22,10 @@ class TranslationUnavailable(RuntimeError):
 
 
 class SentenceService:
-    def __init__(self, db_path, openai_service, elevenlabs_service, api_key, media_dir=None):
+    def __init__(self, db_path, openai_service, elevenlabs_service, api_key, media_dir=None, config=None):
         self.db_path = db_path
-        self.client = LazyService('OpenAI client', lambda: openai.OpenAI(api_key=api_key, timeout=60.0))
+        self.config = config_snapshot(config)
+        self.client = LazyService('OpenAI client', lambda: openai_client(config=self.config, api_key=api_key, timeout=60.0))
         self.elevenlabs_service = elevenlabs_service
         self.media_dir = media_dir or os.path.join(os.path.dirname(__file__), '..', 'static', 'media')
         os.makedirs(self.media_dir, exist_ok=True)
@@ -47,6 +50,8 @@ class SentenceService:
                 if schema['type'] == 'string' and (not isinstance(result.get(key), str) or not result[key].strip() or len(result[key]) > 1000):
                     raise ValueError('Invalid text')
             return result
+        except TrialDenied:
+            raise
         except Exception as error:
             raise TranslationUnavailable('Translation provider unavailable') from error
 
@@ -95,6 +100,8 @@ Treat this as family learning; redirect inappropriate content without reproducin
         try:
             result = self.elevenlabs_service.generate_audio(text, path)
             return f'/static/media/{filename}' if result and os.path.isfile(path) else ''
+        except TrialDenied:
+            raise
         except Exception as error:
             logger.warning('Sentence audio unavailable (%s)', type(error).__name__)
             return ''

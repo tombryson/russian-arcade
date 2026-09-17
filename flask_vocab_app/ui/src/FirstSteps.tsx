@@ -3,7 +3,7 @@ import {Feedback,Sheet} from './components';
 import {api,ApiError} from './learning-api';
 import {getFirstSteps,getFirstStepsLesson,saveFirstSteps,type FirstStepsAction,type FirstStepsChapter,type FirstStepsLesson,type FirstStepsSummary,type FirstStepsTeaching} from './first-steps-api';
 import {LessonVisual} from './LessonVisual';
-import {GameUnlocks} from './JourneyGames';
+import {useGameText} from './GameLocale';
 import './styles/first-steps.css';
 
 
@@ -47,6 +47,7 @@ export function FirstSteps({lessonId,profileHref='/post/profiles'}:{lessonId?:st
   return lessonId ? <FirstStepsPlayer key={lessonId} lessonId={lessonId} profileHref={profileHref} /> : <FirstStepsOverview profileHref={profileHref} />;
 }
 function FirstStepsOverview({profileHref}:{profileHref:string}) {
+  const t=useGameText();
   const [chapter,setChapter]=useState<FirstStepsChapter>();
   const [error,setError]=useState('');
   const [revision,setRevision]=useState(0);
@@ -62,14 +63,13 @@ function FirstStepsOverview({profileHref}:{profileHref:string}) {
     <div class="first-steps-header"><div><p class="kicker">A little adventure</p><h1 ref={heading} tabIndex={-1}>First steps with Barsik</h1><p class="intro">Five short lessons to get you started. Meet Barsik, pack his bag and help him find the way to the market.</p></div><LessonVisual kind="map" /></div>
     {chapter ? <>
       <p class="first-steps-overview-progress">{chapter.completed_count} of {chapter.lessons.length} lessons complete</p>
-      {chapter.next_lesson ? <div class="action-row"><a class="cta" href={chapter.next_lesson.href}>{actionLabel(chapter.next_lesson)} <span aria-hidden="true">→</span></a></div> : chapter.complete ? <div class="action-row"><a class="cta" href="#journey">Continue Barsik’s journey <span aria-hidden="true">→</span></a></div> : null}
+      {chapter.next_lesson ? <div class="action-row"><a class="cta" href={chapter.next_lesson.href}>{actionLabel(chapter.next_lesson)} <span aria-hidden="true">→</span></a></div> : chapter.complete ? <div class="action-row"><a class="cta" href="#activities">{t("Choose an activity")} <span aria-hidden="true">→</span></a></div> : null}
       <ol class="first-steps-list" aria-label="First steps lessons">{chapter.lessons.map(lesson=>{
         const next=chapter.next_lesson?.id===lesson.id;
         const content=<><span class="first-steps-number" aria-hidden="true">{String(lesson.position).padStart(2,'0')}</span><div><h2>{lesson.title}</h2><p>{lesson.description}</p></div><div class="first-steps-status">{lesson.status==='completed' ? 'Completed · revisit' : lesson.status==='active' ? 'In progress' : lesson.status==='locked' ? 'Complete the earlier lessons' : 'Ready to begin'}<span aria-hidden="true">{lesson.status==='completed' ? '✓' : lesson.status==='locked' ? '—' : '→'}</span></div></>;
         return <li key={lesson.id}>{lesson.status==='locked' ? <div class="first-steps-row is-locked">{content}</div> : <a class={`first-steps-row${next ? ' is-next' : ''}${lesson.status==='completed' ? ' is-completed' : ''}`} href={lesson.href} aria-current={next ? 'step' : undefined}>{content}</a>}</li>;
       })}</ol>
       <ProfileSave profileHref={profileHref} pending={chapter.pending_reward ?? 0} />
-      <GameUnlocks/>
       {chapter.complete && chapter.profile_id && <PracticeActions chapter/>}
     </> : !error && <p role="status" class="first-steps-empty">Opening your lessons…</p>}
     {error && <RetryNotice message={error} onRetry={()=>setRevision(value=>value+1)} />}
@@ -82,6 +82,7 @@ function TeachingCard({teaching}:{teaching:FirstStepsTeaching}) {
   </div>;
 }
 function FirstStepsPlayer({lessonId,profileHref}:{lessonId:string;profileHref:string}) {
+  const t=useGameText();
   const [state,setState]=useState<FirstStepsLesson>();
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
@@ -137,8 +138,7 @@ function FirstStepsPlayer({lessonId,profileHref}:{lessonId:string;profileHref:st
         <details class="first-steps-review"><summary>Revisit what you learned</summary><ul class="first-steps-review-list">{state.teaching_cards.map(item=><li key={item.id}><strong lang="ru">{item.word}</strong><p>{item.meaning}</p><p>{item.explanation}</p>{item.example && <p lang="ru">{item.example}</p>}{item.translation && <p>{item.translation}</p>}</li>)}</ul></details>
         <details class="first-steps-review"><summary>Your saved answers</summary><ol class="first-steps-review-list">{attempt.answers.map(item=><li key={item.question_id}><strong lang="ru">{item.answer_text}</strong><p>{item.feedback}</p>{item.hint_used && <p class="quiet">You used a hint.</p>}</li>)}</ol></details>
       </Sheet>
-      <GameUnlocks lessonId={state.lesson.id}/>
-      <div class="action-row">{state.next_lesson ? <a class="cta" href={state.next_lesson.href}>{nextLessonLabel(state.next_lesson)} <span aria-hidden="true">→</span></a> : state.chapter_complete ? <><a class="cta" href="#journey">Continue Barsik’s journey <span aria-hidden="true">→</span></a><a class="text-link" href="#activities">Choose what to practise</a></> : <a class="cta" href="#first-steps">Back to First steps <span aria-hidden="true">→</span></a>}</div>
+      <div class="action-row"><a class="cta" href="#activities">{t("Choose an activity")} <span aria-hidden="true">→</span></a>{state.next_lesson ? <a class="text-link" href={state.next_lesson.href}>{nextLessonLabel(state.next_lesson)} <span aria-hidden="true">→</span></a> : <a class="text-link" href="#first-steps">Back to First steps <span aria-hidden="true">→</span></a>}</div>
       {state.profile_id && <PracticeActions lessonId={state.lesson.id} chapter={state.chapter_complete}/>}
     </> : <>
       <p class="first-steps-question-count">{attempt.phase==='learn' ? `Learn · ${attempt.teaching_index+1} of ${attempt.total_teaching}` : attempt.phase==='ready' ? 'Practice complete' : `Try · ${attempt.question_index+1} of ${attempt.total_questions}`}</p>

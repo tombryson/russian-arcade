@@ -4,6 +4,7 @@ Generation never writes the lexical library. The Add action uses the existing
 lemma/form resolver; English meaning remains attached to its Russian example.
 """
 import json
+import logging
 import re
 from copy import deepcopy
 from urllib.parse import quote
@@ -17,6 +18,7 @@ from utils.pos_case import POS_MAP
 from utils.story_processing import get_morph
 
 VERSION = 'game-discovery-v1'
+logger = logging.getLogger(__name__)
 POSITIONS = ('NOUN', 'ADJF', 'ADJS', 'COMP', 'VERB', 'INFN', 'PRTF', 'PRTS',
              'GRND', 'NUMR', 'ADVB', 'NPRO', 'PRED', 'PREP', 'CONJ', 'PRCL', 'INTJ')
 LABELS = {'NOUN': 'noun', 'ADJF': 'adjective', 'ADJS': 'short adjective', 'COMP': 'comparative',
@@ -72,6 +74,7 @@ def generate_discovery(provider, known_lemmas, familiar_records, options, seed):
     properties['pos'] = {'type': 'string', 'enum': list(POSITIONS)}
     properties['tags'] = {'type': 'object', 'properties': {key: {'type': ['string', 'null']} for key in GRAMMAR},
                           'required': list(GRAMMAR), 'additionalProperties': False}
+    stage = 'provider'
     try:
         response = provider.client.with_options(timeout=60, max_retries=0).chat.completions.create(
             model=provider.flashcard_model,
@@ -96,15 +99,19 @@ def generate_discovery(provider, known_lemmas, familiar_records, options, seed):
                              'schema': {'type': 'object', 'properties': properties, 'required': list(properties), 'additionalProperties': False}}},
             max_completion_tokens=4096, reasoning_effort='low',
         )
+        stage = 'response'
         choice = response.choices[0]
         if choice.finish_reason != 'stop' or choice.message.refusal or not choice.message.content:
             raise ValueError('Incomplete discovery response')
         result = json.loads(choice.message.content)
+        stage = 'fields'
         if set(result) != set(properties) or any(not isinstance(result[name], str) or len(result[name]) > 2000
                                                 for name in properties if name != 'tags'):
             raise ValueError('Invalid discovery fields')
+        stage = 'new_word'
         if not _token(result['lemma']) or not _token(result['form']) or _normal(result['lemma']) in known:
             raise ValueError('Discovery must be a new Russian lexeme')
+        stage = 'morphology'
         if result['pos'] not in POSITIONS or not isinstance(result['tags'], dict) or set(result['tags']) != set(GRAMMAR):
             raise ValueError('Invalid discovery morphology')
         if any(value is not None and (not isinstance(value, str) or not value) for value in result['tags'].values()):
@@ -115,15 +122,18 @@ def generate_discovery(provider, known_lemmas, familiar_records, options, seed):
             raise ValueError('Discovery morphology is not uniquely supported by the dictionary')
         parsed = next(parse for parse in parses if parse.tag.POS == result['pos'])
         tags = _grammar(parsed)
+        stage = 'sentence'
         sentence = result['sentence'].strip()
         if not 2 <= len(re.findall(r'[А-Яа-яЁё]+(?:-[А-Яа-яЁё]+)*', sentence)) <= 12:
             raise ValueError('Discovery should be one short sentence')
         if re.search(r'[A-Za-z]', sentence) or len(_occurrences(sentence, result['form'])) != 1:
             raise ValueError('Discovery must use the exact Russian surface once')
+        stage = 'duplicate_context'
         if any(_context_key(record.get('sentence')) == _context_key(sentence)
                or _context_key(record.get('translation')) == _context_key(result['translation'])
                for record in familiar_records):
             raise ValueError('Discovery needs a distinct contextual example')
+        stage = 'card_context'
         lemma = _normal(result['lemma'])
         difficulty = options.get('difficulty')
         word = {'word_id': None, 'form_id': None, 'lemma': lemma, 'form': result['form'].strip(),
@@ -142,7 +152,13 @@ def generate_discovery(provider, known_lemmas, familiar_records, options, seed):
     except Exception as error:
         if isinstance(error, LearningError) and error.code == 'discovery_unavailable':
             raise
-        raise LearningError('discovery_unavailable', 'The new word could not be prepared. Retry to choose a clear example.', 503) from None
+        # Keep useful diagnostics without logging prompts, provider responses,
+        # credentials or arbitrary exception messages.
+        logger.warning('Game vocabulary discovery failed (stage=%s, exception=%s)', stage, type(error).__name__)
+        message = ('The AI service could not return the new example. Your prepared examples are saved; retry to continue.'
+                   if stage == 'provider' else
+                   'The new example did not pass the Russian language checks. Your prepared examples are saved; retry to replace this example.')
+        raise LearningError('discovery_unavailable', message, 503, {'reason': stage}) from None
 
 
 def _texts(content):

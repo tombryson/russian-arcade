@@ -184,14 +184,15 @@
         const links = document.querySelectorAll(
             '#sidebar .sidebar-link, #sidebar .sidebar-icon-link',
         );
+        const matches = Array.from(links).filter(link => {
+            const href = link.getAttribute('href') || '';
+            return href === path || (href !== '/' && !href.includes('#') && path.startsWith(href + '/'));
+        });
+        const longest = Math.max(0, ...matches.map(link => link.getAttribute('href').length));
         links.forEach((link) => {
             const href = link.getAttribute('href') || '';
-            const isActive =
-                (href === '/' && path === '/') ||
-                (href !== '/' && href !== '#' && path.startsWith(href));
-            const isDuplicateShortcut =
-                link.classList.contains('sidebar-icon-link') && href === '/vocab';
-            const current = isActive && !isDuplicateShortcut;
+            const isActive = matches.includes(link) && href.length === longest;
+            const current = isActive;
             link.classList.toggle('active', current);
             if (current) {
                 link.setAttribute('aria-current', 'page');
@@ -212,6 +213,21 @@
     function isBoostedSidebarNavigation(element) {
         const link = sidebarNavLink(element);
         return Boolean(link && link.getAttribute('hx-boost') !== 'false');
+    }
+
+    function closeMobileSidebarAfterNavigation(event) {
+        const { target, requestConfig, elt, xhr } = event.detail || {};
+        const source = requestConfig?.elt || elt;
+        if (target?.id !== 'mainContent' || !isBoostedSidebarNavigation(source) ||
+            window.innerWidth >= 992 || (xhr && (xhr.status < 200 || xhr.status >= 400))) return;
+        const menu = document.getElementById('sidebarNav');
+        if (!menu?.classList.contains('show')) return;
+        if (window.bootstrap?.Collapse) {
+            window.bootstrap.Collapse.getOrCreateInstance(menu, { toggle: false }).hide();
+        } else {
+            menu.classList.remove('show');
+            document.querySelector('[data-bs-target="#sidebarNav"]')?.setAttribute('aria-expanded', 'false');
+        }
     }
 
     function setMainLoading(isLoading) {
@@ -754,6 +770,7 @@
     document.body.addEventListener('htmx:afterSettle', (event) => {
         setMainLoading(false);
         if (event.detail.target.id === 'mainContent') {
+            closeMobileSidebarAfterNavigation(event);
             scheduleInitPage(event.detail.target, true);
             return;
         }

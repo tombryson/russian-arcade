@@ -17,6 +17,39 @@ class JourneyGamePracticeTests(unittest.TestCase):
     chapter = practice.FirstStepsPracticeTests.chapter
     finish_batch = practice.FirstStepsPracticeTests.finish_batch
 
+    def test_delivery_contexts_keep_inflected_forms_in_native_cards(self):
+        from services.route_content import build_mission, MISSION_IDS
+        for i in range(len(MISSION_IDS)):
+            pack=build_mission(i)
+            batch=self.post(self.game('delivery-'+str(i),candidates=pack['vocabulary_refs']),status=201)
+            self.finish_batch(batch)
+        with transaction(self.db) as conn:
+            selections=[json.loads(r[0]) for r in conn.execute('SELECT selection FROM native_card_generation_items')]
+            bridge=next(s for s in selections if s['form']=='мостом')
+            self.assertEqual(bridge['lemma'],'мост')
+            self.assertEqual(bridge['tags']['case'],'ablt')
+            station=next(s for s in selections if s['form']=='вокзалом')
+            self.assertEqual(station['lemma'],'вокзал')
+            self.assertEqual(station['tags']['case'],'ablt')
+
+    def test_selected_contexts_are_validated_and_reused_without_new_duplicates(self):
+        from services.first_steps_practice import _identity
+        candidates = next(item for item in chapter_content()['lessons'] if item['id'] == 'bag')['vocabulary']
+        endpoint = self.game()
+        chosen = _identity(candidates[1])
+        for items in ([], ['foreign'], [chosen, chosen], [123], 'all', None):
+            with self.subTest(items=items):
+                self.post(endpoint, {'items': items}, status=400)
+        batch = self.post(endpoint, {'items': [chosen]}, status=201)
+        self.assertEqual(len(batch['items']), 1)
+        self.assertEqual(self.post(endpoint, {'items': [chosen]}, status=201)['id'], batch['id'])
+        with transaction(self.db) as conn:
+            saved = json.loads(conn.execute('SELECT selection FROM native_card_generation_items').fetchone()[0])
+            self.assertEqual(saved['form'], candidates[1]['form'])
+            response = json.loads(conn.execute('SELECT response FROM native_card_generation_items').fetchone()[0])
+            self.assertEqual(response['sentence'], candidates[1]['sentence'])
+            self.assertEqual(conn.execute('SELECT COUNT(*) FROM native_card_generation_items').fetchone()[0], 1)
+
     def game(self, session_id='saved-game', *, lesson='bag', complete=True, owner='personal-learning', candidates=None):
         source = next(item for item in chapter_content()['lessons'] if item['id'] == lesson)
         content = {'title': 'Saved contextual game', 'vocabulary_refs': candidates if candidates is not None else source['vocabulary']}

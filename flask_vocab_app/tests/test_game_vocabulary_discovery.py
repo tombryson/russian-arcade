@@ -106,13 +106,26 @@ class DiscoveryTests(unittest.TestCase):
         with self.assertRaises(LearningError) as error:
             self.discover()
         self.assertEqual(error.exception.code, 'discovery_unavailable')
+        self.assertEqual(error.exception.details['reason'], 'response')
         self.provider.refusal = None; self.provider.reason = 'length'
         with self.assertRaises(LearningError):
             self.discover()
         self.provider.client.with_options = lambda **_: (_ for _ in ()).throw(RuntimeError('secret-key-here'))
+        with self.assertLogs('services.game_vocabulary_discovery', level='WARNING') as logs:
+            with self.assertRaises(LearningError) as error:
+                self.discover()
+        self.assertNotIn('secret-key', str(error.exception))
+        self.assertNotIn('secret-key', ''.join(logs.output))
+        self.assertEqual(error.exception.details['reason'], 'provider')
+        self.assertIn('stage=provider', ''.join(logs.output))
+
+    def test_morphology_failure_is_distinguished_from_provider_failure(self):
+        self.provider.result['tags']['case'] = 'accs'
         with self.assertRaises(LearningError) as error:
             self.discover()
-        self.assertNotIn('secret-key', str(error.exception))
+        self.assertEqual(error.exception.details['reason'], 'morphology')
+        self.assertIn('Russian language checks', str(error.exception))
+        self.assertEqual(len(self.provider.calls), 1)
 
 
 class GameWordTests(unittest.TestCase):

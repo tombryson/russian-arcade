@@ -1,5 +1,6 @@
 """Local profile sessions and opt-in household access across every study route."""
 import secrets
+import re
 import sqlite3
 from urllib.parse import urlsplit
 
@@ -85,9 +86,15 @@ def install_household_policy(app):
             role = 'public'
         if request.endpoint == 'static':
             filename = request.view_args.get('filename', '')
-            if filename.startswith(('css/','js/')) or filename in {
-                'images/barsik-running-v1.webp', 'images/favicon.svg',
+            if filename.startswith(('css/','js/')) or re.fullmatch(r'audio/deliveries/[0-9a-f]{24}\.mp3', filename) or filename in {
+                'images/barsik-running-v1.webp', 'images/barsik-progress-run-v1.webp', 'images/favicon.svg',
                 'images/favicon.ico', 'images/apple-touch-icon.png',
+                'images/scene-builder/cat-v1.webp', 'images/scene-builder/table-v1.webp',
+                'images/scene-builder/book-v1.webp', 'images/scene-builder/book-upright-v1.webp', 'images/scene-builder/walking-v1.webp',
+                'images/scene-builder/taxi-v1.webp',
+                'images/scene-builder/walking-away-v1.webp', 'images/scene-builder/taxi-moving-v1.webp',
+                'images/scene-builder/taxi-away-v1.webp', 'images/scene-builder/doorway-inside-v1.webp',
+                'images/scene-builder/courtyard-in-v1.webp', 'images/scene-builder/courtyard-out-v1.webp',
             }:
                 role = 'public'
         # Unknown routes retain their normal 404/405 behavior without creating a session.

@@ -78,15 +78,17 @@ describe('First steps chapter',()=>{
     expect(screen.queryByRole('link',{name:/Which way/})).toBeNull();
     expect(screen.getByRole('link',{name:'Choose an activity'}).getAttribute('href')).toBe('#activities');
     expect(api.posts()).toHaveLength(0);
+    expect(api.fetch.mock.calls.some(([url])=>url==='/api/v1/games')).toBe(false);
   });
 
-  it('uses Continue for an active lesson and offers the journey when the chapter is finished',async()=>{
+  it('uses Continue for an active lesson and offers main activities when the chapter is finished',async()=>{
     const overview=chapter();overview.lessons[1].status='active';overview.next_lesson=overview.lessons[1];server(lesson(),overview);
     const view=render(<FirstSteps/>);
     expect(await screen.findByRole('link',{name:'Continue lesson 2'})).toBeTruthy();view.unmount();
     const finished=chapter();finished.lessons.forEach(item=>item.status='completed');finished.completed_count=5;finished.complete=true;finished.next_lesson=null;
     server(done(),finished);render(<FirstSteps/>);
-    expect(await screen.findByRole('link',{name:'Continue Barsik’s journey'})).toBeTruthy();
+    await screen.findByText('5 of 5 lessons complete');
+    expect(document.querySelector('.action-row .cta')?.getAttribute('href')).toBe('#activities');
     expect(screen.getByText('5 of 5 lessons complete')).toBeTruthy();
   });
 
@@ -98,6 +100,18 @@ describe('First steps chapter',()=>{
 });
 
 describe('First steps lesson player',()=>{
+  it('sends a completed introduction to main practice without requesting or announcing game unlocks',async()=>{
+    const api=server(done());render(<FirstSteps lessonId="bag"/>);
+    const activity=await screen.findByRole('link',{name:'Choose an activity'});
+    expect(activity.getAttribute('href')).toBe('#activities');
+    expect(activity.classList.contains('cta')).toBe(true);
+    expect(screen.getByRole('link',{name:'Next: Which way?'}).classList.contains('cta')).toBe(false);
+    expect(screen.queryByText('New game unlocked')).toBeNull();
+    expect(screen.queryByRole('heading',{name:'Pack the bag'})).toBeNull();
+    expect(api.fetch.mock.calls.some(([url])=>url==='/api/v1/games')).toBe(false);
+    expect(screen.getByRole('button',{name:'Make flashcards'})).toBeTruthy();
+  });
+
   it('teaches every word before asking Russian-choice questions, with context and a light illustration',async()=>{
     const api=server();render(<FirstSteps lessonId="bag"/>);
     expect(await screen.findByText('a bag')).toBeTruthy();expect(screen.getByText('Это сумка.').getAttribute('lang')).toBe('ru');
@@ -180,7 +194,7 @@ describe('First steps lesson player',()=>{
 
   it('offers chapter practice after the last lesson and retries a failed card request',async()=>{
     const api=server(done({chapter_complete:true,next_lesson:null}));api.state.failNext='flashcards';render(<FirstSteps lessonId="set-off"/>);
-    expect(await screen.findByRole('link',{name:'Continue Barsik’s journey'})).toBeTruthy();expect(screen.getByRole('button',{name:'Write with these words'})).toBeTruthy();
+    expect(await screen.findByRole('link',{name:'Choose an activity',exact:true})).toBeTruthy();expect(screen.getByRole('button',{name:'Write with these words'})).toBeTruthy();
     expect(screen.getByRole('link',{name:'Try a conversation'}).getAttribute('href')).toBe('#speaking/scenario/directions');
     await click('Make chapter flashcards');await screen.findByRole('alert');expect(window.location.hash).not.toContain('generate');
     await click('Try again');await waitFor(()=>expect(window.location.hash).toBe('#generate/cards-from-bag'));

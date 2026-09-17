@@ -1,0 +1,56 @@
+# Game activity artwork
+
+Updated 16 September 2026. These bundled illustrations show Barsik doing each activity. The approved Describe the scene picture remains in use.
+
+## Use in the app
+
+`GameArtwork` supplies the same picture to activity cards, unlock lists, setup pages and completion screens. Exercise pictures and gameplay are separate. The old extra running-cat overlay on the Directions card has been removed.
+
+All new files are 512 × 512 WebP images, encoded at quality 90. They were generated with the built-in image tool using the approved Barsik artwork as a reference, then resized and converted without repainting. No generation runs when a learner opens a game. Vite bundles and versions the files.
+
+## Assets
+
+Paths are relative to `flask_vocab_app/ui/src/assets/`.
+
+| Activity | File | Size |
+|---|---|---:|
+| Pack the bag | [barsik-pack-bag-v1.webp](../../flask_vocab_app/ui/src/assets/barsik-pack-bag-v1.webp) | 58 KiB |
+| Lost Parcel Detective | [barsik-detective-v1.webp](../../flask_vocab_app/ui/src/assets/barsik-detective-v1.webp) | 57 KiB |
+| Follow the directions | [barsik-directions-v1.webp](../../flask_vocab_app/ui/src/assets/barsik-directions-v1.webp) | 47 KiB |
+| Post Office Radio | [barsik-radio-v1.webp](../../flask_vocab_app/ui/src/assets/barsik-radio-v1.webp) | 48 KiB |
+| A Letter Back | [barsik-letter-back-v1.webp](../../flask_vocab_app/ui/src/assets/barsik-letter-back-v1.webp) | 48 KiB |
+| Missing Stamp | [barsik-missing-stamp-v1.webp](../../flask_vocab_app/ui/src/assets/barsik-missing-stamp-v1.webp) | 51 KiB |
+| Mailbox Sort | [barsik-mailbox-sort-v1.webp](../../flask_vocab_app/ui/src/assets/barsik-mailbox-sort-v1.webp) | 50 KiB |
+| Describe the scene | [scene-builder-activity-v1.webp](../../flask_vocab_app/ui/src/assets/scene-builder-activity-v1.webp) | 43 KiB |
+
+The earlier scene-builder illustration and its prompts are documented in [the scene artwork notes](scene-builder-artwork.md).
+
+## Generation prompts
+
+### Pack the bag
+
+Use case: illustration-story. Asset type: activity thumbnail for Pack the bag in Russian Arcade. Input image is a STYLE AND CHARACTER REFERENCE ONLY: create a NEW scene in the same handmade torn-paper collage style, same orange Barsik with large cream eyes and navy pupils, cream muzzle, angular ears and cobalt blue postal jacket. Primary scene: Barsik kneeling beside his open red postal satchel, putting a cream envelope into the bag with one paw; a small folded map peeks from the bag. Friendly concentrated expression and curled striped tail. The action of packing should read immediately. Square composition with cat's face and bag both large, very few props. Keep entire ears, tail, paws and bag in frame with 7% safe margins. Use a plain warm cream background #f3e9d1 across the entire canvas, opaque, NO transparency or checkerboard. Crisp readable silhouettes, tactile paper layers, palette orange/cobalt/red/cream. No lettering, no text, no symbols, no arrows, no speech bubbles, no decorative stars, no border, no badge, no other characters or scenery. No vector-icon look, no glossy3D, no realistic fur. Readable as an 86px thumbnail and 180px illustration.
+
+### Lost Parcel Detective
+
+Use case: illustration-story. Asset type: square Russian Arcade game activity thumbnail, legible at 86 pixels. Create one new illustration of Barsik as a detective. Input image 1 is the approved activity thumbnail style and cream background reference. Input image 2 defines Barsik's exact character identity: orange striped cat, large cream eyes with navy pupils, cream muzzle, cobalt blue postal jacket with gold button. Keep that identity and the tactile irregular torn-paper collage texture. Barsik is leaning curiously over a large unfolded simple map, one paw holding a clear handheld magnifying glass over the map, looking through the lens. Make Barsik's face, magnifier and map each instantly readable. Simple composition, big recognizable shapes, same warm cream #f3e9d1 plain background as image 1. No table needed; the unfolded map may rest angled across his lap. Full ears, paws, tail and props inside the square with generous safe margins. Friendly inquisitive expression, paper cut edges and paper grain, bright orange/cobalt/cream palette. No words, letters, numbers, labels, watermarks, badges, borders, additional characters, landscape, stars, moon or decorative clutter. One polished square illustration, not a collage of multiple separate options.
+
+### Follow the directions
+
+Use case: illustration-story. Asset type: square Russian Arcade game activity thumbnail, legible at 86 pixels. Create one new illustration of Barsik finding his route. Input image 1 is the approved activity thumbnail style and cream background reference. Input image 2 defines Barsik's exact character identity: orange striped cat, large cream eyes with navy pupils, cream muzzle, cobalt blue postal jacket with gold button. Keep that identity and tactile irregular torn-paper collage texture. Barsik is standing with a small unfolded map held in his front paws, looking up thoughtfully at a simple wooden signpost beside him. The signpost has exactly two blank directional arrow boards pointing opposite ways. Friendly confident curious face, ears clear, upright cat posture, tail visible. Distinct simple silhouette: cat and map on left, large readable signpost on right. Same warm cream #f3e9d1 plain background as image 1. Full ears, paws, tail, map and signpost inside square, safe margin on every edge. Bright orange, cobalt, cream and warm wood palette. No magnifying glass, detective hat, words, letters, numbers, labels, badges, watermark, border, extra characters, buildings, landscape, stars, moon or decorative clutter. One polished square illustration, not multiple options.
+
+### Post Office Radio
+
+Use case: illustration-story. Create a square activity thumbnail for Post Office Radio. Reference image 1 is the approved thumbnail style, warm cream background and tactile paper collage rendering. Reference image 2 establishes Barsik's exact character identity. Draw the same orange striped cat Barsik with cream muzzle, large cream and navy eyes, triangular ears and cobalt blue postal jacket with one yellow button. Barsik is listening attentively beside a small red and golden vintage tabletop radio: ear turned toward its large speaker, a front paw carefully adjusting one tuning knob. Friendly curious expression. The radio must be immediately recognizable by a large speaker grille, two knobs and a simple tuner strip without text. Single clear silhouette grouping: cat dominant, radio secondary but prominent. Warm flat plain cream #f3e9d1 background, fully opaque, no checkerboard. Charming hand torn colored paper collage with visible paper grain and layered irregular edges, closely matching references. Simple readable composition when reduced to an 86px card thumbnail. Keep all ears, tail, paws and radio inside frame with 7 percent margin. No text, letters, numbers, headphones, borders, badge, scenery, extra objects, decorative sparkles or watermark. This is one standalone square illustration, not a contact sheet.
+
+### A Letter Back
+
+Use case: illustration-story. Create a square activity thumbnail for A Letter Back. Reference image 1 is the approved thumbnail style, warm cream background and tactile paper collage rendering. Reference image 2 establishes Barsik's exact character identity. Draw the same orange striped cat Barsik with cream muzzle, large cream and navy eyes, triangular ears, curved striped tail and cobalt blue postal jacket with one yellow button. Barsik is seated at a very small simple wooden writing desk, leaning over one cream sheet of paper, holding a pencil naturally with his front paw and writing a letter. His other paw rests beside the paper. One small closed cream envelope rests on the desk. A focused friendly smile, looking at his writing. Cat face and writing gesture clearly visible, cat dominant. Warm flat plain cream #f3e9d1 background, fully opaque, no checkerboard. Charming hand torn colored paper collage with visible paper grain and layered irregular edges, closely matching references. Simple readable composition when reduced to an 86px card thumbnail. Keep all ears, tail, paws and desk inside frame with 7 percent margin. Paper may have two tiny abstract curved strokes but no actual text, letters or numbers. No additional books, scenery, borders, badge, decorative sparkles or watermark. This is one standalone square illustration, not a contact sheet.
+
+### Missing Stamp
+
+Use case: illustration-story. Create one square activity thumbnail for Missing Stamp in the Russian Arcade app. Use the two supplied images solely as character and art style references: image 1 is the approved simple thumbnail style, image 2 is original Barsik character identity. Match this exact tactile torn-paper collage style with richly textured paper orange fur, tiny darker orange tabby stripes, large cream eyes with navy pupils, cream muzzle, navy whiskers, blue postal jacket with one round yellow button. Depict Barsik with delighted concentration applying a single small vivid red postage stamp to the upper-right corner of a large cream postcard held toward the viewer. One paw supports the postcard, the other presses the red stamp. Clear unmistakable stamping action, no pencil. Focus on head, torso, two paws and postcard. Full ears and props visible with safe margins. A simple centered vignette with a clear silhouette at just 86px display size. Flat opaque warm cream background #f3e9d1; no transparency, no checkerboard. No text, letters, symbols, borders, badges, extra characters, scenery, decorative stars, or busy details. No photorealism, no vector-flat style; preserve warm handmade collage textures of the references.
+
+### Mailbox Sort
+
+Use case: illustration-story. Create one square activity thumbnail for Mailbox Sort in the Russian Arcade app. Input image 1 is the approved simple thumbnail and tactile torn-paper style; input image 2 is original Barsik character identity. Depict this same friendly orange tabby cat Barsik sorting mail: he stands on the left, in his blue postal jacket with one round yellow button, reaching with one paw to post a cream envelope into one of TWO small open-front postal sorting compartments positioned on the right, one muted teal compartment above one red compartment. His other paw holds a second cream envelope. Exactly TWO compartments as a small tabletop sorting unit, not a wall of mailboxes. His face looks at the envelope he is posting with delighted concentration. Match character: very large cream eyes with navy pupils, cream muzzle, small dark-orange tabby marks, navy whiskers, orange tail. All ears, paws, envelopes and entire sorting unit visible with safe margins. Clear actor and action, simple compact centered composition with legible silhouettes at 86px. Warm handmade cut-and-torn textured paper collage, bold blue jacket, bright orange cat and limited teal/red props. Solid opaque flat warm cream background #f3e9d1. No text, lettering, labels, numbers, badges, borders, extra characters, scenery, decorative stars, transparency or checkerboard. Do not add complex postal equipment.

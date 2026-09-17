@@ -16,7 +16,7 @@ jobs:
           cache-dependency-path: flask_vocab_app/ui/package-lock.json
       - run: npm ci --prefix flask_vocab_app/ui
       - run: npm run build --prefix flask_vocab_app/ui
-      - run: npm test --prefix flask_vocab_app/ui
+      - run: npm test --prefix flask_vocab_app/ui -- --maxWorkers=2
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

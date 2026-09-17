@@ -225,12 +225,7 @@ html { scroll-padding-top: 116px; }
 .arcade-workspace .translation-audio { margin: 12px 0 20px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .arcade-workspace .translation-page audio { display: block; max-width: 100%; }
 .arcade-workspace .translation-page .btn-outline-secondary { --bs-btn-color: var(--wp-text-primary); --bs-btn-border-color: var(--wp-text-secondary); --bs-btn-hover-bg: var(--wp-surface-paper); --bs-btn-hover-color: var(--wp-text-primary); }
-.arcade-workspace .translation-filter { display: flex; align-items: center; gap: 16px; margin: 16px 0; }
-.arcade-workspace .translation-filter .form-select { max-width: 300px; }
-.arcade-workspace .translation-saved-list { display: grid; gap: 20px; }
-.arcade-workspace .translation-saved-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
-.arcade-workspace .translation-saved-item > div { min-width: 0; flex: 1; }
-.arcade-workspace .translation-saved-english, .arcade-workspace .translation-detail-russian { font-size: 23px; line-height: 1.6; overflow-wrap: anywhere; }
+.arcade-workspace .translation-detail-russian { font-size: 23px; line-height: 1.6; overflow-wrap: anywhere; }
 .arcade-workspace .sentence-history[open] > summary .sentence-disclosure-icon { transform: rotate(45deg); }
 @media (max-width: 1000px) {
   .arcade-workspace .translation-launch { grid-template-columns: 1fr; gap: 28px; }
@@ -238,10 +233,6 @@ html { scroll-padding-top: 116px; }
 }
 @media (max-width: 600px) {
   .arcade-workspace .translation-settings { grid-template-columns: 1fr; gap: 0; }
-  .arcade-workspace .translation-filter { flex-wrap: wrap; }
-  .arcade-workspace .translation-filter label { width: 100%; }
-  .arcade-workspace .translation-filter .form-select { flex: 1; min-width: 0; }
-  .arcade-workspace .translation-saved-item { flex-direction: column; }
   .arcade-workspace .translation-prompt { padding: 20px; }
 }
 

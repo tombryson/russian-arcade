@@ -15,6 +15,7 @@ export class LiveConnection {
   private disposed = false;
   private closing = false;
   private ready = false;
+  private serverControlled = false;
   private closeTimer?: ReturnType<typeof setTimeout>;
   private startTimer?: ReturnType<typeof setTimeout>;
   private connectionTimer?: ReturnType<typeof setTimeout>;
@@ -63,8 +64,9 @@ export class LiveConnection {
       await peer.setLocalDescription(offer);
       await this.gather(peer);
       if (this.disposed) return;
-      const answer = await api<{sdp:string}>(`/api/v1/live-conversations/${this.sid}/connect`,{sdp:peer.localDescription?.sdp},this.abort.signal);
+      const answer = await api<{sdp:string;server_controlled?:boolean}>(`/api/v1/live-conversations/${this.sid}/connect`,{sdp:peer.localDescription?.sdp},this.abort.signal);
       if (this.disposed) return;
+      this.serverControlled = Boolean(answer.server_controlled);
       await peer.setRemoteDescription({type:'answer',sdp:answer.sdp});
       if (!this.ready && !this.disposed) this.startTimer = setTimeout(() => this.fail('The voice connection did not become ready. Please start a new conversation.'),20000);
     } catch (error) {
@@ -97,7 +99,7 @@ export class LiveConnection {
       this.ready = true;
       clearTimeout(this.startTimer);
       this.callbacks.status('listening');
-      this.send({type:'session.instructions.append',event_id:crypto.randomUUID(),delegation_id:null,
+      if (!this.serverControlled) this.send({type:'session.instructions.append',event_id:crypto.randomUUID(),delegation_id:null,
         content:`Весь разговор веди только по-русски, даже если собеседник говорит по-английски. Поприветствуй его сейчас: «${this.opening}» Затем слушай. Сохраняй роль и все инструкции выбранной ситуации.`});
     } else if (event.type === 'session.closed') {
       this.callbacks.status('ended');

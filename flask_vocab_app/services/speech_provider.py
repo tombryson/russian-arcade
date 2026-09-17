@@ -8,6 +8,8 @@ import wave
 from pathlib import Path
 
 import requests
+from .trial_provider import config_snapshot, openai_client, elevenlabs_call, mai_call, trial_enabled
+from .ai_trial_budget import TrialDenied
 
 
 class SpeechError(ValueError):
@@ -72,7 +74,7 @@ def wav_copy(source, destination):
 
 class SpeechProvider:
     def __init__(self, config):
-        self.config = config
+        self.config = config_snapshot(config)
 
     def transcribe(self, path, *, provider='mai', style='verbatim'):
         if provider not in ('mai', 'openai') or style not in ('verbatim', 'clean'):
@@ -87,10 +89,13 @@ class SpeechProvider:
                 model = self.config.get('CONVERSATION_TRANSCRIPTION_MODEL', 'microsoft/mai-transcribe-2')
                 options = {'response_format': 'verbose_json', 'timestamp_granularities': ['word'],
                            'provider': {'options': {'azure': {'enhancedMode': {'modelOptions': {'transcribeStyle': style}}}}}}
-                response = requests.post('https://openrouter.ai/api/v1/audio/transcriptions',
+                if trial_enabled(self.config):
+                    options['provider']['allow_fallbacks'] = False
+                response = mai_call(self.config, path, model, options,
+                    lambda: requests.post('https://openrouter.ai/api/v1/audio/transcriptions',
                     headers={'Authorization': 'Bearer ' + key},
                     json={'model': model, 'input_audio': {'data': base64.b64encode(path.read_bytes()).decode(),
-                                                        'format': path.suffix[1:]}, **options}, timeout=(10, 60))
+                                                        'format': path.suffix[1:]}, **options}, timeout=(10, 60)))
                 raw = _response(response, 'MAI transcription').json()
             else:
                 import openai
@@ -99,7 +104,7 @@ class SpeechProvider:
                     raise SpeechError('OpenAI transcription needs OPENAI_API_KEY in your existing .env file.')
                 model = self.config.get('CONVERSATION_COMPARISON_MODEL', 'gpt-transcribe')
                 options = {'prompt': 'Transcribe the Russian speech literally. Preserve incorrect endings, conjugations, repetitions and self-corrections. Do not improve grammar.'}
-                client = openai.OpenAI(api_key=key, timeout=60, max_retries=0)
+                client = openai_client(config=self.config, api_key=key, timeout=60, max_retries=0)
                 with path.open('rb') as audio:
                     raw = client.audio.transcriptions.create(model=model, file=audio, **options).model_dump(mode='json')
             if not isinstance(raw, dict) or not isinstance(raw.get('text'), str) or not raw['text'].strip():
@@ -107,7 +112,7 @@ class SpeechProvider:
             return {'provider': provider, 'model': model, 'style': style if provider == 'mai' else 'literal_prompt',
                     'settings': options, 'text': raw['text'], 'words': raw.get('words', []),
                     'raw': raw, 'latency_ms': round((time.monotonic() - started) * 1000)}
-        except SpeechError:
+        except (SpeechError, TrialDenied):
             raise
         except Exception:
             raise SpeechError('Transcription could not finish. Your recording is kept; try again.') from None
@@ -117,17 +122,19 @@ class SpeechProvider:
         if not key:
             raise SpeechError('Speech playback needs ELEVENLABS_API_KEY in your existing .env file.')
         try:
-            response = requests.post(f'https://api.elevenlabs.io/v1/text-to-speech/{voice_id}',
+            model = self.config.get('ELEVENLABS_MODEL', 'eleven_multilingual_v2')
+            response = elevenlabs_call(self.config, text, model, voice_id,
+                lambda: requests.post(f'https://api.elevenlabs.io/v1/text-to-speech/{voice_id}',
                 headers={'xi-api-key': key}, json={'text': text,
-                    'model_id': self.config.get('ELEVENLABS_MODEL', 'eleven_multilingual_v2'),
-                    'voice_settings': {'stability': 0.8, 'similarity_boost': 0.85, 'style': 0.0}}, timeout=(10, 60))
+                    'model_id': model,
+                    'voice_settings': {'stability': 0.8, 'similarity_boost': 0.85, 'style': 0.0}}, timeout=(10, 60)))
             data = _response(response, 'Speech playback').content
             with tempfile.TemporaryDirectory() as tmp:
                 audio = Path(tmp) / 'reply.mp3'
                 audio.write_bytes(data)
                 audio_info(audio)
             return data
-        except SpeechError:
+        except (SpeechError, TrialDenied):
             raise
         except Exception:
             raise SpeechError('Speech playback could not be prepared. You can still read the reply.') from None

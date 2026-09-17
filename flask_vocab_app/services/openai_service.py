@@ -1,3 +1,5 @@
+from .trial_provider import config_snapshot, openai_client
+from .ai_trial_budget import TrialDenied
 import logging
 import json
 from typing import List, Dict, Optional
@@ -7,10 +9,11 @@ from config import OPENAI_MODEL_FLASHCARDS, OPENAI_MODEL_HIGH, OPENAI_MODEL_FAST
 logger = logging.getLogger(__name__)
 
 class OpenAIService:
-    def __init__(self, api_key: str, *, flashcard_model=OPENAI_MODEL_FLASHCARDS, high_model=OPENAI_MODEL_HIGH, fast_model=OPENAI_MODEL_FAST, image_model=OPENAI_IMAGE_MODEL):
+    def __init__(self, api_key: str, *, flashcard_model=OPENAI_MODEL_FLASHCARDS, high_model=OPENAI_MODEL_HIGH, fast_model=OPENAI_MODEL_FAST, image_model=OPENAI_IMAGE_MODEL, config=None):
+        self.config = config_snapshot(config)
         self.flashcard_model = flashcard_model.removeprefix("openai/")
         self.high_model, self.fast_model, self.image_model = high_model, fast_model, image_model
-        self.client = openai.Client(api_key=api_key, timeout=60.0, max_retries=1)
+        self.client = openai_client(config=self.config, factory=openai.Client, api_key=api_key, timeout=60.0, max_retries=1)
 
     def generate_native_card(self, word: Dict, kind: str) -> Dict:
         """One structured generation replaces the legacy sentence/translation chain."""
@@ -81,6 +84,8 @@ class OpenAIService:
             sentence = response.choices[0].message.content.strip()
             logger.debug(f"Generated sentence for {target_form}: {sentence}")
             return sentence if sentence else None
+        except TrialDenied:
+            raise
         except Exception as e:
             logger.error(f"Sentence generation failed for {target_form}: {str(e)}")
             return None
@@ -105,6 +110,8 @@ class OpenAIService:
             translation = response.choices[0].message.content.strip()
             logger.debug(f"Translated {word} in context '{context}': {translation}")
             return translation if translation else None
+        except TrialDenied:
+            raise
         except Exception as e:
             logger.error(f"Translation failed for {word}: {str(e)}")
             return None
@@ -134,6 +141,8 @@ class OpenAIService:
                 image_url = None
             logger.debug("Image generation completed: %s", bool(image_url))
             return image_url
+        except TrialDenied:
+            raise
         except Exception as e:
             logger.error(f"Image generation failed for sentence '{sentence}': {str(e)}")
             return None

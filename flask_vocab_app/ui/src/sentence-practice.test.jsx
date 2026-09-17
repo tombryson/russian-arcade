@@ -152,6 +152,27 @@ describe('sentence editor', () => {
         expect(document.getElementById('sentence-action-status').textContent).toBe('Saved.');
     });
 
+    it('opens activity entry pages at the top without scrolling to the heading', () => {
+        document.body.innerHTML = `<main id="mainContent" class="activity-entry">
+            <header><h1 id="sentence-page-title" tabindex="-1">Word Jumble</h1></header>
+        </main>`;
+        const heading = document.querySelector('h1');
+        const focus = vi.spyOn(heading, 'focus');
+        heading.scrollIntoView = vi.fn();
+        const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+        document.body.dispatchEvent(new CustomEvent('htmx:afterSwap', { bubbles: true,
+            detail: { target: document.getElementById('mainContent') } }));
+        expect(document.activeElement).toBe(heading);
+        expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+        expect(heading.scrollIntoView).not.toHaveBeenCalled();
+        expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' });
+
+        scrollTo.mockClear();
+        document.body.dispatchEvent(new CustomEvent('htmx:afterSwap', { bubbles: true,
+            detail: { target: document.querySelector('header') } }));
+        expect(scrollTo).not.toHaveBeenCalled();
+    });
+
     it('focuses and reveals the heading after a saved practice opens', () => {
         page();
         const heading = document.createElement('h1');

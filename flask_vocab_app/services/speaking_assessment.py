@@ -4,6 +4,8 @@ The conversation transcript is deliberately not used as learner evidence: an
 ASR system may already have repaired the very ending we want to teach. Scores
 describe this recorded attempt, not a calibrated proficiency or CEFR level.
 """
+from .trial_provider import config_snapshot, openai_client
+from .ai_trial_budget import TrialDenied
 import base64
 import json
 from pathlib import Path
@@ -286,7 +288,7 @@ def validate_assessment(result, goals, language='en'):
 
 class SpeakingAssessment:
     def __init__(self, config):
-        self.config = config
+        self.config = config_snapshot(config)
 
     def assess(self, audio_path, scenario, dialogue, language='en'):
         if not self.config.get('OPENAI_API_KEY'):
@@ -314,7 +316,7 @@ class SpeakingAssessment:
 
         import openai
         try:
-            client = openai.OpenAI(api_key=self.config['OPENAI_API_KEY'], timeout=120, max_retries=0)
+            client = openai_client(config=self.config, api_key=self.config['OPENAI_API_KEY'], timeout=120, max_retries=0)
             # GPT Audio does not support strict structured outputs. Request plain
             # JSON text and validate it locally instead of passing json_schema.
             response = client.chat.completions.create(
@@ -331,6 +333,8 @@ class SpeakingAssessment:
             if not isinstance(content, str) or len(content) > 50000:
                 raise ValueError('Invalid response')
             result = validate_assessment(json.loads(content), goals, language)
+        except TrialDenied:
+            raise
         except Exception:
             raise SpeechError('Speaking feedback could not finish. Your audio is saved; you can retry.') from None
         return {**result, 'basis': 'audio_review', 'rubric_version': RUBRIC_VERSION,

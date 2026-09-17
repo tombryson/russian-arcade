@@ -1,11 +1,9 @@
 """Radio's public flow is listening -> comprehension -> optional new vocabulary."""
-from copy import deepcopy
 import json
 import unittest
 
 from repositories.learning_repository import encoded, identifier, transaction
-from services.first_steps import chapter_content
-from services.journey_games import sync_unlocks
+from tests.game_fixtures import grant_earned_game_access
 from tests.support import isolated_app
 from tests.test_radio_broadcast import RecordingProvider, SCRIPT, TextProvider
 
@@ -17,17 +15,13 @@ class RadioGameFlowTests(unittest.TestCase):
         self.client = self.app.test_client()
         self.db = self.app.config['DB_PATH']
         self.csrf = self.client.get('/api/v1/games').json['csrf_token']
+        grant_earned_game_access(self.db)
         with transaction(self.db, write=True) as conn:
             for lemma, form in [('парк', 'парками'), ('книга', 'книгу')]:
                 word = conn.execute("INSERT INTO words(lemma,pos,count,lemma_difficulty) VALUES (?,'NOUN',0,2)", (lemma,)).lastrowid
                 conn.execute('INSERT INTO forms(word_id,form,count,tags,form_difficulty) VALUES (?,?,0,?,2)',
                              (word, form, encoded({'case': 'ablt' if lemma == 'парк' else 'accs'})))
-            chapter = chapter_content()
-            for lesson in chapter['lessons']:
-                frozen = deepcopy(lesson) | {'version': chapter['version'], 'chapter_id': 'first-steps'}
-                conn.execute("INSERT INTO first_steps_attempts(id,profile_id,chapter_id,lesson_id,version,content_json,completed_at,created_at,updated_at) VALUES (?,'personal-learning','first-steps',?,?,?,1,1,1)",
-                             (identifier(), lesson['id'], chapter['version'], encoded(frozen)))
-            sync_unlocks(conn, 'personal-learning', None)
+
 
     def post(self, path, data=None, status=200):
         response = self.client.post(path, json=data or {}, headers={'X-CSRF-Token': self.csrf})

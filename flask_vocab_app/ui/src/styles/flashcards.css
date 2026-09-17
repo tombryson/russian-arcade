@@ -1,6 +1,7 @@
 /* Native cards share the app's paper, type and interaction tokens. */
 .post-language { position:relative; margin-left:12px; flex:none; }
-.post-language summary { cursor:pointer; list-style:none; padding:8px; font-size:1.5rem; }
+.post-language summary { display:flex; align-items:center; justify-content:center; width:48px; height:48px; cursor:pointer; list-style:none; padding:0; }
+.post-language summary svg { display:block; flex:0 0 auto; }
 .post-language summary::-webkit-details-marker { display:none; }
 .post-language form { position:absolute; right:0; top:100%; padding:8px; min-width:150px; border:1px solid var(--wp-border-subtle); background:var(--wp-surface-sheet); border-radius:12px; box-shadow:0 8px 25px #0002; z-index:30; }
 .post-language button { display:block; width:100%; padding:12px; text-align:left; background:none; border:0; color:var(--wp-text-primary); cursor:pointer; font:inherit; }

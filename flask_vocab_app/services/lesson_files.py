@@ -24,11 +24,12 @@ def digest(data):
 
 
 class LessonFiles:
-    def __init__(self, db_path, upload_folder=None, renderer="pdftoppm"):
+    def __init__(self, db_path, upload_folder=None, renderer="pdftoppm", *, max_pages=MAX_PAGES):
         self.db_path = db_path
         self.root = Path(db_path).resolve().parent / "lesson-assets"
         self.upload_folder = Path(upload_folder or LEGACY_ROOT).resolve()
         self.renderer = renderer
+        self.max_pages = min(MAX_PAGES, max(1, int(max_pages)))
 
     def path(self, key):
         if not re.fullmatch("[a-f0-9]{64}", key):
@@ -58,7 +59,7 @@ class LessonFiles:
         return key
 
     @staticmethod
-    def inspect(data):
+    def inspect(data, max_pages=MAX_PAGES):
         if not data or len(data) > MAX_BYTES:
             raise LearningError(
                 "lesson_file", "Choose a PDF or image smaller than 25 MB."
@@ -66,10 +67,10 @@ class LessonFiles:
         try:
             if data.startswith(b"%PDF-"):
                 with pdfplumber.open(io.BytesIO(data)) as pdf:
-                    if not 1 <= len(pdf.pages) <= MAX_PAGES:
+                    if not 1 <= len(pdf.pages) <= max_pages:
                         raise LearningError(
                             "lesson_file",
-                            f"Choose up to {MAX_PAGES} pages for one lesson.",
+                            f"Choose up to {max_pages} pages for one lesson.",
                         )
                     return "application/pdf", len(pdf.pages)
             with Image.open(io.BytesIO(data)) as image:
@@ -90,7 +91,7 @@ class LessonFiles:
             ) from None
 
     def receive(self, data, filename):
-        mime, count = self.inspect(data)
+        mime, count = self.inspect(data, self.max_pages)
         return {
             "digest": self.put(data, mime),
             "name": Path(filename).name[:200],

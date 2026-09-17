@@ -6,6 +6,7 @@ import './styles/conversation.css';
 import './styles/live-conversation.css';
 import { russianTranscript } from './conversation-transcript';
 import { SpeakingHistory } from './SpeakingHistory';
+import { ActivityHeader } from './ActivityHeader';
 import type { PracticeLevel } from './Progression';
 
 type Recording = {id:string;ordinal:number;state:string;audio_url:string;sample_count:number;sample_rate:number;error:string|null;retryable:boolean;
@@ -218,9 +219,11 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
   const finished=saved && ['ended','review'].includes(state) && !saved.connected && !saved.needs_recovery;
   const compact=!!saved && ['ended','review'].includes(state);
   const naturalEnd=saved?.end_reason==='task_complete' || saved?.end_reason==='learner_finished';
-  return <section class="page live-page">
-    <a class="text-link" href="#activities">← {t('Activities','Занятия')}</a>
-    <div class="live-heading"><div><p class="kicker">{t('Speaking & listening','Говорение и аудирование')}</p><h1>{t('Speaking','Разговорная практика')}</h1></div></div>
+  const content = <>
+    {showCatalogue ? <ActivityHeader title={t('Speaking','Разговорная практика')} description={t('Choose a scenario and practise speaking Russian.','Выберите ситуацию и практикуйте разговорный русский.')} /> : <>
+      <a class="text-link" href="#activities">← {t('Activities','Занятия')}</a>
+      <div class="live-heading"><div><p class="kicker">{t('Speaking & listening','Говорение и аудирование')}</p><h1>{t('Speaking','Разговорная практика')}</h1></div></div>
+    </>}
     {showCatalogue ? <section class="speaking-catalogue" aria-label={t('Choose a scenario','Выберите ситуацию')}>
       {catalogue ? practiceLevels.map(band=>{
         const choices=catalogue.scenarios.filter(item=>item.available!==false && item.variant_count>0 && (item.levels ?? ['A1']).includes(band));
@@ -267,7 +270,9 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
           </div>}
           {playbackBlocked && active && <button class="cta" onClick={() => { void call.current?.play().then(() => setPlaybackBlocked(false)).catch(() => setError(t('Your browser could not play audio. Check its sound permissions.','Браузер не воспроизводит звук. Проверьте разрешения.'))); }}>{t('Turn on sound','Включить звук')}</button>}
           {options && !options.configured && <p role="alert">{t('Add the OpenAI key to the existing app .env file to use Speaking.','Для разговорной практики нужен ключ OpenAI в существующем файле .env приложения.')}</p>}
-          {state==='idle' && <p class="quiet">{t('Up to five minutes. Your microphone audio is saved for speaking feedback.','До пяти минут. Запись микрофона сохраняется для разбора речи.')}</p>}
+          {state==='idle' && <p class="quiet">{(options?.max_seconds ?? 300) <= 60
+            ? t('Up to one minute in the demo. Your microphone audio is saved for speaking feedback.','В демоверсии — до одной минуты. Запись микрофона сохраняется для разбора речи.')
+            : t('Up to five minutes. Your microphone audio is saved for speaking feedback.','До пяти минут. Запись микрофона сохраняется для разбора речи.')}</p>}
         </div>
         {compact && scenario && <details class="live-task-details"><summary>{t('Task & reference','Задание и подсказки')}</summary>
           <div class="live-task-reference">
@@ -324,6 +329,9 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
         <a class="text-link" href="#speaking/lab">{t('Speech lab','Проверка распознавания')} ↗</a>
       </details>
     </>}
+  </>;
+  return <section class={`page live-page${showCatalogue ? ' activity-entry' : ''}`}>
+    {showCatalogue ? <div class="activity-entry-content">{content}</div> : content}
   </section>;
 }
 

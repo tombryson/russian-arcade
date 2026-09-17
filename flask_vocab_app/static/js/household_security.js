@@ -19,10 +19,28 @@
             if (profile) event.detail.headers['X-Profile-ID'] = profile;
         }
     });
+    const submissions = new WeakMap();
+    function needsToken(form, submitter) {
+        const method = submitter?.hasAttribute('formmethod') ? submitter.getAttribute('formmethod') : form.method;
+        const action = submitter?.hasAttribute('formaction') ? submitter.getAttribute('formaction') : form.action;
+        return method.toLowerCase() === 'post' && local(action);
+    }
     document.addEventListener('submit', event => {
         const form = event.target;
-        if (!(form instanceof HTMLFormElement) || !local(form.action)) return;
-        let hidden = form.querySelector('input[name="csrf_token"]');
+        if (!(form instanceof HTMLFormElement)) return;
+        const submission = { includeToken: needsToken(form, event.submitter) };
+        submissions.set(form, submission);
+        // formdata has no submitter. Retain its overrides through the browser's
+        // submission task, then let subsequent FormData calls use the form defaults.
+        setTimeout(() => { if (submissions.get(form) === submission) submissions.delete(form); }, 0);
+        const fields = Array.from(form.elements).filter(field =>
+            field instanceof HTMLInputElement && field.type === 'hidden' && field.name === 'csrf_token');
+        if (!submission.includeToken) {
+            fields.forEach(field => field.remove());
+            return;
+        }
+        let hidden = fields.shift();
+        fields.forEach(field => field.remove());
         if (!hidden) {
             hidden = document.createElement('input');
             hidden.type = 'hidden';
@@ -32,6 +50,10 @@
         hidden.value = token;
     }, true);
     document.addEventListener('formdata', event => {
-        if (event.target instanceof HTMLFormElement && local(event.target.action)) event.formData.set('csrf_token', token);
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement)) return;
+        const includeToken = submissions.get(form)?.includeToken ?? needsToken(form);
+        if (includeToken) event.formData.set('csrf_token', token);
+        else event.formData.delete('csrf_token');
     }, true);
 })();

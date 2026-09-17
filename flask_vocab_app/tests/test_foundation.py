@@ -92,11 +92,11 @@ class FoundationTests(unittest.TestCase):
             conn.execute('DROP TABLE sync_runs')
             conn.execute('DROP TABLE reward_events')
         version, backup = upgrade_database(db)
-        self.assertEqual(version, 33)
+        self.assertEqual(version, 39)
         self.assertTrue(Path(backup).exists())
         with connect_db(db) as conn:
             self.assertEqual(list(conn.execute('SELECT * FROM words')), before)
-        self.assertEqual(upgrade_database(db), (33, None))
+        self.assertEqual(upgrade_database(db), (39, None))
 
     def test_migration_rejects_incompatible_schema_without_partial_changes(self):
         with tempfile.TemporaryDirectory() as temporary:

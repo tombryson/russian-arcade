@@ -1,6 +1,6 @@
 # Practice levels, Lingo coins and Barsik’s journey
 
-Decision and implementation: 15 September 2026. This document records the approved direction and the scope of the first integrated release. It supersedes earlier proposals to turn the legacy Elo total into distance, or to charge coins for access to ordinary practice.
+Progression decision: 15 September 2026. Game-shop update: 17 September 2026. This document records the approved direction and the scope of the first integrated release. It supersedes earlier proposals to turn the legacy Elo total into distance, or to charge coins for access to ordinary practice.
 
 ## Product rules
 
@@ -15,7 +15,7 @@ Use A1, A2, B1 and B2 as recognisable **practice targets**, accompanied by frien
 
 A1–B2 are CEFR bands used by the Russian testing system. TORFL assesses more than speaking, including listening, reading, writing and language knowledge. These labels describe curriculum intent here; our scenario contracts have not undergone external level validation. Sources: [Council of Europe global scale](https://www.coe.int/en/web/common-european-framework-reference-languages/table-1-cefr-3.3-common-reference-levels-global-scale), [SPbPU Russian testing centre](https://english.spbstu.ru/education/programs/short-term-programs/russian-language-studies/testing-center-russian-as-foreign-language/).
 
-Learners can freely select a practice target. There is no coin requirement, placement lock or new parent/PIN requirement for practice. Personal study remains the default; the existing optional household mode remains optional.
+Learners can freely select a practice target. Core activities have no coin requirement, placement lock or new parent/PIN requirement. Optional games are permanent [shop purchases](game-access.md) using Lingocoins: 25 for the first paid game and 50 thereafter. They do not require an Elo score or real-money payment. Personal study remains the default; the existing optional household mode remains optional.
 
 ## Three distinct kinds of progress
 
@@ -59,6 +59,8 @@ Activity entitlements pay **3 coins**, with a combined **12 activity coins per l
 
 The [first delivery](first-delivery.md) adds a separate **3-coin welcome bonus once per profile** for completing its three recall questions after learning Привет!, письмо and Спасибо!. It remains available after the ordinary activity allowance is used and does not consume that allowance. It counts toward the wallet and eligible journey earnings; story prerequisites still apply. The same completion cannot also collect an ordinary Reading reward. Teaching cards and introduction pages award nothing. Unhinted first recall answers contribute one aggregate Reading observation; hints do not reduce the bonus but exclude supported evidence from Elo. Guest completion is pending until transferred once into a newly created personal profile, never an existing profile selected afterward. Restarting the earlier activity into this revised lesson archives old answers and preserves any existing welcome receipt and rating evidence.
 
+Barsik’s shop uses the visible wallet balance, including earlier balances and introductory rewards. Learners choose their first paid game for 25 coins and later games for 50 coins each. Purchases are permanent and profile-specific. They do not lower eligible journey earnings or skill estimates. Existing acquired games remain owned; introductory lessons and coin milestones grant no further games automatically. See [game access](game-access.md) for purchase and migration rules.
+
 The review reward does not depend on the selected rating, so there is no incentive to choose Easy dishonestly. Undo appends a negative receipt and releases the card’s daily claim. Re-rating can reclaim the same net entitlement; it cannot accumulate extra coins. Reward writes and their qualifying saves share a SQLite transaction. Request retries and repeated checks cannot exceed the per-content entitlement or shared cap.
 
 Migration 025 assigns saved reading, writing, translation and Word Jumble work to a profile. Their adapters reward the selected profile in personal mode; historical work stays with “Me”. In optional household mode they do **not** attribute work from the shared adult workspace to whichever child happens to be selected. Native review, Speaking, lesson practice and journey rewards also remain profile-scoped. See [local user sessions](user-sessions.md) for the shared-library boundary and browser lifecycle.
@@ -67,7 +69,7 @@ Migration 025 assigns saved reading, writing, translation and Word Jumble work t
 
 The first two stops are the little post office and the market town. A short reading choice at the post office establishes where Barsik goes first. Completing it and earning 12 eligible practice coins opens the market town. There, another direction advances his route. These are small narrative checkpoints, not claims of passing A1 or delivering the final letter.
 
-The coin badge and journey link appear in both the React app and legacy activity headers. Updating the badge does not reload an activity or reconnect the microphone. The journey shows available/completed stops, remaining earnings and a receipt history. Ordinary activities remain accessible while a story stop is locked.
+The coin badge and journey link appear in both the React app and legacy activity headers. Updating the badge does not reload an activity or reconnect the microphone. The journey shows available/completed stops and the coins needed for the next stop. Ordinary activities remain accessible while a story stop is locked.
 
 The eventual final letter remains a larger authored assessment tied to learned vocabulary and forms. Its content, evidence coverage, support rules and outcome must be designed before it is presented as an ending; see [the narrative contract](barsik-journey.md).
 
@@ -97,7 +99,7 @@ Regression coverage includes independent profiles, simultaneous duplicate writes
 
 The application-wide integration in this release is the shared participation/progression system. Authored A1/A2 contracts currently apply to **Speaking**. Existing Reading/Writing/Word Jumble/Translation difficulty controls retain their previous semantics; their old records are not mechanically relabelled as certified CEFR tasks. Their next curriculum pass should introduce explicit task contracts and genuine options at each band before unifying those controls.
 
-Still to build: authored B1/B2 content, independent curriculum review of band assignments, further story destinations and the final-letter assessment, learner ownership for old shared activities in household mode, and evaluated skill recommendations. Coins do not solve those curriculum or measurement problems. No shop/spending mechanic or calibrated Elo model is introduced in this release. The visible practice rating is explicitly provisional and does not yet choose tasks for the learner.
+Still to build: authored B1/B2 content, independent curriculum review of band assignments, further story destinations and the final-letter assessment, learner ownership for old shared activities in household mode, and evaluated skill recommendations. Coins do not solve those curriculum or measurement problems. The later game-shop update adds spending with permanent ownership; it does not introduce a calibrated Elo model. The visible practice rating is explicitly provisional and does not yet choose tasks for the learner.
 
 Operational rollout: back up the configured SQLite store; run `db-upgrade` explicitly; verify foreign keys and preserved historical row counts; build the React bundle; restart the local server against the same configuration. Retain the pre-migration backup. To roll back, stop the app and restore a matching code/database backup together; do not downgrade a database in place or discard subsequent practice silently.
 

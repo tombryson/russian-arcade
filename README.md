@@ -22,6 +22,7 @@ Google Drive and SQLite have separate roles. Drive supports quick word capture, 
 | **Reading** | Generate or paste passages, answer comprehension questions and save new vocabulary. Revisit stories with English or Russian titles. |
 | **Word Jumble** | Compose an original sentence using a supplied word set and receive feedback on meaning, grammar and use of the target words. |
 | **Sentence practice** | Practise translation and review feedback on your attempt. |
+| **Saved sentences** | Read Russian sentences beside their English translations and play each recording for shadowing. Search either language or filter by topic and level. |
 | **Writing** | Respond to a prompt, save your writing and revisit assessed attempts. |
 | **Speaking** | Practise a scenario such as ordering at a café or asking directions. A separate audio review assesses grammar, fluency and task completion. |
 | **Tutor lessons** | Upload a PDF or image, save revisions, and practise with exercises based on the document. Select words on its pages for flashcards. |
@@ -29,15 +30,17 @@ Google Drive and SQLite have separate roles. Drive supports quick word capture, 
 | **Barsik’s journey** | Learn your first words through a five-lesson introduction, discover games, earn Lingocoins and follow progress through story stops. |
 | **Anki tools** | Use the existing automated card-generation workflow when you prefer to study in Anki. Native and Anki review schedules remain separate. |
 
+The appearance icon switches between top navigation and a left sidebar, saving the choice in this browser. The top Activities menu lists the main activities. Sidebar mode places the profile, language, coins and library shortcuts at the bottom and removes the top banner.
+
 ### Practice games
 
-First steps introduces the games. Once unlocked, they are also available for standalone practice with a wider vocabulary.
+Barsik’s shop lets learners choose permanent game unlocks using Lingocoins: 25 for the first purchase and 50 for each later game. Core practice stays available from the start. First steps teaches the opening words without automatically unlocking games. Games use a wider vocabulary and remain open for standalone practice once owned. See [game access](docs/word-post/game-access.md) for pricing and migration rules.
 
 | Game | What you practise |
 | --- | --- |
 | **Pack the Bag** | Match Russian messages to pictures and pack the appropriate items. |
-| **Follow the Directions** | Follow Russian instructions on a map, relative to Barsik’s heading. |
-| **Postcard Pairs** | Match contextual Russian sentences with pictures. |
+| **Follow the Directions** | Follow Russian directions through a town assembled from neighbourhood blocks. Distinguish buildings and entrances, ask for missing details and respond to changed plans. Checked map instructions and AI dialogue are prepared with audio before play. |
+| **Describe the scene** | Build Russian sentences from a simple scene. Practise prepositions, case endings, motion verbs, placement and agreement. |
 | **Missing Stamp** | Restore the missing Russian form using its sentence and English translation. |
 | **Post Office Radio** | Listen to a roughly one-minute Russian programme, then answer four comprehension questions. |
 | **Mailbox Sort** | Match Russian messages to their contextual English meanings. |
@@ -149,11 +152,12 @@ Audio jobs choose a voice from the configured list and keep it for retries. This
 ### Rewards and progress tracking
 
 - **Lingocoins** reward completed practice, subject to earning limits. Hints and mistakes do not automatically prevent rewards.
-- **Journey progress** records opened destinations and discovered games.
+- **Game ownership** records permanent purchases from Barsik’s shop.
+- **Journey progress** records opened destinations and completed story stops.
 - **Skill estimates** use assessed practice. Barsik’s progress bar displays this progress.
 - **Flashcard schedules** determine when each card returns.
 
-A1–B2 describe target practice levels. They are not qualifications awarded by the app. Speaking has authored A1/A2 variations. The old Elo total remains in historical records; it does not determine current skill estimates. Coins can open journey destinations, while ordinary practice remains available. See [levels and progression](docs/word-post/levels-and-progression.md).
+A1–B2 describe target practice levels. They are not qualifications awarded by the app. Speaking has authored A1/A2 variations. The old Elo total remains in historical records; it does not determine current skill estimates. Coins buy optional games, while eligible earned coins open journey destinations. Spending does not reduce journey or skill progress. Ordinary practice remains available. See [levels and progression](docs/word-post/levels-and-progression.md).
 
 ## Architecture and technology stack
 
@@ -177,13 +181,17 @@ Model settings are listed in [config.py](flask_vocab_app/config.py) and [`.env.e
 
 ## Public demo and project status
 
-The **[public demo](https://russian-arcade.fly.dev/post/)** includes introductory lessons, sample vocabulary and authored cloze cards. Each browser receives a separate temporary profile.
+The **[public demo](https://russian-arcade.fly.dev/post/)** offers introductory lessons, sample games, vocabulary and authored cloze cards without signing in. Each browser receives a separate temporary sample profile.
 
-The demo uses sample data only. Cards demonstrate text review without generated pictures or speech. AI generation, live speaking, uploads and editing are disabled. Demo progress resets on restart.
+Sample mode uses synthetic data and makes no paid AI calls. Its cards demonstrate text review without generated pictures or speech. Sample progress resets on restart.
+
+When the hosted AI trial is enabled, **GitHub sign-in** opens a separate, persistent workspace for that account. It supports the application's AI activities, including content generation, card media, lesson uploads and speaking, within provider and budget limits. Sign-in requests no repository access. A visitor cannot select another visitor's local learning profile.
+
+The funded trial shares a **US$1 daily and US$20 monthly** admission budget across all accounts. The server reserves costs before provider calls, limits simultaneous work and rejects unsupported operations. Pictures, speech, transcription and assessment all consume that allowance. A single activity may require several calls. Lingocoins buy games; they do not buy AI credits or increase this budget. Live calls close after one minute, but a server failure can prevent that close; a provider-side spending limit is also required. See [hosted trial operation](docs/operations-fly.md#funded-ai-trial) for prerequisites and limits.
 
 The application is under active development, with local individual and household use as its main deployment model. Current limits include:
 
-- Local profiles do not provide hosted account authentication.
+- Local profiles do not provide hosted account authentication; the optional public trial uses its separate GitHub sign-in boundary.
 - Background work uses threads within the application. Running multiple instances requires changes to storage and worker coordination.
 - OCR, generated content and automated assessment can contain errors.
 - Lesson selections feed cards and games. Broader lesson-based writing and speaking integration remains planned.
@@ -247,7 +255,7 @@ Settings are loaded in this order: shell variables, `flask_vocab_app/.env`, then
 
 Keys stay on the server. Keep `.env`, OAuth files, personal databases, uploads and generated media out of Git. A hosted server cannot reach Anki on your computer through its own `localhost`.
 
-See [Security](SECURITY.md) for deployment boundaries, credential handling and public-demo limits. Local profiles are not authenticated internet accounts. Paid AI is disabled in the public sample demo.
+See [Security](SECURITY.md) for deployment boundaries, credential handling and public-demo limits. Local profiles are not authenticated internet accounts. Anonymous sample mode has no paid AI access; the optional signed-in trial has separate admission and spending controls.
 
 ### Tests and maintenance
 
@@ -264,7 +272,7 @@ Back up **both the database and media**. The `word-post backup` command includes
 
 ## Deployment
 
-The [Dockerfile](Dockerfile), [fly.toml](fly.toml) and [hosted entry point](flask_vocab_app/hosted.py) configure the Fly.io demo. Startup creates a temporary sample database. The image excludes credentials and personal runtime files.
+The [Dockerfile](Dockerfile), [fly.toml](fly.toml) and [hosted entry point](flask_vocab_app/hosted.py) configure Fly.io hosting. Anonymous samples use a temporary database; the optional signed-in trial requires persistent identity, budget and per-account storage. The image excludes credentials and personal runtime files.
 
 A private deployment also needs authentication, persistent database and media storage, and backups. Separate SQLite files do not synchronise automatically. See the [Fly deployment runbook](docs/operations-fly.md).
 
@@ -283,7 +291,7 @@ flask_vocab_app/
   static/                Shared legacy CSS, JavaScript and static artwork
   ui/                    Preact/TypeScript interface and design tokens
   tests/                 Python workflow and regression tests
-scripts/                 Provider experiments and historical maintenance utilities
+scripts/                 Release export, provider experiments and maintenance utilities
 instance/                Ignored local databases, media, sessions and backups
 docs/                    Architecture, product decisions and feature guides
 .github/workflows/       Continuous integration
@@ -299,9 +307,10 @@ docs/                    Architecture, product decisions and feature guides
 - [Native flashcards](docs/word-post/native-flashcards.md) and [vocabulary library](docs/word-post/vocabulary-library.md)
 - [Tutor lessons](docs/word-post/lessons-companion.md) and [lesson-driven practice](docs/word-post/lesson-driven-practice.md)
 - [Speaking scenarios](docs/word-post/speaking-scenarios.md) and [assessment](docs/word-post/speaking-assessment.md)
-- [Journey games](docs/word-post/journey-games.md) and [mixed vocabulary / Radio](docs/word-post/mixed-vocabulary-and-radio.md)
+- [Describe the scene](docs/word-post/scene-builder.md), [Journey games](docs/word-post/journey-games.md) and [mixed vocabulary / Radio](docs/word-post/mixed-vocabulary-and-radio.md)
 - [Levels and rewards](docs/word-post/levels-and-progression.md), [skill progress](docs/word-post/skill-progress.md) and [Barsik’s story](docs/word-post/barsik-journey.md)
 - [Design system](docs/word-post/design-system.md) and [hosting runbook](docs/operations-fly.md)
+- [Public release procedure](docs/release-process.md) and [game shop](docs/word-post/game-access.md)
 
 ## Contributing and licensing
 

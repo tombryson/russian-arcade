@@ -5,26 +5,33 @@ main.game-workspace { max-width:none; width:100%; }
 .journey-game>.kicker { margin-bottom:8px; }
 .page.journey-game h1 { font-size:clamp(25px,3vw,31px); line-height:1.3; margin-bottom:12px; }
 .journey-games-catalogue,.journey-game-unlocks { margin-top:42px; }
+.games-page .journey-games-catalogue { margin-top:0; }
 .journey-games-section-head { margin-bottom:26px; max-width:640px; }
 .journey-games-section-head h2 { margin:8px 0 12px; }
 .journey-games-section-head>p:last-child { color:var(--wp-text-secondary); }
 .journey-game-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
 .journey-game-card { display:grid; grid-template-columns:116px minmax(0,1fr); gap:22px; align-items:center; background:#f3e9d1; color:#343a44; border-radius:22px; padding:26px; overflow:hidden; position:relative; }
+a.journey-game-card,a.journey-game-card:hover,a.journey-game-card:focus-visible { color:#343a44; text-decoration:none; }
+a.journey-game-card:hover { box-shadow:inset 0 0 0 2px #867344; }
+a.journey-game-card:focus-visible { outline:3px solid #cfad5c; outline-offset:4px; }
+a.journey-game-card .journey-game-card-copy { padding-right:18px; }
+a.journey-game-card .journey-game-card-copy>p:last-child { margin-bottom:0; }
+.journey-game-card-arrow { position:absolute; right:20px; bottom:20px; font-size:23px; line-height:1; }
 .journey-game-card.game-directions { background:#e1e7d2; }
-.journey-game-card h3 { font:500 23px/1.25 var(--wp-font-reading); margin:8px 0 12px; }
+.journey-game-card h2,.journey-game-card h3 { font:500 23px/1.25 var(--wp-font-reading); margin:8px 0 12px; }
 .journey-game-card .kicker { color:#6a6150; font-size:10px; letter-spacing:1.3px; margin:0; }
 .journey-game-card-copy>p:not(.kicker) { font-size:14px; line-height:1.55; margin-bottom:18px; }
 .journey-game-card .text-link,.journey-game-card a { color:inherit; }
+.game-artwork-illustrated { border-radius:22%; overflow:hidden; background:#f3e9d1; }
+.game-artwork-illustrated img { display:block; width:100%; height:100%; object-fit:contain; }
 .journey-game-card-art { position:relative; align-self:center; }
 .journey-game-card-art .first-steps-art { width:116px; height:116px; }
-.journey-game-card-art>img { position:absolute; bottom:-5px; right:-12px; width:80px; height:auto; transform:rotate(-8deg); }
 .journey-game-card.is-locked { background:var(--wp-surface-sheet); color:var(--wp-text-secondary); }
 .journey-game-card.is-locked .journey-game-card-art { filter:grayscale(1); opacity:.55; }
 .journey-game-card.is-locked .kicker { color:inherit; }
 .journey-game-card-copy>.journey-game-lock { font-size:13px; margin:16px 0 0; }
 .journey-game-unlocks .journey-game-card { grid-template-columns:140px minmax(0,1fr); padding:30px; }
 .journey-game-unlocks .journey-game-card-art .first-steps-art { width:140px; height:140px; }
-.journey-game-unlocks .journey-game-card-copy .cta { color:var(--wp-action-primary-foreground); }
 .journey-game-unlocks .journey-game-card+.journey-game-card { margin-top:18px; }
 .journey-game-keep { margin:14px 4px 0; color:var(--wp-text-secondary); font-size:13px; }
 .journey-game-intro { display:grid; grid-template-columns:180px minmax(0,1fr); gap:40px; align-items:center; padding:35px 0; max-width:850px; }
@@ -147,8 +154,7 @@ main.game-workspace { max-width:none; width:100%; }
 @media(max-width:440px) {
   .journey-game-card,.journey-game-unlocks .journey-game-card { grid-template-columns:72px minmax(0,1fr); gap:15px; padding:20px 16px; }
   .journey-game-card-art .first-steps-art,.journey-game-unlocks .journey-game-card-art .first-steps-art { width:72px; height:72px; }
-  .journey-game-card-art>img { width:57px; right:-7px; }
-  .journey-game-card h3 { font-size:21px; }
+  .journey-game-card h2,.journey-game-card h3 { font-size:21px; }
   .journey-game-card .kicker { letter-spacing:.6px; font-size:9px; }
   .journey-bag-board,.journey-map-board { padding:16px; border-radius:18px; }
   .journey-bag-objects { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
@@ -167,11 +173,12 @@ main.game-workspace { max-width:none; width:100%; }
    own small tabletop interaction rather than another list of quiz answers. */
 .journey-game-card.game-pairs { background:#e8dbca; }
 .journey-game-card.game-missing-stamp { background:#ede2bb; }
-.journey-game-card.game-radio { background:#e7cfc1; }
+.journey-game-card.game-radio:not(.journey-game-card) { background:#e7cfc1; }
 .journey-game-card.game-mailbox-sort { background:#dce6de; }
 .journey-game-card.game-letter-back { background:#e4dfcf; }
 .journey-game-card.game-detective { background:#dee1bd; }
 .journey-games-catalogue .journey-game-card { grid-template-columns:86px minmax(0,1fr); gap:19px; padding:23px; }
+.journey-games-catalogue .journey-game-card.is-locked { background:var(--wp-surface-sheet); color:var(--wp-text-secondary); }
 .journey-games-catalogue .journey-game-card-art .first-steps-art { width:86px; height:86px; }
 .journey-games-upcoming { margin-top:24px; }
 .journey-games-upcoming summary { cursor:pointer; padding:15px 0; font-weight:500; }
@@ -255,7 +262,7 @@ main.game-workspace { max-width:none; width:100%; }
 .game-word-tiles>button.is-correct { background:#dce5c9; color:#394f3d; border-color:#6e8a66; }
 .game-word-tiles>button:disabled.is-selected,.game-word-tiles>button:disabled.is-correct { opacity:1; }
 .game-radio-board { display:grid; grid-template-columns:minmax(230px,1fr) minmax(0,1fr); align-items:center; gap:28px; }
-.game-radio { border-radius:24px; border:4px solid #7a543d; background:#ac7857; box-shadow:inset 0 4px 0 #d29b70,0 6px 0 #624a39; padding:24px; color:#fcf1d5; }
+.game-radio:not(.journey-game-card) { border-radius:24px; border:4px solid #7a543d; background:#ac7857; box-shadow:inset 0 4px 0 #d29b70,0 6px 0 #624a39; padding:24px; color:#fcf1d5; }
 .game-radio-top { display:flex; justify-content:space-between; gap:15px; align-items:center; }
 .game-radio-name { font:500 13px/1.4 var(--wp-font-reading); text-transform:uppercase; letter-spacing:1.3px; }
 .game-radio-light { width:9px; height:9px; flex:0 0 9px; background:#ead177; border:2px solid #6f6037; border-radius:50%; }
@@ -422,7 +429,7 @@ main.game-workspace { max-width:none; width:100%; }
 @media(max-width:760px) {
   .journey-games-upcoming ul,.journey-game-collection { grid-template-columns:minmax(0,1fr); }
   .game-radio-board { grid-template-columns:minmax(0,1fr); }
-  .game-radio { max-width:430px; width:100%; justify-self:center; }
+  .game-radio:not(.journey-game-card) { max-width:430px; width:100%; justify-self:center; }
   .game-radio-response { max-width:430px; width:100%; justify-self:center; }
   .game-cloze-postcard { grid-template-columns:minmax(0,1fr) 82px; gap:18px; padding:22px; }
   .game-postcard-address { padding-left:12px; }
@@ -474,7 +481,7 @@ main.game-workspace { max-width:none; width:100%; }
   .game-evidence-note .journey-game-clue-row { gap:8px; }
   .game-evidence-note .journey-game-clue-row>p { font-size:20px; }
   .game-evidence-note .journey-game-audio { width:36px; height:36px; min-height:36px; flex-basis:36px; }
-  .game-radio { padding:20px; }
+  .game-radio:not(.journey-game-card) { padding:20px; }
   .game-radio-face { gap:18px; }
   .game-reply-paper { padding:22px; }
   .game-reply-composition>button { font-size:21px; }
@@ -577,3 +584,35 @@ main.game-workspace { max-width:none; width:100%; }
   .is-playing .game-russian-postcard { min-height:140px; }
   .is-playing .game-picture-postcard .game-vocabulary-picture { height:124px; }
 }
+
+/* The first result and supported practice have distinct, compact controls. */
+.game-feedback-actions { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+.game-practice-notice { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin:12px 0; padding:12px 16px; border:1px solid var(--wp-border-subtle); border-radius:12px; }
+.game-practice-notice p { margin:0; }
+.journey-game-completed>.cta { margin:8px 0 18px; }
+.journey-game button:focus-visible, .journey-game a:focus-visible { outline:3px solid var(--wp-accent-learning); outline-offset:4px; }
+@media(max-width:700px) {
+  .journey-game.is-playing .journey-game-submit { position:sticky; bottom:0; z-index:3; background:var(--wp-surface-sheet); border:1px solid var(--wp-border-subtle); border-radius:12px; padding:12px 14px max(12px,env(safe-area-inset-bottom)); box-shadow:0 -5px 18px #0002; flex-wrap:wrap; }
+  .journey-game.is-playing .journey-game-submit>p { margin:0; font-size:13px; flex:1 1 160px; }
+  .journey-game.is-playing .journey-game-submit>.cta { min-height:44px; padding:12px 16px; }
+  .journey-game-stage button { scroll-margin-block:120px; }
+  .journey-game-feedback { padding:16px; gap:16px; }
+  .game-feedback-actions { width:100%; }
+  .game-feedback-actions>button { flex:1 1 auto; }
+  .game-practice-notice { font-size:14px; }
+}
+
+.journey-game-card-selection { margin-block: 1rem; }
+.journey-game-card-selection summary { cursor: pointer; padding-block: .5rem; }
+.journey-game-card-selection fieldset { border: 0; padding: .75rem 0; margin: 0; }
+.journey-game-card-selection label { display: flex; gap: .75rem; align-items: flex-start; min-height: 44px; padding-block: .5rem; cursor: pointer; }
+.journey-game-card-selection label span span { display: block; font-size: .9em; }
+.journey-game-card-selection input { flex: none; margin-top: .3rem; width: 1.25rem; height: 1.25rem; }
+
+.journey-games-shop-link { display:flex; justify-content:space-between; align-items:center; gap:24px; padding:24px; margin-top:20px; border:1px solid var(--wp-border-subtle); border-radius:16px; color:var(--wp-text-primary); text-decoration:none; background:var(--wp-surface-sheet); }
+.journey-games-shop-link>span:first-child { display:grid; gap:7px; }
+.journey-games-shop-link strong { font-size:17px; }
+.journey-games-shop-link>span:first-child>span { font-size:14px; color:var(--wp-text-secondary); }
+.journey-games-shop-link>span:last-child { font-size:26px; }
+.journey-games-shop-link:hover { color:var(--wp-text-primary); border-color:#938654; }
+.journey-games-shop-link:focus-visible { outline:3px solid #c59328; outline-offset:4px; }

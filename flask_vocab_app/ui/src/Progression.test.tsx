@@ -12,14 +12,14 @@ const source=()=>({data,error:'',loading:false,refresh:vi.fn()});
 afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();window.history.replaceState(null,'','/');});
 
 describe('Shared progression',()=>{
-  it('shows the real balance and rewards while using new earnings for journey progress',()=>{
+  it('shows the real balance and uses new earnings for journey progress',()=>{
     render(<Journey progression={source()} />);
     expect(screen.getByText('42')).toBeTruthy();
     expect(screen.getByText('3 earned through practice')).toBeTruthy();
     expect(screen.getByRole('link',{name:'Start →'}).getAttribute('href')).toBe('#first-steps');
     expect(screen.getByText('Earn 9 more Lingo coins and finish the previous stop to reach here.')).toBeTruthy();
     expect(screen.queryByRole('link',{name:/Market town/})).toBeNull();
-    expect(screen.getByText('A visit to the café')).toBeTruthy();
+    expect(screen.queryByText('A visit to the café')).toBeNull();
     expect(screen.getByText(/Your earlier 39 coins are saved/)).toBeTruthy();
     expect(screen.queryByText(/B2|Elo|You have mastered/)).toBeNull();
   });

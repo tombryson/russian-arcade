@@ -39,34 +39,34 @@ class LessonCompanion:
     def __init__(self, db_path, legacy, ai, config):
         self.db_path, self.legacy, self.ai = db_path, legacy, ai
         self.config = config
+        self.max_pages = min(MAX_PAGES, max(1, int(config.get("LESSON_MAX_PAGES", MAX_PAGES))))
         self.files = LessonFiles(
             db_path,
             config.get("UPLOAD_FOLDER"),
             config.get("LESSON_PDF_RENDERER", "pdftoppm"),
+            max_pages=self.max_pages,
         )
         self._lock = threading.Lock()
         self._active = set()
         self._slots = threading.BoundedSemaphore(2)
 
     def receive(self, uploads):
-        materials = []
+        uploads = [upload for upload in uploads if upload and upload.filename]
+        if not 1 <= len(uploads) <= 5:
+            raise LearningError("lesson_file", "Choose 1–5 files for a lesson.")
+        pending = []
+        total = 0
+        # Validate the whole upload before saving any files or starting work.
         for upload in uploads:
-            if upload and upload.filename:
-                materials.append(
-                    self.files.receive(
-                        upload.stream.read(25 * 1024 * 1024 + 1), upload.filename
-                    )
-                )
-        if (
-            not materials
-            or len(materials) > 5
-            or sum(m["pages"] for m in materials) > MAX_PAGES
-        ):
-            raise LearningError(
-                "lesson_file",
-                f"Choose 1–5 files, with at most {MAX_PAGES} pages in total.",
-            )
-        return materials
+            data = upload.stream.read(25 * 1024 * 1024 + 1)
+            media_type, pages = self.files.inspect(data, self.max_pages)
+            total += pages
+            if total > self.max_pages:
+                raise LearningError("lesson_file", f"Choose up to {self.max_pages} pages in total.")
+            pending.append((data, media_type, pages, Path(upload.filename).name[:200]))
+        return [{"digest": self.files.put(data, media_type), "name": name,
+                 "media_type": media_type, "pages": pages}
+                for data, media_type, pages, name in pending]
 
     def create(self, title, description, materials):
         title = clean(title or Path(materials[0]["name"]).stem, 200, "lesson title")
@@ -148,9 +148,9 @@ class LessonCompanion:
             raise LearningError(
                 "lesson_file", "Add the lesson PDF or images before preparing practice."
             )
-        if sum(m["pages"] for m in materials) > MAX_PAGES:
+        if sum(m["pages"] for m in materials) > self.max_pages:
             raise LearningError(
-                "lesson_file", f"Choose a section of up to {MAX_PAGES} pages."
+                "lesson_file", f"Choose a section of up to {self.max_pages} pages."
             )
         return self.revise(lesson_id, materials)
 

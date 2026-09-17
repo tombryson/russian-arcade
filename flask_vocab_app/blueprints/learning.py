@@ -8,10 +8,19 @@ from contracts.learning import fields, key
 from repositories.learning_repository import LearningError, require_access, timestamp, transaction
 from services.onboarding import GUEST_ONBOARDING_KEY, onboarding_state
 from utils.household_access import access_id, access_policy, csrf_token
+from utils.navigation import browser_navigation_layout
 
 
 def create_learning_blueprint(household, content, learning, store):
     bp = Blueprint('learning', __name__)
+
+    def clear_access_session():
+        language = session.get('ui_lang')
+        navigation = browser_navigation_layout()
+        session.clear()
+        if language in {'en', 'ru'}:
+            session['ui_lang'] = language
+        session['ui_navigation'] = navigation
 
     def body(required, optional=()):
         if not request.is_json:
@@ -64,7 +73,7 @@ def create_learning_blueprint(household, content, learning, store):
 
     def unlock(pin):
         credential = household.unlock(pin, access_id())
-        session.clear()
+        clear_access_session()
         session['household_access_id'] = credential
         current_app.session_interface.regenerate(session)
         csrf_token()
@@ -81,7 +90,7 @@ def create_learning_blueprint(household, content, learning, store):
     def api_lock():
         body(set())
         household.lock(access_id())
-        session.clear()
+        clear_access_session()
         return jsonify(locked=True, csrf_token=csrf_token())
 
     @bp.post('/api/v1/grownups/profiles')
@@ -187,7 +196,7 @@ def create_learning_blueprint(household, content, learning, store):
             unlock(request.form.get('pin'))
         elif action == 'lock':
             household.lock(access_id())
-            session.clear()
+            clear_access_session()
         elif action == 'create-profile':
             guest = session.get(GUEST_ONBOARDING_KEY) if onboarding_state()['profile_id'] is None else None
             household.create_profile(access_id(), request.form.get('name'), request.form.get('timezone'), request.form.get('avatar', 'letter'), guest_onboarding=guest)

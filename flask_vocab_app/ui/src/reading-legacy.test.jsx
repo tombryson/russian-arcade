@@ -99,4 +99,58 @@ describe('reading draft guard', () => {
     const cached = document.getElementById('question-form').cloneNode(true);
     expect(cached.querySelector('textarea').textContent).toBe('Мой ответ.');
   });
+
+  function mobileSidebar() {
+    document.body.insertAdjacentHTML('afterbegin', `<nav id="sidebar">
+      <button data-bs-target="#sidebarNav" aria-expanded="true">Menu</button>
+      <div id="sidebarNav" class="collapse show"><a class="sidebar-link" href="/writing" hx-boost="true">Writing</a></div>
+    </nav>`);
+    vi.stubGlobal('innerWidth', 390);
+    const menu = document.getElementById('sidebarNav');
+    const hide = vi.fn(() => menu.classList.remove('show'));
+    const getOrCreateInstance = vi.fn(() => ({ hide }));
+    vi.stubGlobal('bootstrap', { Collapse: { getOrCreateInstance } });
+    return { menu, link: menu.querySelector('a'), hide, getOrCreateInstance };
+  }
+
+  it('closes the mobile menu only after a successful boosted activity swap', () => {
+    workspace().dataset.dirty = 'false';
+    const { menu, link, hide, getOrCreateInstance } = mobileSidebar();
+    const main = document.getElementById('mainContent');
+    document.body.dispatchEvent(new CustomEvent('htmx:beforeRequest', { detail: { target: main, elt: link } }));
+    expect(hide).not.toHaveBeenCalled();
+    document.body.dispatchEvent(new CustomEvent('htmx:afterSettle', {
+      detail: { target: main, elt: main, requestConfig: { elt: link }, xhr: { status: 200 } },
+    }));
+    expect(getOrCreateInstance).toHaveBeenCalledWith(menu, { toggle: false });
+    expect(hide).toHaveBeenCalledOnce();
+    expect(menu.classList.contains('show')).toBe(false);
+  });
+
+  it('keeps the mobile menu open when navigation is cancelled to preserve a draft', () => {
+    workspace();
+    const { menu, link, hide } = mobileSidebar();
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const request = new CustomEvent('htmx:beforeRequest', { cancelable: true,
+      detail: { target: document.getElementById('mainContent'), elt: link } });
+    document.body.dispatchEvent(request);
+    expect(request.defaultPrevented).toBe(true);
+    expect(menu.classList.contains('show')).toBe(true);
+    expect(hide).not.toHaveBeenCalled();
+    expect(document.getElementById('draft').value).toBe('Мой ответ.');
+  });
+
+  it('does not close navigation for failed swaps, unrelated updates or desktop views', () => {
+    workspace().dataset.dirty = 'false';
+    const { link, hide } = mobileSidebar();
+    const main = document.getElementById('mainContent');
+    const settle = (source, status = 200) => document.body.dispatchEvent(new CustomEvent('htmx:afterSettle', {
+      detail: { target: main, requestConfig: { elt: source }, xhr: { status } },
+    }));
+    settle(link, 503);
+    settle(document.getElementById('save-story'));
+    vi.stubGlobal('innerWidth', 1200);
+    settle(link);
+    expect(hide).not.toHaveBeenCalled();
+  });
 });

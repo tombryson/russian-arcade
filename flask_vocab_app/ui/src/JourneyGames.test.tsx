@@ -1,12 +1,13 @@
+import {GameLanguage} from './GameLocale';
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {act,fireEvent,render,screen,waitFor} from '@testing-library/preact';
-import {GameCatalogue,GameUnlocks,JourneyGame,traceRoute} from './JourneyGames';
+import {GameCatalogue,JourneyGame,traceRoute} from './JourneyGames';
 import type {GameBoard,GameCatalogueState,GameRound,GameState,GameSummary,JourneyGameId} from './journey-games-api';
 import {AudioClue} from './GameAudio';
 
 const games:GameSummary[]=[
-  {id:'pack-bag',title:'Pack the bag',description:'Help Barsik choose what to take.',lesson_id:'bag',lesson_title:'What’s in the bag?',lesson_href:'#first-steps/bag',unlocked:true,new:true,active_session_id:null},
-  {id:'directions',title:'Follow the directions',description:'Guide Barsik through the streets.',lesson_id:'directions',lesson_title:'Which way?',lesson_href:'#first-steps/directions',unlocked:false,new:false,active_session_id:null},
+  {id:'pack-bag',title:'Pack the bag',description:'Help Barsik choose what to take.',lesson_id:'bag',lesson_title:'What’s in the bag?',lesson_href:'#first-steps/bag',unlocked:true,unlock:{required_coins:12,earned_coins:12,remaining_coins:0},new:true,active_session_id:null},
+  {id:'directions',title:'Follow the directions',description:'Guide Barsik through the streets.',lesson_id:'directions',lesson_title:'Which way?',lesson_href:'#first-steps/directions',unlocked:false,unlock:{required_coins:60,earned_coins:12,remaining_coins:48},new:false,active_session_id:null},
 ];
 const objects=[{id:'letter',visual:'letter',label:'letter'},{id:'map',visual:'map',label:'map'},{id:'apple',visual:'apple',label:'apple'},{id:'cup',visual:'cup',label:'cup'}];
 const packRounds:GameRound[]=[
@@ -38,6 +39,11 @@ function server(initial=state(),overview=catalogue(),rounds=packRounds) {
       api.state.result={answer:body.answer,expected_answer:expected,correct:JSON.stringify(body.answer)===JSON.stringify(expected),feedback:'Barsik needs the letter.',answer_audio:api.answerAudio};api.state.phase='feedback';
       if(api.state.game_id==='radio')api.state.round!.clues=api.state.round!.clues.map(clue=>({...clue,text:api.transcripts[clue.audio_key]??'Барсик, налево!'}));
     }
+    if(action==='retry'){api.state.practice={mode:'correction',index:0,total:1};api.state.phase='practice';api.state.result=null;}
+    if(action==='practice_answer'){api.state.result={answer:body.answer,expected_answer:['letter'],correct:body.answer[0]==='letter',feedback:'Это письмо. — This is a letter.'};api.state.phase='practice_feedback';}
+    if(action==='practice_continue'){api.state.practice=undefined;api.state.round_index++;api.state.result=null;api.state.round=structuredClone(api.rounds[api.state.round_index]??null);api.state.phase=api.state.round?'play':'completed';}
+    if(action==='review'){api.state.practice={mode:'review',index:0,total:1};api.state.phase='practice';api.state.round=structuredClone(packRounds[0]);api.state.result=null;}
+    if(action==='practice_exit'){api.state.practice=undefined;api.state.phase='completed';api.state.round=null;api.state.result=null;}
     if(action==='continue'){api.state.round_index++;api.state.result=null;api.state.round=structuredClone(api.rounds[api.state.round_index] ?? null);api.state.phase=api.state.round?'play':'ready';}
     if(action==='complete'){api.state.phase='completed';api.state.reward={amount:3,status:'credited',awarded_now:true};}
     if(api.changeOwner)api.state.profile_id='someone-else';
@@ -51,32 +57,68 @@ beforeEach(()=>{vi.stubGlobal('scrollTo',vi.fn());window.location.hash='games/pa
 afterEach(()=>vi.unstubAllGlobals());
 
 describe('Discovering games',()=>{
-  it('shows unlocked games alongside clear lesson links, without starting games or preparing paid audio',async()=>{
-    const api=server();render(<GameCatalogue/>);
-    expect(await screen.findByRole('heading',{name:'Pack the bag'})).toBeTruthy();
-    expect(screen.getByRole('link',{name:'Play'}).getAttribute('href')).toBe('#games/pack-bag');
-    expect(screen.getByRole('link',{name:'Which way?'}).getAttribute('href')).toBe('#first-steps/directions');
-    expect(screen.queryByRole('link',{name:'Follow the directions'})).toBeNull();
+  it('lists all games on the Games page, opening owned games and directing locked games to the shop',async()=>{
+    const api=server();render(<GameCatalogue context="games"/>);
+    expect(await screen.findByRole('heading',{name:'Pack the bag',level:2})).toBeTruthy();
+    expect(screen.getByRole('link',{name:'Pack the bag'}).getAttribute('href')).toBe('#games/pack-bag');
+    expect(screen.getByRole('heading',{name:'Follow the directions',level:2})).toBeTruthy();
+    expect(screen.getByRole('link',{name:'Follow the directions — In Barsik’s shop'}).getAttribute('href')).toBe('#shop');
+    expect(screen.queryByRole('heading',{name:'Games to discover'})).toBeNull();
     expect(api.posts()).toHaveLength(0);
   });
-  it('only announces the game from the completed lesson and keeps its standalone destination clear',async()=>{
-    const api=server();api.raw.overview.games[1].unlocked=true;render(<GameUnlocks lessonId="bag"/>);
+  it('routes a retired Pairs setup bookmark to the replacement without starting a game',async()=>{
+    const api=server();render(<JourneyGame gameId="pairs"/>);
+    await waitFor(()=>expect(window.location.hash).toBe('#games/scene-builder'));
+    expect(api.posts()).toHaveLength(0);
+  });
+  it('shows owned games and one shop link without automatic coin milestones',async()=>{
+    const api=server();render(<GameCatalogue/>);
     expect(await screen.findByRole('heading',{name:'Pack the bag'})).toBeTruthy();
+    expect(screen.getByRole('link',{name:'Pack the bag'}).getAttribute('href')).toBe('#games/pack-bag');
+    expect(screen.getByRole('link',{name:/Visit Barsik’s shop/}).getAttribute('href')).toBe('#shop');
+    expect(screen.queryByText(/Lingocoins earned/)).toBeNull();
+    expect(screen.queryByText(/brought-forward coins/)).toBeNull();
     expect(screen.queryByRole('heading',{name:'Follow the directions'})).toBeNull();
-    expect(screen.getByText(/You can find this game/)).toBeTruthy();
-    expect(screen.getByRole('link',{name:'Activities'}).getAttribute('href')).toBe('#activities');
+    expect(api.posts()).toHaveLength(0);
+  });
+  it('explains the shop in Russian without directing the learner back to the introduction',async()=>{
+    server();render(<GameLanguage.Provider value="ru"><GameCatalogue/></GameLanguage.Provider>);
+    expect(await screen.findByRole('link',{name:/В магазин Барсика/})).toBeTruthy();
+    expect(screen.getByText('Открывайте новые игры за лингокоины в магазине Барсика.')).toBeTruthy();
+    expect(screen.queryByRole('link',{name:'Which way?'})).toBeNull();
+    expect(screen.queryByText(/Заработано лингокоинов/)).toBeNull();
+  });
+  it('describes public samples without the activity-coin unlock policy',async()=>{
+    const overview=catalogue();overview.public_demo=true;
+    overview.games[0].availability='sample';overview.games[1].availability='local-only';
+    server(state(),overview);render(<GameCatalogue/>);
+    expect(await screen.findByText('Sample game')).toBeTruthy();
+    expect(screen.getByText('Build on words you know, meet new ones and try a different way to practise.')).toBeTruthy();
+    expect(screen.queryByText('Earn Lingocoins from reading, writing, speaking and other activities to open new games.')).toBeNull();
+    expect(screen.queryByText(/brought-forward coins/)).toBeNull();
+    expect(screen.queryByRole('link',{name:'Choose an activity'})).toBeNull();
+  });
+  it('retains an unfinished game when its new milestone has not been reached',async()=>{
+    const overview=catalogue();overview.games[1].active_session_id='saved-route';
+    const api=server(state(),overview);render(<GameCatalogue/>);
+    expect(await screen.findByRole('link',{name:'Follow the directions'})).toBeTruthy();
+    expect(screen.getByRole('link',{name:'Follow the directions'}).getAttribute('href')).toBe('#games/session/saved-route');
+    expect(screen.getByText('Continue playing')).toBeTruthy();
+    expect(screen.queryByText('Opens after earning 60 Lingocoins in activities.')).toBeNull();
+    expect(api.posts()).toHaveLength(0);
   });
   it('continues an existing game from the catalogue instead of starting a second session',async()=>{
     const overview=catalogue();overview.games[0].active_session_id='saved-game';server(state(),overview);render(<GameCatalogue context="journey"/>);
-    expect(await screen.findByRole('link',{name:'Continue playing'})).toBeTruthy();
-    expect(screen.getByRole('link',{name:'Continue playing'}).getAttribute('href')).toBe('#games/session/saved-game');
+    expect(await screen.findByRole('link',{name:'Pack the bag'})).toBeTruthy();
+    expect(screen.getByText('Continue playing')).toBeTruthy();
+    expect(screen.getByRole('link',{name:'Pack the bag'}).getAttribute('href')).toBe('#games/session/saved-game');
     expect(screen.getByRole('heading',{name:'Games along the way'})).toBeTruthy();
   });
   it('recovers a catalogue error without inventing an unlocked game',async()=>{
-    const api=server();api.raw.fail='load';render(<GameCatalogue/>);await screen.findByRole('alert');expect(screen.queryByRole('link',{name:'Play'})).toBeNull();await click('Try again');expect(await screen.findByRole('link',{name:'Play'})).toBeTruthy();
+    const api=server();api.raw.fail='load';render(<GameCatalogue/>);await screen.findByRole('alert');expect(screen.queryByRole('link',{name:'Pack the bag'})).toBeNull();await click('Try again');expect(await screen.findByRole('link',{name:'Pack the bag'})).toBeTruthy();
   });
   it('shows a recoverable error for a malformed catalogue instead of crashing the activity page',async()=>{
-    vi.stubGlobal('fetch',vi.fn(async()=>response({status:'ok'})));render(<GameCatalogue/>);expect(await screen.findByRole('alert')).toBeTruthy();expect(screen.getByText('Your games could not load. Please try again.')).toBeTruthy();expect(screen.queryByRole('link',{name:'Play'})).toBeNull();
+    vi.stubGlobal('fetch',vi.fn(async()=>response({status:'ok'})));render(<GameCatalogue/>);expect(await screen.findByRole('alert')).toBeTruthy();expect(screen.getByText('Your games could not load. Please try again.')).toBeTruthy();expect(screen.queryByRole('link',{name:'Pack the bag'})).toBeNull();
   });
 });
 
@@ -86,8 +128,73 @@ describe('A game with Barsik',()=>{
     api.raw.fail='start';await click('Let’s play');await screen.findByRole('alert');const first=JSON.parse(api.posts()[0][1]!.body as string);expect(first.request_id).toBeTruthy();
     await click('Try again');await screen.findByRole('button',{name:'Pack letter'});expect(JSON.parse(api.posts()[1][1]!.body as string)).toEqual(first);expect(window.location.hash).toBe('#games/session/play-1');
   });
-  it('keeps a locked game linked to its lesson with no start button',async()=>{
-    const api=server();render(<JourneyGame gameId="directions"/>);await screen.findByText(/This game unlocks after/);expect(screen.getByRole('link',{name:'Which way?'}).getAttribute('href')).toBe('#first-steps/directions');expect(screen.queryByRole('button',{name:'Let’s play'})).toBeNull();expect(api.posts()).toHaveLength(0);
+  it('sends a locked game to the shop without setup controls or a start button',async()=>{
+    const api=server();render(<JourneyGame gameId="directions"/>);
+    expect(await screen.findByText('Unlock this game in Barsik’s shop with Lingocoins.')).toBeTruthy();
+    expect(screen.getByRole('link',{name:/Visit Barsik’s shop/}).getAttribute('href')).toBe('#shop');
+    expect(screen.queryByRole('button',{name:'Let’s play'})).toBeNull();expect(api.posts()).toHaveLength(0);
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.queryByRole('link',{name:'Which way?'})).toBeNull();
+  });
+  it('starts the town mission shown as selected even when older deliveries precede it in the catalogue',async()=>{
+    const overview=catalogue();overview.games[1].unlocked=true;
+    overview.deliveries=[
+      {mission_id:'old-letter',title:'A familiar letter route',title_ru:'Знакомый маршрут',area:'park',summary:'Follow the park route.',summary_ru:'Пройди через парк.'},
+      {mission_id:'town-parcel',title:'Collect the parcel',title_ru:'Забрать посылку',area:'town',summary:'Find the parcel and deliver it.',summary_ru:'Найди и доставь посылку.'},
+    ];
+    const api=server(state({game_id:'directions',round:routeRound}),overview);render(<JourneyGame gameId="directions"/>);
+    const selected=await screen.findByRole('radio',{name:/Collect the parcel/});
+    expect((selected as HTMLInputElement).checked).toBe(true);
+    expect(screen.queryByText('One letter · Three connected stops')).toBeNull();
+    await click('Let’s play');
+    expect(JSON.parse(api.posts()[0][1]!.body as string).options.delivery_id).toBe('town-parcel');
+  });
+  it.each(['town-generated','town-procedural'])('starts %s without disclosing authored puzzles from a mixed catalogue',async(missionId)=>{
+    const overview=catalogue();overview.games[1].unlocked=true;
+    overview.deliveries=[
+      {mission_id:'town-detour',title:'The closed bridge',title_ru:'Закрытый мост',area:'town',summary:'Find another river crossing.',summary_ru:'Найди другую переправу.'},
+      {mission_id:'old-letter',title:'A familiar letter route',title_ru:'Знакомый маршрут',area:'park',summary:'Follow the park route.',summary_ru:'Пройди через парк.'},
+      {mission_id:missionId,title:'A delivery for Barsik',title_ru:'Доставка для Барсика',area:'town',summary:'Each delivery takes a different route.',summary_ru:'У каждой доставки свой маршрут.'},
+    ];
+    const api=server(state({game_id:'directions',round:routeRound}),overview);render(<JourneyGame gameId="directions"/>);
+    expect(await screen.findByRole('heading',{name:'A delivery for Barsik'})).toBeTruthy();
+    expect(screen.queryByText('The closed bridge')).toBeNull();
+    expect(screen.queryByText('Find another river crossing.')).toBeNull();
+    expect(screen.queryByText('A familiar letter route')).toBeNull();
+    expect(screen.getAllByRole('radio')).toHaveLength(2);
+    expect(api.posts()).toHaveLength(0);
+    await click('Let’s play');
+    expect(JSON.parse(api.posts()[0][1]!.body as string).options.delivery_id).toBe(missionId);
+  });
+  it('shows paused delivery preparation without calling it an obsolete saved game',async()=>{
+    const pending=state({game_id:'directions',phase:'preparing',round:null,source:{kind:'route',title:'Town deliveries',href:'#games/directions'},
+      preparation:{status:'failed',ready:2,total:8,stage:'audio',message:'Preparing the voices.',error:'The recording could not be prepared.'}});
+    const api=server(pending);render(<JourneyGame sessionId="play-1"/>);
+    await screen.findByRole('button',{name:/Retry preparation/});
+    expect(screen.queryByText('This is a saved route from the earlier game.')).toBeNull();
+    expect(api.posts()).toHaveLength(0);
+  });
+  it('explicitly requests a new game when exploring another town even without a listed active session',async()=>{
+    const overview=catalogue();overview.games[1].unlocked=true;
+    overview.deliveries=[{mission_id:'town-procedural',title:'A delivery for Barsik',title_ru:'Доставка для Барсика',area:'town',summary:'Follow Russian directions.',summary_ru:'Следуй указаниям.'}];
+    const api=server(state({game_id:'directions',round:routeRound}),overview);render(<JourneyGame gameId="directions"/>);
+    fireEvent.click(await screen.findByRole('checkbox',{name:'Explore a new town'}));
+    expect(api.posts()).toHaveLength(0);
+    await click('Let’s play');
+    const body=JSON.parse(api.posts()[0][1]!.body as string);
+    expect(body.new_game).toBe(true);
+    expect(body.options.delivery_id).toBe('town-procedural');
+    expect(body.options.delivery_new_town).toBe(true);
+  });
+  it('keeps the saved town by default when starting a procedural delivery',async()=>{
+    const overview=catalogue();overview.games[1].unlocked=true;
+    overview.deliveries=[{mission_id:'town-procedural',title:'A delivery for Barsik',title_ru:'Доставка для Барсика',area:'town',summary:'Follow Russian directions.',summary_ru:'Следуй указаниям.'}];
+    const api=server(state({game_id:'directions',round:routeRound}),overview);render(<JourneyGame gameId="directions"/>);
+    expect((await screen.findByRole('checkbox',{name:'Explore a new town'}) as HTMLInputElement).checked).toBe(false);
+    await click('Let’s play');
+    const body=JSON.parse(api.posts()[0][1]!.body as string);
+    expect(body.new_game).toBeUndefined();
+    expect(body.options.delivery_new_town).toBeUndefined();
   });
   it('uses illustrated objects in a bag, supports removing a choice, and only checks after the user asks',async()=>{
     const api=server();render(<JourneyGame sessionId="play-1"/>);await screen.findByRole('button',{name:'Pack letter'});expect((screen.getByRole('button',{name:'Check the bag'}) as HTMLButtonElement).disabled).toBe(true);
@@ -225,5 +332,50 @@ describe('The six new games',()=>{
   });
   it('changes the cached recording when a reused clue component receives a new audio key',async()=>{
     const clips=mockAudio();const api=server();const view=render(<AudioClue text="Это письмо." audioKey="letter-audio"/>);await click('Listen: Это письмо.');await screen.findByRole('button',{name:'Stop recording: Это письмо.'});view.rerender(<AudioClue text="Это карта." audioKey="map-audio"/>);await click('Listen: Это карта.');await screen.findByRole('button',{name:'Stop recording: Это карта.'});expect(clips).toHaveLength(2);expect(clips[0].pause).toHaveBeenCalled();expect(api.posts().map(([url])=>url)).toEqual(['/api/v1/games/media/letter-audio/prepare','/api/v1/games/media/map-audio/prepare']);
+  });
+});
+
+describe('Correction practice and translated controls',()=>{
+  it('reopens a wrong answer, saves a separate correction, then continues',async()=>{
+    const initial=state({phase:'feedback',result:{answer:['apple'],correct:false,expected_answer:['letter'],feedback:'Это письмо.'}});
+    const api=server(initial);render(<JourneyGame sessionId="play-1"/>);
+    await click('Try again');
+    expect(await screen.findByText('This is practice. Your first result is saved.')).toBeTruthy();
+    await click('Pack letter');await click('Check the bag');
+    expect(await screen.findByText('Just what Barsik needed.')).toBeTruthy();
+    const saved=api.posts().find(([url])=>url.endsWith('/practice_answer'));
+    expect(JSON.parse(saved![1]!.body as string)).toMatchObject({round_id:'letter-round',answer:['letter'],request_id:expect.any(String)});
+    expect(api.posts().filter(([url])=>url.endsWith('/answer'))).toHaveLength(0);
+    await click('Continue');expect(await screen.findByText('Round 2 of 3')).toBeTruthy();
+  });
+  it('offers missed-item review only when there are mistakes and keeps the saved score',async()=>{
+    const completed=state({phase:'completed',round:null,summary:{correct_rounds:2,total_rounds:3,missed_rounds:1,matched:2,total:3},reward:{amount:3,status:'credited',awarded_now:false}});
+    server(completed);render(<JourneyGame sessionId="play-1"/>);
+    expect(await screen.findByText('2 / 3')).toBeTruthy();await click('Practise missed items');
+    expect(await screen.findByText('Review 1 of 1')).toBeTruthy();await click('Close review');
+    expect(await screen.findByText('2 / 3')).toBeTruthy();
+  });
+  it('uses Russian catalogue and play controls from the app language',async()=>{
+    const api=server();const view=render(<GameLanguage.Provider value="ru"><GameCatalogue/></GameLanguage.Provider>);
+    expect(await screen.findByRole('heading',{name:'Собери сумку'})).toBeTruthy();
+    expect(screen.getByRole('link',{name:'Собери сумку'})).toBeTruthy();view.unmount();
+    render(<GameLanguage.Provider value="ru"><JourneyGame sessionId="play-1"/></GameLanguage.Provider>);
+    expect(await screen.findByRole('button',{name:'Проверить сумку'})).toBeTruthy();
+    expect(screen.getByRole('button',{name:'Показать подсказку'})).toBeTruthy();expect(api.posts()).toHaveLength(0);
+  });
+  it('renders built-in landmarks even without generated pictures',async()=>{
+    const route={...routeRound,board:{...board,landmarks:[{x:0,y:0,visual:'post-office'},{x:4,y:0,visual:'market'}]}};
+    server(state({game_id:'directions',round:route}));render(<JourneyGame sessionId="play-1"/>);
+    expect(await screen.findByText('Post office',{selector:'title'})).toBeTruthy();expect(screen.getByText('Market',{selector:'title'})).toBeTruthy();
+  });
+  it('does not offer paid preparation or audio in an authored demo sample',async()=>{
+    const api=server(state({sample:true}));render(<JourneyGame sessionId="play-1"/>);
+    await screen.findByRole('button',{name:'Pack letter'});
+    expect(screen.queryByRole('button',{name:/Listen/})).toBeNull();expect(api.posts()).toHaveLength(0);
+  });
+  it('explains unavailable demo games before sending visitors through an unlock',async()=>{
+    const overview=catalogue();overview.public_demo=true;overview.games[1].availability='local-only';server(state(),overview);
+    render(<GameCatalogue/>);expect(await screen.findByText('Available in your own installation.')).toBeTruthy();
+    expect(screen.queryByRole('link',{name:'Which way?'})).toBeNull();
   });
 });

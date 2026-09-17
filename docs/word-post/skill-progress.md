@@ -30,7 +30,7 @@ The [first delivery](first-delivery.md) teaches three Russian words, then asks t
 
 ## Explicit pilot model
 
-Policy identifier: `practice-elo-v1`. Each skill has a separate prior `R = 1000`.
+The original policy identifier is `practice-elo-v1`. Historical receipts retain this formula. Each skill has a separate prior `R = 1000`.
 
 ```
 expected = 1 / (1 + 10 ** ((task_rating - R) / 400))
@@ -46,6 +46,15 @@ R_next   = R + 24 * (observed - expected)
 | Authored Speaking A1 / A2 / B1 / B2 target | 1000 / 1200 / 1400 / 1600 |
 
 These are **uncalibrated task priors**, not equivalent proficiency levels across games. A score of 1200 does not mean A2. Each displayed estimate remains labelled provisional, regardless of observation count. The model needs evaluation against actual learner performance before it recommends difficulty automatically.
+
+New journey-game receipts use `game-evidence-v2` from 16 September 2026. Their task prior is 1000; word difficulty is no longer used as task calibration. Their expected score includes chance performance:
+
+```
+expected = chance + (1 - chance) / (1 + 10 ** ((task_rating - R) / 400))
+R_next   = R + 24 * (observed - expected)
+```
+
+The chance baseline follows each mechanic’s actual scoring rule. It accounts for partial-credit matching and repeated sentence tiles. Hints, transcripts and answers already exposed by earlier feedback are excluded from new evidence. Feedback times are compared across sessions, including sessions opened in a different order. Correction attempts earn no rating observation. Both policy versions remain readable; this change does not recalculate historical receipts.
 
 The visual stages are internal 200-point intervals starting at 1000. At 1200, Stage 2 begins. Ratings below 1000 remain at the beginning of Stage 1, with their real rating and remaining gap available in the skill summary. These visual thresholds are a product setting, not an educational standard.
 

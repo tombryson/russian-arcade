@@ -38,7 +38,7 @@ export function SkillProgress({progression,language='en',introductory=false,prof
   return <div class={`skill-rail${moving ? ' is-moving' : ''}${!data && !preview && !introductory ? ' is-unavailable' : ''}`} style={{'--skill-progress':progress}}>
     <a class="skill-rail-link" href={profileHref} aria-label={linkLabel}>
       <span class="skill-rail-track" aria-hidden="true"><span class="skill-rail-fill" /></span>
-      {(data || preview || introductory) && <span class="skill-rail-runner" aria-hidden="true"><img src="/static/images/barsik-running-v1.webp" alt="" width="46" height="34" /></span>}
+      {(data || preview || introductory) && <span class="skill-rail-runner" aria-hidden="true"><img src="/static/images/barsik-progress-run-v1.webp" alt="" width="56" height="40" /></span>}
       {(active || preview) && <span class="sr-only" role="progressbar" aria-label={t('Progress through this skill stage','Прогресс на этом этапе навыка')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress*100)} aria-valuetext={preview ? t('50% layout preview; saved progress unchanged','Предпросмотр 50%; сохранённый прогресс не изменён') : `${number(active!.rating!)} ${t('Elo; next stage at','Эло; следующий этап —')} ${number(active!.stage_end)}`} />}
     </a>
   </div>;

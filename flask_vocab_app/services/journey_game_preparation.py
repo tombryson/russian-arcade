@@ -212,6 +212,7 @@ class JourneyGamePreparationService:
             record = items[index]
             state = record.setdefault('_preparation', {})
             state.pop('error', None)
+            state.pop('error_reason', None)
             # Existing complete source contexts are validated without an LLM.
             response = self._response(record)
             supplied = stage == 'context' and all(response[key] for key in ('english', 'sentence', 'sentence_english'))
@@ -289,8 +290,13 @@ class JourneyGamePreparationService:
             logger.warning('Journey example %s preparation failed (%s)', stage, type(error).__name__)
             with transaction(self.db_path, write=True) as conn:
                 self._preparation(conn, session_id)
-                state['error'] = FAILURES[stage]
-                self._save(conn, session_id, items, claim=claim, error=FAILURES[stage])
+                reason = error.details.get('reason') if isinstance(error, LearningError) and error.code == 'discovery_unavailable' else None
+                message = FAILURES[stage]
+                if stage == 'discovery' and reason in {'provider', 'response', 'fields', 'new_word', 'morphology', 'sentence', 'duplicate_context', 'card_context'}:
+                    state['error_reason'] = reason
+                    message = str(error)
+                state['error'] = message
+                self._save(conn, session_id, items, claim=claim, error=message)
                 return self.status(conn, row)
         with transaction(self.db_path, write=True) as conn:
             owner, row = self._preparation(conn, session_id)

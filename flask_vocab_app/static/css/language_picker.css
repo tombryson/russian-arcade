@@ -2,10 +2,11 @@
 .language-picker > summary {
     display: flex; align-items: center; justify-content: center;
     width: 48px; height: 48px; padding: 0; list-style: none; cursor: pointer;
-    border: 1px solid #ffffff40; border-radius: 50%; background: transparent;
+    border: 0; border-radius: 50%; background: transparent;
     font-size: 25px; line-height: 1;
 }
 .language-picker > summary::-webkit-details-marker { display: none; }
+.language-picker > summary svg { display: block; flex: 0 0 auto; }
 .language-picker > summary:hover, .language-picker[open] > summary { background: #ffffff18; }
 .language-picker .language-picker-options {
     position: absolute; top: calc(100% + 10px); right: 0; z-index: 1100;

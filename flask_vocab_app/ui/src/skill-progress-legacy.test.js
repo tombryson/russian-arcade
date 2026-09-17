@@ -9,9 +9,17 @@ afterEach(()=>dom?.window.close());
 const skill=(patch={})=>({id:'reading',label:'Reading',label_ru:'Чтение',status:'provisional',rating:1040,stage:1,stage_end:1200,progress:.2,observations:3,points_to_next:160,...patch});
 const data=(patch={})=>({profile_id:'personal',balance:42,skill:{status:'provisional',policy_version:'practice-elo-v1',active_skill:'reading',skills:[skill()]},...patch});
 const rated=(patch={},extra={})=>data({skill:{status:'provisional',policy_version:'practice-elo-v1',active_skill:'reading',skills:[skill(patch)]},...extra});
-async function setup(initial=data(),{household=false,language='en'}={}) {
+async function setup(initial=data(),{household=false,language='en',layout='top',width=1200,coins=true}={}) {
   const markup=template.replace(/\{%[\s\S]*?%\}/g,'').replace(/\{\{[\s\S]*?\}\}/g,expression=>expression.includes('household_enabled') ? household ? '/post/household#skill-progress' : '/post/profiles#skill-progress' : language);
-  dom=new JSDOM(`<header class="arcade-header"><a data-progression-badge data-language="${language}"><strong data-progression-balance>—</strong></a>${markup}</header><textarea aria-label="Draft">Я читаю.</textarea>`,{url:'http://localhost/writing',runScripts:'outside-only'});
+  const badge=coins ? `<a data-progression-badge data-language="${language}"><strong data-progression-balance>—</strong></a>` : '';
+  const navigation=layout==='sidebar' ? `<nav id="sidebar"><div class="sidebar-brand-row"></div><button class="navbar-toggler"></button><div id="sidebarNav"><div class="sidebar-footer">${badge}${markup}</div></div></nav>` : `<header class="arcade-header">${badge}${markup}</header>`;
+  dom=new JSDOM(`${navigation}<textarea aria-label="Draft">Я читаю.</textarea>`,{url:'http://localhost/writing',runScripts:'outside-only'});
+  dom.window.innerWidth=width;
+  const heights={'.arcade-header':120,'.sidebar-brand-row':64,'.navbar-toggler':40,'#sidebar':600};
+  for (const [selector,height] of Object.entries(heights)) {
+    const element=dom.window.document.querySelector(selector);
+    if (element) element.getBoundingClientRect=()=>({height});
+  }
   const state={data:initial,fail:false,status:503};
   const savedResponse={ok:true,json:async()=>({saved:true})};
   const fetch=vi.fn(async(url)=>url==='/api/v1/progression' ? {ok:!state.fail,status:state.fail ? state.status : 200,json:async()=>state.data} : savedResponse);
@@ -31,6 +39,31 @@ async function setup(initial=data(),{household=false,language='en'}={}) {
 }
 
 describe('Shared progress in existing activities',()=>{
+  it.each([['top',1200,'120px'],['top',500,'120px'],['sidebar',1200,'0px'],['sidebar',500,'104px']])('measures the visible %s bar at width %s',async(layout,width,expected)=>{
+    const {document}=await setup(data(),{layout,width});
+    expect(document.documentElement.style.getPropertyValue('--arcade-header-height')).toBe(expected);
+    expect(document.documentElement.style.getPropertyValue('--skill-header-height')).toBe(expected);
+  });
+
+  it('updates sidebar progress and clears the mobile offset when the viewport reaches desktop',async()=>{
+    const {document,state,rail,refresh}=await setup(data(),{layout:'sidebar',width:500});
+    expect(document.querySelector('.arcade-header')).toBeNull();
+    expect(document.querySelector('#sidebar [data-progression-balance]').textContent).toBe('42');
+    dom.window.innerWidth=992;
+    dom.window.dispatchEvent(new dom.window.Event('resize'));
+    expect(document.documentElement.style.getPropertyValue('--arcade-header-height')).toBe('0px');
+    state.data=rated({rating:1050,progress:.25},{balance:45});
+    await refresh();
+    expect(document.querySelector('#sidebar [data-progression-balance]').textContent).toBe('45');
+    expect(rail.style.getPropertyValue('--skill-progress')).toBe('0.25');
+  });
+
+  it('can refresh an introduced skill rail without a coin badge',async()=>{
+    const {document,rail}=await setup(data(),{layout:'sidebar',coins:false});
+    expect(document.querySelector('[data-progression-badge]')).toBeNull();
+    expect(rail.style.getPropertyValue('--skill-progress')).toBe('0.2');
+  });
+
   it.each([false,true])('links the uncluttered rail to the profile skill section (household=%s)',async household=>{
     const {rail,link}=await setup(data(),{household});
     expect(rail.tagName).toBe('DIV');expect(link.tagName).toBe('A');
@@ -122,7 +155,7 @@ describe('Shared progress in existing activities',()=>{
     const {link,rail}=await setup(rated({label:'<img src=x onerror=alert(1)>'}));
     expect(link.getAttribute('aria-label')).toContain('<img src=x onerror=alert(1)>');
     expect(rail.querySelectorAll('img')).toHaveLength(1);
-    expect(rail.querySelector('img').getAttribute('src')).toBe('/static/images/barsik-running-v1.webp');
+    expect(rail.querySelector('img').getAttribute('src')).toBe('/static/images/barsik-progress-run-v1.webp');
   });
 
   it('provides the rating and profile destination in Russian',async()=>{

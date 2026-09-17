@@ -3,7 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from services.ai_trial_budget import AITrialBudget, TrialDenied
+from services.ai_trial_budget import AITrialBudget, TrialDenied, ACCOUNT_OPERATIONS_PER_DAY
 
 
 class AITrialBudgetTests(unittest.TestCase):
@@ -73,14 +73,34 @@ class AITrialBudgetTests(unittest.TestCase):
         for i in range(3):
             self.reserve(request=str(i), cost=100000)
             self.ledger.settle('a', str(i), 100000)
-        with self.assertRaises(TrialDenied):
-            self.reserve(request='four', cost=1)
         self.reserve('b', cost=700000)
         self.ledger.settle('b', 'first', 700000)
         with self.assertRaises(TrialDenied):
             self.reserve('c', cost=1)
         self.now += 86400
         self.assertTrue(self.reserve('c', cost=1)['created'])
+
+    def test_provider_operation_cap_allows_workflows_but_stops_abuse(self):
+        for index in range(ACCOUNT_OPERATIONS_PER_DAY):
+            self.reserve(request=str(index), cost=1)
+            self.ledger.settle('a', str(index), 1)
+        with self.assertRaises(TrialDenied):
+            self.reserve(request='one-more', cost=1)
+
+    def test_unknown_usage_charges_reservation_without_locking_account(self):
+        self.reserve(cost=10000)
+        self.ledger.charge_reservation('a', 'first')
+        self.assertTrue(self.reserve(request='next', cost=1)['created'])
+
+    def test_voice_hold_allows_one_metered_delegate_but_no_second_voice(self):
+        self.ledger.reserve('a', 'voice', 'b' * 64, 100000, lane='voice')
+        self.assertTrue(self.reserve(request='delegate', cost=1000)['created'])
+        with self.assertRaises(TrialDenied):
+            self.reserve(request='parallel', cost=1)
+        self.ledger.settle('a', 'delegate', 1000)
+        with self.assertRaises(TrialDenied):
+            self.ledger.reserve('a', 'voice2', 'b' * 64, 100000, lane='voice')
+        self.assertTrue(self.reserve(request='next-delegate', cost=1000)['created'])
 
     def test_monthly_spend_survives_day_rollover_and_process_restart(self):
         # Start early enough for twenty days in one calendar month.

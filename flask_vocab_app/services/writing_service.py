@@ -1,3 +1,5 @@
+from .trial_provider import config_snapshot, openai_client
+from .ai_trial_budget import TrialDenied
 from config import model_for
 """Writing preparation and feedback; persistence belongs to the repository."""
 import json
@@ -13,8 +15,9 @@ class WritingUnavailable(RuntimeError):
 
 
 class WritingService:
-    def __init__(self, db_path, openai_service, api_key):
-        self.client = LazyService('OpenAI client',lambda: openai.OpenAI(api_key=api_key,timeout=60.0))
+    def __init__(self, db_path, openai_service, api_key, config=None):
+        self.config = config_snapshot(config)
+        self.client = LazyService('OpenAI client',lambda: openai_client(config=self.config, api_key=api_key,timeout=60.0))
 
     def structured(self, name, properties, instruction, payload):
         try:
@@ -30,6 +33,8 @@ class WritingService:
             if not isinstance(output,dict):
                 raise ValueError('Invalid output')
             return output
+        except TrialDenied:
+            raise
         except Exception as error:
             raise WritingUnavailable('Writing provider unavailable') from error
 

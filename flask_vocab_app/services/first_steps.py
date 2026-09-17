@@ -206,8 +206,6 @@ def lesson_command(lesson_id, operation, data):
             if profile_id:
                 completed = _rows(conn, profile_id, guest_token)[lesson_id]
                 awarded_now = bool(_credit(conn, profile_id, completed, now))
-            from services.journey_games import sync_unlocks
-            sync_unlocks(conn, profile_id, guest_token, now=now)
         elif operation == 'learn':
             teaching_id = data['teaching_id']
             if not isinstance(teaching_id, str) or teaching_id not in [card['id'] for card in cards]:

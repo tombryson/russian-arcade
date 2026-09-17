@@ -9,17 +9,18 @@ def is_shell_navigation():
 
 
 def extract_main_content(html):
-    start = html.find('<main class="main-content" id="mainContent"')
-    if start != -1:
-        end = html.find("</main>", start)
-        if end != -1:
-            return html[start : end + len("</main>")]
-
-    start = html.find('<div class="main-content" id="mainContent"')
-    if start == -1:
+    # The target ID is stable; page-specific classes and attribute order are not.
+    opening = re.search(
+        r'''<(main|div)\b(?=[^>]*\s+id\s*=\s*(["'])mainContent\2)[^>]*>''',
+        html,
+        re.IGNORECASE,
+    )
+    if opening is None:
         return html
+    start = opening.start()
+    tag = opening.group(1)
     depth = 0
-    for match in re.finditer(r"<(/?)div\b[^>]*>", html[start:], re.IGNORECASE):
+    for match in re.finditer(rf"<(/?){tag}\b[^>]*>", html[start:], re.IGNORECASE):
         depth += -1 if match.group(1) else 1
         if depth == 0:
             return html[start : start + match.end()]

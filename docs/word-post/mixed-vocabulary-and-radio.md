@@ -8,7 +8,8 @@ This replaces the earlier assumption that all games need the same picture-and-au
 
 | Activity | Default content | Prepared resources |
 |---|---|---|
-| Pack the bag, Postcard Pairs, Lost Parcel Detective | Three familiar contextual examples and one new word in context | Pictures for these examples |
+| Pack the bag, Lost Parcel Detective | Three familiar contextual examples and one new word in context | Pictures for these examples |
+| Describe the scene | Authored grammatical contrasts with words beyond the introductory lessons | Bundled reusable illustrations; no per-game picture generation |
 | Missing Stamp, Mailbox Sort | Four familiar contextual examples and one new word in context | Text; no mandatory picture or recording |
 | A Letter Back | Four familiar contextual examples and one new word in context | Sentence recordings for reconstruction |
 | Follow the directions | Route language and a map | No vocabulary picture pool |

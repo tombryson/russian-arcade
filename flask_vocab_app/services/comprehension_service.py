@@ -1,3 +1,5 @@
+from .trial_provider import config_snapshot, openai_client
+from .ai_trial_budget import TrialDenied
 from config import model_for
 from models.database import connect_db
 from utils.lazy import LazyService
@@ -24,10 +26,11 @@ logger = logging.getLogger(__name__)
 
 class ComprehensionService:
     def __init__(self, db_path, openai_service, elevenlabs_service, media_dir, api_key: str,
-                 story_model=OPENAI_MODEL_STORY, story_reasoning_effort=OPENAI_STORY_REASONING_EFFORT):
+                 story_model=OPENAI_MODEL_STORY, story_reasoning_effort=OPENAI_STORY_REASONING_EFFORT, config=None):
         self.db_path = db_path
         self.openai_service = openai_service
-        self.client = LazyService("OpenAI client", lambda: openai.OpenAI(api_key=api_key, timeout=60.0))
+        self.config = config_snapshot(config)
+        self.client = LazyService("OpenAI client", lambda: openai_client(config=self.config, api_key=api_key, timeout=60.0))
         self.elevenlabs_service = elevenlabs_service
         self.media_dir = media_dir
         self.story_model = story_model
@@ -208,6 +211,8 @@ class ComprehensionService:
             image.save(image_path, "PNG")
             logger.info(f"Generated image saved to: {image_path}")
             return f"/static/media/{image_filename}"
+        except TrialDenied:
+            raise
         except Exception as e:
             logger.error(f"Image generation error: {str(e)}")
             return ""
@@ -293,6 +298,8 @@ class ComprehensionService:
         except json.JSONDecodeError as e:
             logger.error(f"JSON parsing error: {str(e)}. Cleaned content: {cleaned_content}")
             raise Exception(f"Invalid JSON response from OpenAI: {str(e)}")
+        except TrialDenied:
+            raise
         except Exception as e:
             logger.error(f"Additional questions generation error: {str(e)}", exc_info=True)
             raise
@@ -304,6 +311,8 @@ class ComprehensionService:
             logger.info(f"Generating audio for sentence: {text} with filename: {audio_path}")
             result = self.elevenlabs_service.generate_audio(text, audio_path)
             return f"/static/media/{audio_filename}" if result and os.path.isfile(audio_path) else ""
+        except TrialDenied:
+            raise
         except Exception as e:
             logger.error(f"Audio generation error: {str(e)}")
             return ""
@@ -338,14 +347,18 @@ class ComprehensionService:
             return feedback, scores, total_score, True  # New feedback, can reward
         except LookupError:
             raise
+        except TrialDenied:
+            raise
         except Exception as e:
             logger.error(f"Answer evaluation error: {str(e)}", exc_info=True)
             raise ValueError('The answers could not be checked. Please try again.') from None
 
     def _evaluate_answers(self, story_text, questions, answers):
         """Internal method to evaluate answers without reward checks."""
+        from flask import has_request_context, session
+        feedback_language = "Russian" if has_request_context() and session.get("ui_lang") == "ru" else "English"
         prompt = f"""
-        You are an English-speaking Russian language teacher. Evaluate the following answers to questions about a Russian story. Provide a score out of 10 for each answer based on accuracy, relevance, and language correctness, in English, referring to the responses in Russian as needed. Return a JSON object in the exact format:
+        You are a Russian language teacher. Evaluate the following answers to questions about a Russian story. Provide a score out of 10 for each answer based on accuracy, relevance, and language correctness, with all feedback in {feedback_language}, referring to the responses in Russian as needed. Return a JSON object in the exact format:
         {{"feedback": ["feedback for answer 1", "feedback for answer 2", "feedback for answer 3", ...], "scores": [score1, score2, score3, ...]}}
         Story: {story_text}
         Questions and Answers:

@@ -75,6 +75,10 @@ class SkillProgressTests(unittest.TestCase):
         rounds = [{'id': 'one', 'expected_answer': ['letter']}, {'id': 'two', 'expected_answer': ['map']}]
         if custom_rounds is not None:
             rounds = custom_rounds
+        for item in rounds:
+            item.setdefault('evidence_texts', [item['id'] + ' unique question'])
+            item.setdefault('objects', [{'id': value} for value in ('letter','map','apple','cup')])
+            item.setdefault('choices', [{'id': value} for value in ('letter','map','apple','cup')])
         if game_id == 'radio':
             rounds = [item | {'mechanic': 'radio', 'clues': [{'audio_key': item['id'] + '-recording'}]} for item in rounds]
         content = {'lesson_version': 'first-steps-v1', 'rounds': rounds}
@@ -93,7 +97,7 @@ class SkillProgressTests(unittest.TestCase):
 
     def test_journey_game_derives_reading_from_saved_answers_and_replay_cannot_inflate_it(self):
         self.game_check('first-game', answers=(['letter'], ['cup']))
-        self.assertEqual((self.skill('reading')['rating'], self.skill('reading')['observations']), (1000, 1))
+        self.assertEqual((self.skill('reading')['rating'], self.skill('reading')['observations']), (997, 1))
         receipt = json.loads(self.conn.execute("SELECT evidence_json FROM progression_events WHERE activity='journey_game'").fetchone()[0])
         self.assertEqual(receipt['_skill']['scores'], {'reading': .5})
         self.assertEqual(receipt['basis'], 'contextual_reading_with_optional_audio')
@@ -104,7 +108,7 @@ class SkillProgressTests(unittest.TestCase):
 
     def test_journey_game_english_hint_excludes_that_round(self):
         self.game_check('hinted-game', hints=('two',), answers=(['letter'], ['cup']))
-        self.assertEqual(self.skill('reading')['rating'], 1012)
+        self.assertEqual(self.skill('reading')['rating'], 1009)
         receipt = json.loads(self.conn.execute("SELECT evidence_json FROM progression_events WHERE activity='journey_game'").fetchone()[0])
         self.assertEqual(receipt['unassisted_count'], 1)
         self.assertIsNone(self.skill('speaking_fluency')['rating'])
@@ -117,7 +121,7 @@ class SkillProgressTests(unittest.TestCase):
 
     def test_radio_uses_listening_only_and_excludes_the_transcript_round(self):
         self.game_check('radio-first', game_id='radio', transcripts=('two',), answers=(['letter'], ['wrong']))
-        self.assertEqual(self.skill('listening')['rating'], 1012)
+        self.assertEqual(self.skill('listening')['rating'], 1009)
         self.assertIsNone(self.skill('reading')['rating'])
         self.assertEqual(self.state()['active_skill'], 'listening')
         receipt = json.loads(self.conn.execute("SELECT evidence_json FROM progression_events WHERE activity='journey_game'").fetchone()[0])
@@ -136,9 +140,9 @@ class SkillProgressTests(unittest.TestCase):
         self.assertIsNone(self.skill('listening')['rating'])
 
     def test_matching_uses_partial_credit_from_actual_pairs_not_the_saved_score(self):
-        rounds = [{'id': 'one', 'mechanic': 'pairs', 'expected_answer': ['a:x', 'b:y', 'c:z']}]
+        rounds = [{'id': 'one', 'mechanic': 'pairs', 'right': [{'id': key} for key in ('x','y','z')], 'expected_answer': ['a:x', 'b:y', 'c:z']}]
         self.game_check('pairs-first', game_id='pairs', custom_rounds=rounds, answers=(['a:x', 'b:z', 'c:y'],))
-        self.assertEqual(self.skill('reading')['rating'], 996)
+        self.assertEqual(self.skill('reading')['rating'], 992)
         self.assertIsNone(self.skill('writing')['rating'])
 
     def test_performance_and_task_difficulty_both_change_rating(self):

@@ -26,3 +26,18 @@ it('stops a stale profile from opening another learner’s batch',async()=>{
   expect(screen.getByRole('button',{name:'Practise these words'}).hasAttribute('disabled')).toBe(true);
   expect(screen.getByRole('link',{name:'Choose your profile'}).getAttribute('href')).toBe('/post/profiles');
 });
+it('lets the learner select contextual words before creating the batch',async()=>{
+  const fetch=vi.fn(async(_url:string,_request?:RequestInit)=>({ok:true,json:async()=>({id:'selected-batch'})}));vi.stubGlobal('fetch',fetch);
+  render(<GameStudyActions sessionId="saved-game" words={[
+    {card_key:'a',lemma:'письмо',form:'письмо',sentence:'Это письмо.'},
+    {card_key:'b',lemma:'карта',form:'карту',sentence:'Дай мне карту.'},
+  ]}/>);
+  fireEvent.click(screen.getByText('Choose words for flashcards', {exact:false}));
+  const boxes=screen.getAllByRole('checkbox');
+  fireEvent.click(boxes[0]);fireEvent.click(boxes[1]);
+  expect(screen.getByRole('button',{name:'Practise these words'}).hasAttribute('disabled')).toBe(true);
+  expect(fetch).not.toHaveBeenCalled();
+  fireEvent.click(boxes[1]);fireEvent.click(screen.getByRole('button',{name:'Practise these words'}));
+  await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(1));
+  expect(JSON.parse(fetch.mock.calls[0][1]!.body as string)).toEqual({items:['b']});
+});

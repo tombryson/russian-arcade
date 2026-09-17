@@ -133,6 +133,36 @@ class JourneyGamePreparationTests(unittest.TestCase):
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM journey_game_examples').fetchone()[0], 1)
             self.assertFalse(conn.execute('PRAGMA foreign_key_check').fetchall())
 
+    def test_discovery_failure_keeps_safe_reason_and_retries_only_the_missing_example(self):
+        from services.game_activity_policy import discovery_request
+        familiar = self.supplied() | {'required_media': [], '_preparation': {'context_validated': True}}
+        pending = discovery_request(['кофе'], [familiar], {}, 'fresh', [])
+        with transaction(self.db, write=True) as conn:
+            conn.execute('UPDATE journey_game_preparations SET items_json=? WHERE session_id=?',
+                         (encoded([familiar, pending]), 'first'))
+        message = 'The new example did not pass the Russian language checks. Your prepared examples are saved; retry to replace this example.'
+        def fail(provider, **request):
+            raise LearningError('discovery_unavailable', message, 503, {'reason': 'morphology'})
+        self.service.discover = fail
+        status = self.service.advance('first')
+        self.assertEqual(status['ready'], 1)
+        self.assertEqual(status['error'], message)
+        with transaction(self.db) as conn:
+            items = json.loads(conn.execute('SELECT items_json FROM journey_game_preparations WHERE session_id=?', ('first',)).fetchone()[0])
+            self.assertEqual(items[0], familiar)
+            self.assertEqual(items[1]['_preparation']['error_reason'], 'morphology')
+        self.service.discover = lambda provider, **request: {
+            'identity': 'new-tea', 'word_id': None, 'form_id': None, 'lemma': 'чай', 'form': 'чай',
+            'sentence': 'Анна пьёт чай.', 'translation': 'Anna is drinking tea.', 'target_meaning': 'tea', 'notes': '',
+        }
+        self.assertEqual(self.service.advance('first', retry=True)['status'], 'ready')
+        self.assertEqual(self.provider.calls, [])
+        self.assertEqual(self.media.calls, [])
+        with transaction(self.db) as conn:
+            items = json.loads(conn.execute('SELECT items_json FROM journey_game_preparations WHERE session_id=?', ('first',)).fetchone()[0])
+            self.assertEqual(items[0], familiar)
+            self.assertNotIn('error_reason', items[1]['_preparation'])
+
     def test_existing_native_context_and_media_reused_without_any_paid_work(self):
         record = self.supplied()
         record['source'] = {'kind': 'card', 'id': 'existing-card', 'version': 'immutable-version'}

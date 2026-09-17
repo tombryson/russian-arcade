@@ -164,6 +164,29 @@ class NaturalEnding:
             return None
         return {**data, 'basis': 'agent_assessment', 'rewards_applied': False}
 
+    def propose_client_ending(self, arguments, delegation_id, now=None):
+        """Apply a completed, metered client-delegation result.
+
+The trial backend returns structured data instead of invoking a managed Live
+function. It must pass the same evidence checks and reflected-farewell checks
+as the ordinary finish_speaking tool. No grade or coins are awarded here.
+"""
+        now = time.monotonic() if now is None else now
+        proposal = self._validate(arguments)
+        if not proposal or self.pending or self._close_sent or not isinstance(delegation_id, str):
+            return False
+        self.pending = True
+        self._proposal = proposal
+        self._deadline = now + self.FAREWELL_TIMEOUT_SECONDS
+        self._drain_until = now + self.DRAIN_SECONDS
+        self._heard_output = False
+        self._continuation_done = True  # The app has already received the final result.
+        self._continuation_delegation = delegation_id
+        self._proposal_response = None
+        self._farewell_text = ''
+        self.abandoned_reason = None
+        return True
+
     def receive(self, event, now=None):
         now = time.monotonic() if now is None else now
         if not isinstance(event, dict) or self._close_sent:

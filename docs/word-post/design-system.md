@@ -48,6 +48,12 @@ Use physical-looking edges selectively: one torn/perforated ticket, airmail edge
 
 Use a small spacing scale (4, 8, 12, 16, 24, 32, 48px). Maintain a predictable content width with generous reading space. The reference's occasional rotated slip is an accent; keep input hit areas stable and avoid overlapping rotated controls.
 
+### Activity entry pages
+
+Flashcards, Reading, Speaking, Writing, Lessons, Word Jumble and Translation share one entry layout. Show the activity name followed by one sentence explaining the task. Do not add slogans, category labels or an extra link back to Activities above the title.
+
+Use `ActivityHeader.tsx` in native pages and the `_activity_header.html` macro in Flask templates. Both use `static/css/activity_entry.css`: a 1120px content limit, 40px top padding and 32px side padding on desktop; 24px and 20px on small screens. Titles and descriptions share the same type scale. Existing header actions sit on the right and move below the description on small screens. Loaded exercises retain their task navigation.
+
 Use semantic tokens such as `surface.paper`, `text.primary`, `action.primary.background`, `feedback.hint` and `motion.confirmation`, mapped to raw palette tokens. The authoritative source now lives in [the UI package](../../flask_vocab_app/ui/src/styles/tokens.json); `npm run tokens` generates its CSS. The former documentation token file has been moved, so there is no second independently editable token set.
 
 ### Welcome and practice hierarchy

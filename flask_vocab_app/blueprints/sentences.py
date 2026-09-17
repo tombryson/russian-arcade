@@ -30,7 +30,7 @@ def create_sentences_blueprint(db_path, sentence_service, user_service):
             return None
         item = dict(item)
         item['topic_label'] = topic_label(item.get('topic'), language())
-        item['level_label'] = t('level_' + str(item['difficulty']))
+        item['level_label'] = t('level_' + str(item['difficulty'])) if item.get('difficulty') in range(1, 6) else ''
         item['display_date'] = readable_date(item.get('draft_saved_at') or item.get('created_at'), language())
         item.setdefault('draft', '')
         item.setdefault('saved_draft', item['draft'])
@@ -38,12 +38,12 @@ def create_sentences_blueprint(db_path, sentence_service, user_service):
                          else 'checked' if item.get('checked_response') is not None else 'ready')
         return item
 
-    def context():
+    def context(active_page='sentences'):
         library = [present(item) for item in repository.list_saved()]
         topics = set(words.list_topics()) | {item['topic'] for item in library if item.get('topic')}
-        return {'sentences': library, 'topics': sorted(
+        return {'sentences': library, 'total_sentences': len(library), 'topics': sorted(
             [{'value': topic, 'label': topic_label(topic, language())} for topic in topics if topic != 'any'],
-            key=lambda item: item['label'].casefold()), 'active_page': 'sentences'}
+            key=lambda item: item['label'].casefold()), 'active_page': active_page}
 
     def page(practice=None, **extra):
         return render_page('sentences.html', practice=present(practice), **context(), **extra)
@@ -165,9 +165,11 @@ def create_sentences_blueprint(db_path, sentence_service, user_service):
         except (ValueError, TranslationUnavailable, sqlite3.Error) as error:
             if enhanced():
                 return failure(error, preparing=True)
-            return render_page('saved_sentences.html', **context(), error=t('add_failed'),
-                               added_russian=request.form.get('sentence', ''), added_english=request.form.get('english', ''), add_open=True), 400
-        target = url_for('sentences.sentences_saved_detail', sentence_id=sentence_id)
+            return render_page('saved_sentences.html', **context('sentences_saved'), error=t('add_failed'),
+                               added_russian=request.form.get('sentence', ''), added_english=request.form.get('english', ''),
+                               added_topic=topic, added_level=difficulty if difficulty in range(1, 6) else 1,
+                               add_open=True), 400
+        target = url_for('sentences.sentences_saved', _anchor=f'sentence-{sentence_id}')
         return jsonify(url=target) if enhanced() else redirect(target, code=303)
 
     @blueprint.get('/sentences/saved/<int:sentence_id>')
@@ -175,16 +177,28 @@ def create_sentences_blueprint(db_path, sentence_service, user_service):
         item = repository.load(sentence_id)
         if not item:
             return page(error=t('missing')), 404
-        return render_page('sentence_detail.html', sentence=present(item), active_page='sentences')
+        return render_page('sentence_detail.html', sentence=present(item), active_page='sentences_saved')
 
     @blueprint.get('/sentences/saved')
     def sentences_saved():
-        library = context()
+        library = context('sentences_saved')
         if request.args.get('fetch_all') == 'true' and enhanced():
             return jsonify(sentences=library['sentences'], topics=[topic['value'] for topic in library['topics']], error=None)
         selected = request.args.get('topic', '')
+        selected_level = request.args.get('level', type=int)
+        if selected_level not in range(1, 6):
+            selected_level = ''
+        search = request.args.get('q', '').strip()[:200]
         if selected:
             library['sentences'] = [item for item in library['sentences'] if item['topic'] == selected]
-        return render_page('saved_sentences.html', **library, selected_topic=selected)
+        if selected_level:
+            library['sentences'] = [item for item in library['sentences'] if item['difficulty'] == selected_level]
+        if search:
+            query = search.casefold()
+            library['sentences'] = [item for item in library['sentences']
+                                    if query in (item.get('sentence') or '').casefold()
+                                    or query in (item.get('english') or '').casefold()]
+        return render_page('saved_sentences.html', **library, selected_topic=selected,
+                           selected_level=selected_level, search=search)
 
     return blueprint

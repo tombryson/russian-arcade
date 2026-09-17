@@ -87,6 +87,7 @@ export function FirstDelivery({ next, onIntroduce, profileHref='/post/profiles' 
           <ul><li>Complete an activity: <strong>3 coins</strong>, up to 12 per day.</li><li>Review a flashcard: <strong>1 coin</strong>, up to 10 per day.</li></ul>
           <p>Hints and mistakes won’t reduce your reward. Each activity or card earns coins only once a day.</p>
           <p>Your first activity has its own one-time bonus. You can revisit it whenever you like.</p>
+          <p>You can spend your Lingocoins on games in <a href="#shop">Barsik’s shop</a>. Each game is yours to keep.</p>
         </details>
       </Sheet>
       <div class="action-row"><button class="cta" onClick={() => setStep(1)}>Continue <span aria-hidden="true">→</span></button><a class="text-link" href="#activities">Go straight to activities</a></div>
