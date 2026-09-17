@@ -6,6 +6,10 @@ Barsik (Барсик), a cat delivering a letter, guides the introductory lesson
 
 **[Try the public demo](https://russian-arcade.fly.dev/post/)** · [Local setup](#local-setup) · [Architecture](#architecture-and-technology-stack) · [Documentation](#documentation)
 
+<p align="center">
+  <img src="flask_vocab_app/ui/src/assets/barsik.webp" alt="Barsik holding a letter beside a red postbox." width="320">
+</p>
+
 ## Project purpose
 
 The project began as an automated Anki card generator. In-app flashcards now provide the main review workflow. Anki generation remains available as an optional tool.
