@@ -47,7 +47,7 @@ describe('A full radio programme',()=>{
     const api=service();api.state.fail='listen';render(<JourneyGame sessionId="broadcast-1"/>);fireEvent.ended(await screen.findByLabelText('Listen to the radio programme'));await screen.findByText('The connection paused.');expect((screen.getByRole('button',{name:'Answer the questions'}) as HTMLButtonElement).disabled).toBe(true);await click('Try again');await waitFor(()=>expect((screen.getByRole('button',{name:'Answer the questions'}) as HTMLButtonElement).disabled).toBe(false));expect(api.posts().map(([url])=>url.split('/').at(-1))).toEqual(['listen','listen']);
   });
   it('shows the recorded quiz result when reopening a completed programme',async()=>{
-    service({...initial,phase:'completed',summary:{correct_rounds:3,total_rounds:4,matched:3,total:4}});render(<JourneyGame sessionId="broadcast-1"/>);await screen.findByText('Thanks for listening.');expect(screen.getByText('3 of 4')).toBeTruthy();expect(screen.queryByText('Question 1 of 4')).toBeNull();
+    service({...initial,phase:'completed',summary:{correct_rounds:3,total_rounds:4,matched:3,total:4}});render(<JourneyGame sessionId="broadcast-1"/>);await screen.findByText('Thanks for listening.');expect(screen.getByText('3 / 4')).toBeTruthy();expect(screen.queryByText('Question 1 of 4')).toBeNull();
   });
 });
 

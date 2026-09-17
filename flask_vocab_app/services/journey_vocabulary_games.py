@@ -120,7 +120,9 @@ def build_content(game, examples, seed, session_id, options, source):
             pattern = re.compile(r'(?<![А-Яа-яЁё])'+re.escape(target['form'])+r'(?![А-Яа-яЁё])', re.I)
             if len(list(pattern.finditer(target['sentence']))) != 1:
                 raise LearningError('invalid_context', 'This word needs a clearer example before it can be used.', 409)
-            forms = list(dict.fromkeys(e['form'] for e in alternatives))
+            from services.cloze_choices import choices_for
+            selection = choices_for(target, alternatives, rng)
+            forms = selection['forms']
             rng.shuffle(forms)
             choices = [{'id': f'word-{i}', 'text': form} for i, form in enumerate(forms)]
             answer = next(c['id'] for c in choices if c['text'] == target['form'])
@@ -129,6 +131,7 @@ def build_content(game, examples, seed, session_id, options, source):
                           choices=choices,
                           hint=target.get('mnemonic') or 'Read the whole English sentence, then choose the Russian form that fits.',
                           feedback=_feedback(target), answer_audio=[audio(target['sentence'])])
+            item.update(objective=selection['objective'], explanation=selection['explanation'], explanation_ru=selection['explanation_ru'])
             if any(a.get('kind') == 'image' for a in target.get('assets', [])):
                 item['image_url'] = _image(target, session_id)
         elif game_id == 'radio':
@@ -189,6 +192,8 @@ def build_content(game, examples, seed, session_id, options, source):
                           hint=target['translation']+' '+', then '.join(route), feedback=_feedback(target))
         else:
             raise LearningError('not_found', 'This game was not found.', 404)
+        evidence_examples = chosen if game_id in ('pack-bag', 'pairs', 'mailbox-sort') else [target]
+        item['evidence_texts'] = [e['sentence'] for e in evidence_examples]
         _opaque_choices(item, rng)
         rounds.append(item)
     refs = [dict(item) | {'grammar': item.get('tags', {})} for item in pool]

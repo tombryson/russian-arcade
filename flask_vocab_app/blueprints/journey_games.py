@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request, send_file
 
 from contracts.learning import fields
 from repositories.learning_repository import LearningError
-from services.journey_games import game_image, prepare_session, read_catalogue, read_session, session_command, start_game
+from services.journey_games import game_image, prepare_session, read_catalogue, read_session, session_command, start_game, purchase_game
 from utils.household_access import access_policy, csrf_token
 
 
@@ -19,6 +19,12 @@ def create_journey_games_blueprint():
     @access_policy('public')
     def catalogue():
         return jsonify(**read_catalogue(), csrf_token=csrf_token())
+
+    @bp.post('/<game_id>/purchase')
+    @access_policy('public')
+    def purchase(game_id):
+        data = body({'request_id', 'expected_price'})
+        return jsonify(**purchase_game(game_id, data['request_id'], data['expected_price']), csrf_token=csrf_token())
 
     @bp.post('/<game_id>/start')
     @access_policy('public')
@@ -67,9 +73,17 @@ def create_journey_games_blueprint():
     @access_policy('public')
     def command(session_id, operation):
         required = {'quiz': set(), 'hint': {'round_id'}, 'listen': {'round_id', 'audio_key'}, 'transcript': {'round_id'},
+                    'practice_hint': {'round_id'}, 'practice_transcript': {'round_id'}, 'retry': {'round_id'}, 'review': set(), 'practice_exit': set(),
+                    'practice_answer': {'round_id', 'answer', 'request_id'}, 'practice_continue': {'round_id'},
                     'answer': {'round_id', 'answer'}, 'continue': {'round_id'}, 'complete': set()}
         if operation not in required:
             raise LearningError('not_found', 'This game action was not found.', 404)
         return jsonify(**session_command(session_id, operation, body(required[operation])), csrf_token=csrf_token())
+
+    @bp.post('/sessions/<session_id>/route-command')
+    @access_policy('public')
+    def route_command(session_id):
+        from services.route_delivery import command
+        return jsonify(**command(session_id, body({'request_id', 'revision', 'action', 'payload'})), csrf_token=csrf_token())
 
     return bp

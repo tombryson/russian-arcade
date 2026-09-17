@@ -37,6 +37,11 @@ class TranslationCleanupTests(unittest.TestCase):
         with sqlite3.connect(self.app.config['DB_PATH']) as conn:
             return conn.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0]
 
+    def selected_options(self, html, select_id):
+        options = html.split(f'id="{select_id}"', 1)[1].split('</select>', 1)[0]
+        return [attrs['value'] for tag, attrs in Document(options).elements
+                if tag == 'option' and 'selected' in attrs]
+
     def test_setup_and_saved_practice_work_without_ai_and_hide_reference(self):
         for headers in ({}, {'HX-Request': 'true', 'HX-Target': 'mainContent'}):
             response = self.client.get(self.url, headers=headers)
@@ -175,7 +180,33 @@ class TranslationCleanupTests(unittest.TestCase):
         self.assertEqual(self.count('reward_events'), 0)
         self.assertEqual(self.count('progression_entries'), 0)
         self.service.translate_for_library.assert_not_called()
+        saved = next(item for item in self.repository.list_saved() if item['sentence'] == data['sentence'])
+        self.assertEqual(result.json['url'], f'/sentences/saved#sentence-{saved["id"]}')
         self.assertIn('Мы дома.', self.client.get(result.json['url']).get_data(as_text=True))
+        native = self.client.post('/sentence/add', data=data)
+        self.assertEqual(native.status_code, 303)
+        self.assertEqual(native.location, result.json['url'])
+        self.assertEqual(self.count('sentences'), 2)
+        # Existing detail bookmarks remain usable after add returns to the library.
+        self.assertEqual(self.client.get(f'/sentences/saved/{saved["id"]}').status_code, 200)
+        self.assertEqual(self.service.mock_calls, [])
+
+    def test_library_add_failure_preserves_text_topic_and_level(self):
+        before = self.count('sentences')
+        data = {'sentence': '', 'english': 'Please keep <this> text.', 'topic': 'home', 'difficulty': 4}
+        response = self.client.post('/sentence/add', data=data)
+        self.assertEqual(response.status_code, 400)
+        html = response.get_data(as_text=True)
+        document = Document(html)
+        self.assertEqual(document.answers['add-russian'], data['sentence'])
+        self.assertEqual(document.answers['add-english'], data['english'])
+        self.assertEqual(self.selected_options(html, 'add-topic'), ['home'])
+        self.assertEqual(self.selected_options(html, 'add-level'), ['4'])
+        disclosure = next(attrs for tag, attrs in document.elements
+                          if tag == 'details' and 'sentence-store-add' in attrs.get('class', '').split())
+        self.assertIn('open', disclosure)
+        self.assertEqual(self.count('sentences'), before)
+        self.assertEqual(self.service.mock_calls, [])
 
     def test_library_topic_filter_and_russian_interface(self):
         self.repository.save_content('Мы в школе.', 'We are at school.', 'school', 2)
@@ -193,6 +224,153 @@ class TranslationCleanupTests(unittest.TestCase):
         self.submit()
         self.assertEqual(self.service.assess_translation.call_args.args[-1], 'ru')
         self.assertEqual(self.repository.load(self.id)['attempts'][0]['ui_language'], 'ru')
+
+    def test_library_exposes_both_languages_and_existing_audio_without_a_check(self):
+        self.repository.save_audio(self.id, '/static/media/saved-sentence.mp3')
+        before = self.repository.load(self.id)
+        for headers in ({}, {'HX-Request': 'true', 'HX-Target': 'mainContent'}):
+            response = self.client.get('/sentences/saved', headers=headers)
+            self.assertEqual(response.status_code, 200)
+            html = response.get_data(as_text=True)
+            table = html.split('<table class="translation-library-table">', 1)[1].split('</table>', 1)[0]
+            self.assertIn('Кот спит дома.', table)
+            self.assertIn('The cat is sleeping at home.', table)
+            self.assertIn('/static/media/saved-sentence.mp3', table)
+            self.assertNotIn('<details', table)
+            audio = [attrs for tag, attrs in Document(html).elements if tag == 'audio']
+            self.assertEqual(len(audio), 1)
+            self.assertIn('controls', audio[0])
+            self.assertEqual(audio[0]['preload'], 'none')
+            self.assertEqual(audio[0]['aria-label'], 'Listen to sentence 1')
+        self.assertEqual(self.repository.load(self.id), before)
+        self.assertEqual(self.count('translation_attempts'), 0)
+        self.assertEqual(self.count('progression_entries'), 0)
+        self.assertEqual(self.service.mock_calls, [])
+        # Browsing a reference must not reveal the answer in a fresh practice session.
+        practice = self.client.get(self.url).get_data(as_text=True)
+        self.assertNotIn('Кот спит дома.', practice)
+        self.assertNotIn('/static/media/saved-sentence.mp3', practice)
+
+    def test_library_lists_every_saved_sentence_and_distinguishes_missing_audio(self):
+        ids = [self.id]
+        for number in range(35):
+            sentence_id, _ = self.repository.save_content(f'Пример {number}.', f'Example {number}.', 'general', 2)
+            ids.append(sentence_id)
+        html = self.client.get('/sentences/saved').get_data(as_text=True)
+        document = Document(html)
+        rows = [attrs for tag, attrs in document.elements if tag == 'tr' and 'data-sentence-id' in attrs]
+        self.assertCountEqual([attrs['data-sentence-id'] for attrs in rows], [str(sentence_id) for sentence_id in ids])
+        self.assertCountEqual([attrs['id'] for attrs in rows], [f'sentence-{sentence_id}' for sentence_id in ids])
+        practice_links = [attrs['href'] for tag, attrs in document.elements
+                          if tag == 'a' and attrs.get('href', '').startswith('/sentences/practice/')]
+        self.assertEqual(practice_links, [])
+        self.assertIn('36 sentences', html)
+        self.assertIn('No audio', html)
+        self.assertNotIn('<audio', html)
+        self.assertNotIn('translation-library-meta', html)
+        self.assertNotIn('translation-library-profile', html)
+        library = html.split('<main ', 1)[1].split('</main>', 1)[0]
+        self.assertNotIn('Profile:', library)
+        self.assertNotIn('Switch profile', library)
+
+    def test_library_searches_both_languages_combines_topic_and_can_show_all_again(self):
+        self.repository.save_content('Мы в школе.', 'We are at school.', 'school', 2)
+        self.repository.save_content('Кот в школе.', 'The cat is at school.', 'school', 2)
+        for query in ('КОТ', 'CAT'):
+            html = self.client.get('/sentences/saved', query_string={'q': query, 'topic': 'school'}).get_data(as_text=True)
+            self.assertIn('Кот в школе.', html)
+            self.assertNotIn('Кот спит дома.', html)
+            self.assertNotIn('Мы в школе.', html)
+            self.assertIn('Showing 1 of 3 sentences', html)
+            self.assertIn('Show all', html)
+            self.assertEqual(Document(html).element('library-search')['value'], query)
+        no_matches = self.client.get('/sentences/saved?q=unmatched').get_data(as_text=True)
+        self.assertIn('Showing 0 of 3 sentences', no_matches)
+        self.assertIn('No sentences found.', no_matches)
+        self.assertIn('3 sentences', self.client.get('/sentences/saved').get_data(as_text=True))
+        # Preserve the existing explicit all-records JSON endpoint.
+        exported = self.client.get('/sentences/saved?fetch_all=true&q=unmatched&topic=school', headers=self.headers)
+        self.assertEqual(len(exported.json['sentences']), 3)
+
+    def test_library_level_filter_combines_with_topic_and_search(self):
+        self.repository.save_content('Кот в школе.', 'The cat is at school.', 'school', 2)
+        target_id, _ = self.repository.save_content('Кот учится в школе.', 'The cat studies at school.', 'school', 3)
+        self.repository.save_content('Мы в школе.', 'We are at school.', 'school', 3)
+        self.repository.save_content('Кот отдыхает дома.', 'The cat rests at home.', 'home', 3)
+        before = self.repository.list_saved()
+        for query in ('КОТ', 'CAT'):
+            html = self.client.get('/sentences/saved', query_string={
+                'level': 3, 'topic': 'school', 'q': query,
+            }).get_data(as_text=True)
+            rows = [attrs['data-sentence-id'] for tag, attrs in Document(html).elements
+                    if tag == 'tr' and 'data-sentence-id' in attrs]
+            self.assertEqual(rows, [str(target_id)])
+            self.assertIn('Showing 1 of 5 sentences', html)
+            self.assertEqual(self.selected_options(html, 'library-level'), ['3'])
+            self.assertEqual(self.selected_options(html, 'library-topic'), ['school'])
+        # Export stays complete regardless of filters used by the reference view.
+        exported = self.client.get('/sentences/saved?fetch_all=true&level=3&topic=school&q=CAT', headers=self.headers)
+        self.assertEqual(len(exported.json['sentences']), 5)
+        self.assertEqual(self.repository.list_saved(), before)
+        self.assertEqual(self.service.mock_calls, [])
+
+    def test_library_invalid_level_is_ignored_without_losing_other_filters(self):
+        target_id, _ = self.repository.save_content('Кот в школе.', 'The cat is at school.', 'school', 2)
+        self.repository.save_content('Мы в школе.', 'We are at school.', 'school', 3)
+        for level in ('', 'bad', '0', '6', '-1', '2.5'):
+            with self.subTest(level=level):
+                html = self.client.get('/sentences/saved', query_string={
+                    'level': level, 'topic': 'school', 'q': 'CAT',
+                }).get_data(as_text=True)
+                document = Document(html)
+                rows = [attrs['data-sentence-id'] for tag, attrs in document.elements
+                        if tag == 'tr' and 'data-sentence-id' in attrs]
+                self.assertEqual(rows, [str(target_id)])
+                self.assertFalse(any(self.selected_options(html, 'library-level')))
+                self.assertEqual(self.selected_options(html, 'library-topic'), ['school'])
+                self.assertEqual(document.element('library-search')['value'], 'CAT')
+        self.assertEqual(self.service.mock_calls, [])
+
+    def test_library_escapes_saved_text_and_localizes_new_controls(self):
+        self.repository.save_content('Текст <script>bad()</script>.', 'Text <img src=x onerror=bad()>.', 'home', 1)
+        with self.client.session_transaction() as session:
+            session['ui_lang'] = 'ru'
+        html = self.client.get('/sentences/saved', query_string={'q': '<script>'}).get_data(as_text=True)
+        self.assertNotIn('<script>bad()', html)
+        self.assertNotIn('<img src=x', html)
+        self.assertIn('&lt;script&gt;bad()', html)
+        self.assertIn('Поиск предложений', html)
+        self.assertIn('Показано предложений: 1 из 2', html)
+        self.assertNotIn('Сменить профиль', html)
+
+    def test_library_and_detail_select_saved_sentences_navigation(self):
+        self.client.set_cookie('ui_navigation', 'sidebar')
+        with self.client.session_transaction() as session:
+            session.pop('ui_navigation', None)
+        responses = [self.client.get('/sentences/saved'),
+                     self.client.get(f'/sentences/saved/{self.id}'),
+                     self.client.post('/sentence/add', data={'sentence': '', 'difficulty': 1})]
+        self.assertEqual([response.status_code for response in responses], [200, 200, 400])
+        for response in responses:
+            links = [attrs for tag, attrs in Document(response.get_data(as_text=True)).elements
+                     if tag == 'a' and attrs.get('aria-current') == 'page']
+            self.assertTrue(any(link.get('href') == '/sentences/saved' for link in links))
+            self.assertFalse(any(link.get('href') in ('/sentences', '/post/#activities') for link in links))
+        practice_links = [attrs for tag, attrs in Document(self.client.get(self.url).get_data(as_text=True)).elements
+                          if tag == 'a' and attrs.get('aria-current') == 'page']
+        self.assertTrue(any(link.get('href') == '/sentences' for link in practice_links))
+
+    def test_household_library_has_no_unavailable_personal_profile_link(self):
+        with self.client.session_transaction() as session:
+            access = session['personal_access_id']
+        self.app.config.update(WORD_POST_HOUSEHOLD_ENABLED=True, SECRET_KEY='test-household-secret-at-least-32-characters')
+        with self.client.session_transaction() as session:
+            session['household_access_id'] = access
+        response = self.client.get('/sentences/saved')
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertNotIn('href="/post/profiles"', html)
+        self.assertNotIn('Switch profile', html)
 
 
 class TranslationProviderTests(unittest.TestCase):

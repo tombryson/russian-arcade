@@ -44,8 +44,19 @@ class LiveVoiceProvider:
 
     def create(self, session, scenario, sdp):
         try:
+            configuration = session_config(session, scenario)
+            if self.config.get('HOSTED_AI_TRIAL'):
+                # The browser carries audio/captions, never billable commands or
+                # instruction changes. Delegated requests run through our ledger.
+                configuration['client'] = {'data_channel': {
+                    'allowed_client_events': ['session.close', 'session.input_audio.mute', 'session.input_audio.unmute'],
+                    'allowed_server_events': [
+                        {'type': kind} for kind in ('session.started', 'session.closed',
+                            'session.input_transcript.delta', 'session.output_transcript.delta',
+                            'session.usage.updated', 'error')]}}
+                configuration['delegation'] = {'type': 'client'}
             response = requests.post('https://api.openai.com/v1/live/sessions',
-                headers=self._headers(), json={'session': session_config(session, scenario),
+                headers=self._headers(), json={'session': configuration,
                     'transport': {'type': 'webrtc', 'sdp': sdp}}, timeout=(10, 25))
             if not response.ok:
                 raise SpeechError(f'Live voice returned HTTP {response.status_code}. Check model access or credit and try again.')
@@ -58,6 +69,13 @@ class LiveVoiceProvider:
             raise
         except Exception:
             raise SpeechError('The live connection could not start. Please try a new conversation.') from None
+
+    def hangup(self, provider_id):
+        """Stop primary media if the sideband disconnects before finalization."""
+        response = requests.post('https://api.openai.com/v1/live/sessions/' + quote(provider_id, safe='') + '/hangup',
+                                 headers=self._headers(), timeout=(5, 10))
+        if not response.ok and response.status_code not in (404, 410):
+            raise SpeechError('The live session close could not be confirmed.')
 
     def attach(self, provider_id):
         try:

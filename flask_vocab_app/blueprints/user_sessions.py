@@ -8,6 +8,7 @@ from services.onboarding import onboarding_state
 from services.personal_learning import PersonalSessions
 from services.skill_progress import snapshot as skill_snapshot
 from utils.household_access import access_id, access_policy, csrf_token
+from utils.navigation import browser_navigation_layout
 
 
 def personal_sessions():
@@ -49,9 +50,11 @@ def create_user_sessions_blueprint():
 
     def replace_session(credential=None):
         language = session.get('ui_lang')
+        navigation = browser_navigation_layout()
         session.clear()
         if language in {'en', 'ru'}:
             session['ui_lang'] = language
+        session['ui_navigation'] = navigation
         if credential:
             session['personal_access_id'] = credential
         session.permanent = True

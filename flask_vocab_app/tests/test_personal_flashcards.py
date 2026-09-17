@@ -49,6 +49,31 @@ class PersonalFlashcardTests(unittest.TestCase):
         with self.client.session_transaction() as session:
             return session['personal_access_id']
 
+    def test_native_selection_covers_inflections_and_keeps_explicit_case(self):
+        with transaction(self.db,write=True) as conn:
+            word_id = conn.execute("INSERT INTO words(lemma,pos,count,lemma_difficulty) VALUES ('книга','NOUN',0,1)").lastrowid
+            for form, case in [('книга','nomn'), ('книгу','accs'), ('книгой','ablt')]:
+                conn.execute('INSERT INTO forms(word_id,form,count,tags,form_difficulty) VALUES (?,?,0,?,1)',
+                             (word_id,form,'{"case":"'+case+'","number":"sing"}'))
+        options = {'kind':'ru-cloze','quantity':1,'word_id':word_id,'max_cards':5}
+        first = self.generator.preview(self.credential(),options)[0]
+        self.assertNotEqual(first['form'],'книга')
+        self.generator.create(self.credential(),{'submission_id':'form-coverage-one','options':options})
+        second = self.generator.preview(self.credential(),options)[0]
+        self.assertNotEqual(second['form_id'], first['form_id'])
+        filtered = self.generator.preview(self.credential(),dict(options,case='instr'))[0]
+        self.assertEqual(filtered['form'],'книгой')
+        self.assertEqual(filtered['tags']['case'],'ablt')
+
+    def test_native_difficulty_filters_the_form_and_reduces_rare_participles(self):
+        with transaction(self.db,write=True) as conn:
+            word_id = conn.execute("INSERT INTO words(lemma,pos,count,lemma_difficulty) VALUES ('читать','VERB',0,1)").lastrowid
+            conn.execute("INSERT INTO forms(word_id,form,count,tags,form_difficulty) VALUES (?,'читаю',0,'{\"person\":\"1per\",\"tense\":\"pres\"}',3)", (word_id,))
+            conn.execute("INSERT INTO forms(word_id,form,count,tags,form_difficulty) VALUES (?,'читавшимися',0,'{\"pos\":\"participle\"}',3)", (word_id,))
+        selected = self.generator.preview(self.credential(),{'kind':'ru-cloze','quantity':1,'word_id':word_id,'difficulty':3})
+        self.assertEqual(selected[0]['form'],'читаю')
+        self.assertEqual(selected[0]['metadata']['form_difficulty'],3)
+
     def test_personal_mode_opens_without_pin_or_household_and_keeps_one_profile(self):
         state = self.client.get('/api/v1/household').json
         self.assertEqual(state['mode'],'personal')

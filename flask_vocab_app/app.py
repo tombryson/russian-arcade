@@ -63,6 +63,7 @@ from utils.household_access import access_policy, install_household_policy
 from utils.shell import render_page, is_shell_navigation
 from utils.i18n import SUPPORTED_UI_LANGUAGES, normalize_ui_language, translate_ui
 from utils.navigation import activity_navigation
+from blueprints.ui_preferences import create_ui_preferences_blueprint
 from filters import register_filters
 import logging
 import os
@@ -76,6 +77,13 @@ def create_app(config_overrides=None, service_overrides=None):
     app = Flask(__name__)
     app.config.from_mapping(app_config())
     app.config.update(config_overrides or {})
+    from services.ai_trial_budget import TrialDenied
+
+    @app.errorhandler(TrialDenied)
+    def trial_budget_unavailable(error):
+        from flask import jsonify
+        return jsonify(error={'code': 'trial_limit', 'message': str(error)}), 429
+
     register_filters(app)
     app.teardown_appcontext(close_db)
     register_cli(app)
@@ -92,6 +100,7 @@ def create_app(config_overrides=None, service_overrides=None):
     Session(app)
     install_household_policy(app)
     app.register_blueprint(create_user_sessions_blueprint())
+    app.register_blueprint(create_ui_preferences_blueprint())
     app.register_blueprint(create_onboarding_blueprint())
     app.register_blueprint(create_first_steps_blueprint())
     app.register_blueprint(create_journey_games_blueprint())
@@ -158,11 +167,11 @@ def create_app(config_overrides=None, service_overrides=None):
     db_path = app.config["DB_PATH"]
     media_dir = app.config["ANKI_MEDIA_DIR"]
 
-    openai_service = service("OpenAIService", lambda: OpenAIService(api_key=app.config["OPENAI_API_KEY"], flashcard_model=app.config["OPENAI_MODEL_FLASHCARDS"], high_model=app.config["OPENAI_MODEL_HIGH"], fast_model=app.config["OPENAI_MODEL_FAST"], image_model=app.config["OPENAI_IMAGE_MODEL"]))
-    yandex_service = service("YandexService", lambda: YandexService(api_key=app.config["YANDEX_API_KEY"]))
+    openai_service = service("OpenAIService", lambda: OpenAIService(config=app.config, api_key=app.config["OPENAI_API_KEY"], flashcard_model=app.config["OPENAI_MODEL_FLASHCARDS"], high_model=app.config["OPENAI_MODEL_HIGH"], fast_model=app.config["OPENAI_MODEL_FAST"], image_model=app.config["OPENAI_IMAGE_MODEL"]))
+    yandex_service = service("YandexService", lambda: YandexService(config=app.config, api_key=app.config["YANDEX_API_KEY"]))
     elevenlabs_service = service(
         "ElevenLabsService",
-        lambda: ElevenLabsService(api_key=app.config["ELEVENLABS_API_KEY"], media_dir=media_dir, voice_ids=app.config["ELEVENLABS_VOICE_IDS"], model=app.config["ELEVENLABS_MODEL"]),
+        lambda: ElevenLabsService(config=app.config, api_key=app.config["ELEVENLABS_API_KEY"], media_dir=media_dir, voice_ids=app.config["ELEVENLABS_VOICE_IDS"], model=app.config["ELEVENLABS_MODEL"]),
     )
 
 
@@ -178,14 +187,14 @@ def create_app(config_overrides=None, service_overrides=None):
         lambda: FlashcardService(db_path, openai_service, yandex_service, elevenlabs_service, anki_connect),
     )
     drive_service = service("GoogleDriveService", lambda: GoogleDriveService(auto_auth=app.config["GOOGLE_DRIVE_AUTO_AUTH"], file_id=app.config["GOOGLE_DRIVE_FILE_ID"], credentials_file=app.config["GOOGLE_DRIVE_CREDENTIALS_FILE"], token_file=app.config["GOOGLE_DRIVE_TOKEN_FILE"], cache_file=app.config["GOOGLE_DRIVE_CACHE_FILE"]))
-    sync_service = service("SyncService", lambda: SyncService(db_path, drive_service=drive_service, api_key=app.config["OPENAI_API_KEY"]))
+    sync_service = service("SyncService", lambda: SyncService(db_path, config=app.config, drive_service=drive_service, api_key=app.config["OPENAI_API_KEY"]))
     comprehension_service = service(
         "ComprehensionService",
-        lambda: ComprehensionService(db_path, openai_service, elevenlabs_service, app.config["APP_MEDIA_DIR"], api_key=app.config["OPENAI_API_KEY"], story_model=app.config["OPENAI_MODEL_STORY"], story_reasoning_effort=app.config["OPENAI_STORY_REASONING_EFFORT"]),
+        lambda: ComprehensionService(db_path, openai_service, elevenlabs_service, app.config["APP_MEDIA_DIR"], config=app.config, api_key=app.config["OPENAI_API_KEY"], story_model=app.config["OPENAI_MODEL_STORY"], story_reasoning_effort=app.config["OPENAI_STORY_REASONING_EFFORT"]),
     )
     writing_service = service(
         "WritingService",
-        lambda: WritingService(db_path, openai_service, api_key=app.config["OPENAI_API_KEY"]),
+        lambda: WritingService(db_path, openai_service, config=app.config, api_key=app.config["OPENAI_API_KEY"]),
     )
     lesson_service = service(
         "LessonService",
@@ -193,11 +202,11 @@ def create_app(config_overrides=None, service_overrides=None):
     )
     word_jumble_service = service(
         "WordJumbleService",
-        lambda: WordJumbleService(db_path, openai_service, api_key=app.config["OPENAI_API_KEY"]),
+        lambda: WordJumbleService(db_path, openai_service, config=app.config, api_key=app.config["OPENAI_API_KEY"]),
     )
     sentence_service = service(
         "SentenceService",
-        lambda: SentenceService(db_path, openai_service, elevenlabs_service, api_key=app.config["OPENAI_API_KEY"], media_dir=app.config["APP_MEDIA_DIR"]),
+        lambda: SentenceService(db_path, openai_service, elevenlabs_service, config=app.config, api_key=app.config["OPENAI_API_KEY"], media_dir=app.config["APP_MEDIA_DIR"]),
     )
     user_service = service("UserService", lambda: UserService(db_path))
     media_provider = service('CardMediaProvider', lambda: NativeMediaProvider(openai_service, elevenlabs_service))
@@ -216,6 +225,8 @@ def create_app(config_overrides=None, service_overrides=None):
     app.extensions['learning']['journey_game_preparation'] = game_preparation
     from services.radio_broadcast import RadioBroadcastService
     app.extensions['learning']['radio_broadcast'] = RadioBroadcastService(db_path, asset_store, openai_service, media_provider, authorize_preparation)
+    from services.route_preparation import RoutePreparationService
+    app.extensions['learning']['route_preparation'] = RoutePreparationService(db_path, asset_store, openai_service, speech, app.config)
     card_media.shared_audio = game_media
     app.register_blueprint(create_journey_game_media_blueprint(game_media))
     generator = CardGenerationService(db_path, content, openai_service, media=card_media, household=app.config['WORD_POST_HOUSEHOLD_ENABLED'])

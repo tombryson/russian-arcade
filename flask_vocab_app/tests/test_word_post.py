@@ -64,6 +64,19 @@ class WordPostTests(unittest.TestCase):
         for service in self.app.extensions['services'].values():
             self.assertIsNone(service.instance)
 
+    def test_scene_artwork_is_public_without_opening_private_static_media(self):
+        for household in (False, True):
+            self.app.config.update(WORD_POST_HOUSEHOLD_ENABLED=household, SECRET_KEY='test-only-' * 4)
+            client = FlaskClient(self.app)
+            for name in ('cat', 'table', 'book', 'book-upright', 'walking', 'taxi',
+                         'walking-away', 'taxi-moving', 'taxi-away', 'doorway-inside', 'courtyard-in', 'courtyard-out'):
+                with client.get(f'/static/images/scene-builder/{name}-v1.webp') as response:
+                    self.assertEqual(response.status_code, 200, name)
+                    self.assertEqual(response.mimetype, 'image/webp')
+                    self.assertNotIn('Set-Cookie', response.headers)
+            self.assertEqual(client.get('/static/images/scene-builder/private.png').status_code, 302)
+            self.assertEqual(client.get('/static/images/scene-builder/../../media/private.mp3').status_code, 302)
+
     def test_missing_or_invalid_build_has_a_recoverable_setup_page(self):
         manifest_path = self.dist / '.vite/manifest.json'
         for content in ('', 'null', '{}', '[]', '{"src/main.tsx": 1}'):

@@ -1,7 +1,29 @@
 (() => {
   'use strict';
+  const header=document.querySelector('.arcade-header');
+  const sidebar=document.querySelector('#sidebar');
+  const navigation=header || sidebar;
+  if (navigation) {
+    const mobileRows=sidebar ? [...sidebar.querySelectorAll('.sidebar-brand-row, .navbar-toggler')] : [];
+    const measure=()=>{
+      const measured=header ? header.getBoundingClientRect().height : window.innerWidth<992 ? mobileRows.reduce((height,row)=>height+row.getBoundingClientRect().height,0) : 0;
+      const height=`${measured}px`;
+      document.documentElement.style.setProperty('--arcade-header-height',height);
+      document.documentElement.style.setProperty('--skill-header-height',height);
+    };
+    measure();
+    if (typeof ResizeObserver!=='undefined') {
+      const observer=new ResizeObserver(measure);
+      (header ? [header] : mobileRows).forEach(row=>observer.observe(row));
+    }
+    window.addEventListener('resize',measure);
+    if (sidebar) {
+      sidebar.addEventListener('shown.bs.collapse',measure);
+      sidebar.addEventListener('hidden.bs.collapse',measure);
+    }
+  }
   const badges=()=>document.querySelectorAll('[data-progression-badge]');
-  if (!badges().length) return;
+  if (!badges().length && !document.querySelector('[data-skill-rail]')) return;
   const originalFetch=window.fetch;
   let busy=false,queued=false,timer,lastData;
   const railStates=new WeakMap();
@@ -58,14 +80,7 @@
   document.addEventListener('visibilitychange',()=>{if (document.visibilityState==='visible') schedule();});
   document.addEventListener('htmx:afterRequest',schedule);
   document.addEventListener('submit',()=>{setTimeout(schedule,1200);},true);
-  const header=document.querySelector('.arcade-header');
-  if (header) {
-    const measure=()=>{const height=`${header.getBoundingClientRect().height}px`;document.documentElement.style.setProperty('--arcade-header-height',height);document.documentElement.style.setProperty('--skill-header-height',height);};
-    measure();
-    if (typeof ResizeObserver!=='undefined') new ResizeObserver(measure).observe(header);
-    else window.addEventListener('resize',measure);
-  }
-  // Existing activities use both fetch and HTMX. Refresh only header progress
+  // Existing activities use both fetch and HTMX. Refresh shared progress
   // after same-origin writes, preserving the response and the activity draft.
   window.fetch=function(input,options) {
     const result=originalFetch.apply(this,arguments);

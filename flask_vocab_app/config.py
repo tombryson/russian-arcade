@@ -146,6 +146,7 @@ def app_config():
         'GOOGLE_DRIVE_TOKEN_FILE': path('GOOGLE_DRIVE_TOKEN_FILE', app_root / 'token.json'),
         'GOOGLE_DRIVE_CACHE_FILE': path('GOOGLE_DRIVE_CACHE_FILE', app_root / 'vocab_list_cache.txt'),
         'WORD_POST_ENABLED': os.environ.get('WORD_POST_ENABLED', 'true').lower() in {'1', 'true', 'yes'},
+        'DIRECTIONS_DELIVERIES_ENABLED': os.environ.get('DIRECTIONS_DELIVERIES_ENABLED', 'true').lower() in {'1', 'true', 'yes'},
         'WORD_POST_CATALOGUE_ENABLED': os.environ.get('WORD_POST_CATALOGUE_ENABLED', 'false').lower() in {'1', 'true', 'yes'},
         'WORD_POST_DIST_DIR': path('WORD_POST_DIST_DIR', app_root / 'ui/dist'),
         'WORD_POST_HOUSEHOLD_ENABLED': os.environ.get('WORD_POST_HOUSEHOLD_ENABLED', 'false').lower() in {'1', 'true', 'yes'},

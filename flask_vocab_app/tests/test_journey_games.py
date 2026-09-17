@@ -11,10 +11,11 @@ from repositories.learning_repository import encoded, identifier, timestamp, tra
 from migrations import MIGRATION_DIR, upgrade_database
 from services.first_delivery import GUEST_ATTEMPT_KEY
 from services.first_steps import chapter_content
-from services.journey_games import GAMES, _content, assess_answer, movement_path, sync_unlocks
+from services.journey_games import GAMES, _content, assess_answer, movement_path, sync_unlocks, _snapshot_legacy_unlocks
 from services.progression import award, snapshot
-from tests.support import isolated_app, select_test_profile
+from tests.support import isolated_app, select_test_profile, latest_schema_version
 from tests import test_first_steps as first_steps_tests
+from tests.game_fixtures import grant_earned_game_access
 
 
 class JourneyGamesTests(unittest.TestCase):
@@ -45,7 +46,8 @@ class JourneyGamesTests(unittest.TestCase):
         return self.request(f'/api/v1/games/sessions/{session_id}/{operation}', data, client=client, status=status)
 
     def start(self, game='pack-bag', request_id=None, *, client=None, status=200):
-        return self.request(f'/api/v1/games/{game}/start', {'request_id': request_id or identifier(), 'options': {'source': 'first_steps'}}, client=client, status=status)
+        options = {'grammar_focus': 'location'} if game == 'scene-builder' else {'source': 'first_steps'}
+        return self.request(f'/api/v1/games/{game}/start', {'request_id': request_id or identifier(), 'options': options}, client=client, status=status)
 
     def read(self, session_id, *, client=None):
         response = (client or self.client).get('/api/v1/games/sessions/' + session_id)
@@ -77,7 +79,7 @@ class JourneyGamesTests(unittest.TestCase):
             return tuple(conn.execute('SELECT COUNT(*) FROM ' + table).fetchone()[0]
                          for table in ('journey_game_unlocks', 'journey_game_sessions', 'progression_events', 'progression_entries'))
 
-    def test_catalogue_is_read_only_and_completed_lesson_unlocks_only_its_game(self):
+    def test_catalogue_is_read_only_and_tutorial_completion_does_not_unlock_games(self):
         select_test_profile(self.client)
         before = self.counts()
         catalogue = self.client.get('/api/v1/games')
@@ -90,11 +92,23 @@ class JourneyGamesTests(unittest.TestCase):
         before = self.counts()
         for _ in range(2):
             games = self.client.get('/api/v1/games').json['games']
-            self.assertTrue(games[0]['unlocked'])
-            self.assertTrue(games[0]['new'])
-            self.assertFalse(games[1]['unlocked'])
+            self.assertTrue(all(not game['unlocked'] for game in games))
+        self.assertEqual(self.counts(), before)
+        self.start(status=409)
+        with transaction(self.db, write=True) as conn:
+            for index in range(9):
+                award(conn, 'personal-learning', activity='reading',
+                      content_key=f'read-{index}', source_key=f'read-{index}',
+                      title='Completed reading practice', now=946684800 + (index // 4) * 86400)
+        before = self.counts()
+        for _ in range(2):
+            games = self.client.get('/api/v1/games').json['games']
+            self.assertTrue(all(not game['unlocked'] for game in games))
+            self.assertTrue(all(game['purchase']['can_purchase'] for game in games))
         self.assertEqual(self.counts(), before)
         self.start('directions', status=409)
+        self.request('/api/v1/games/pack-bag/purchase', {'request_id': identifier(), 'expected_price': 25})
+        self.assertTrue(self.client.get('/api/v1/games').json['games'][0]['new'])
         started = self.start()
         game = self.client.get('/api/v1/games').json['games'][0]
         self.assertFalse(game['new'])
@@ -103,6 +117,7 @@ class JourneyGamesTests(unittest.TestCase):
     def test_start_resumes_active_and_every_request_alias_retries_original_session(self):
         select_test_profile(self.client)
         self.seed_lesson('bag')
+        grant_earned_game_access(self.db)
         first = self.start(request_id='request-1111')
         self.assertEqual(self.start(request_id='request-2222')['id'], first['id'])
         self.assertEqual(self.start(request_id='request-1111')['id'], first['id'])
@@ -119,6 +134,7 @@ class JourneyGamesTests(unittest.TestCase):
     def test_first_answer_and_hint_are_saved_without_leaking_hidden_answer(self):
         select_test_profile(self.client)
         self.seed_lesson('bag')
+        grant_earned_game_access(self.db)
         state = self.start()
         sid, item = state['id'], self.expected(state['id'])[0]
         self.assertIsNone(state['result'])
@@ -145,7 +161,9 @@ class JourneyGamesTests(unittest.TestCase):
     def test_frozen_unlock_survives_source_retirement_and_game_source_changes(self):
         select_test_profile(self.client)
         self.seed_lesson('bag')
+        grant_earned_game_access(self.db)
         with transaction(self.db, write=True) as conn:
+            _snapshot_legacy_unlocks(conn, 'personal-learning', None)
             frozen = json.loads(conn.execute('SELECT lesson_json FROM journey_game_unlocks').fetchone()[0])
             frozen['vocabulary'][0]['sentence'] = 'Вот письмо.'
             conn.execute('UPDATE journey_game_unlocks SET lesson_json=?', (encoded(frozen),))
@@ -165,13 +183,14 @@ class JourneyGamesTests(unittest.TestCase):
     def test_completed_game_awards_participation_once_per_game_per_day_and_skill_once(self):
         select_test_profile(self.client)
         self.seed_lesson('bag')
+        grant_earned_game_access(self.db)
         first = self.finish(self.start())
         self.assertEqual(first['reward']['amount'], 3)
         self.assertEqual(first['reward']['reason'], 'awarded')
         self.assertTrue(first['reward']['awarded_now'])
         reading = next(skill for skill in first['progression']['skill']['skills'] if skill['id'] == 'reading')
         self.assertEqual(reading['observations'], 1)
-        self.assertEqual(reading['rating'], 1012)
+        self.assertEqual(reading['rating'], 1009)
         repeated = self.post(first['id'], 'complete')
         self.assertFalse(repeated['reward']['awarded_now'])
         self.assertEqual(repeated['reward']['amount'], 3)
@@ -182,6 +201,7 @@ class JourneyGamesTests(unittest.TestCase):
         # A fresh random seed cannot become another content claim or Elo sample.
         self.assertEqual(second['progression']['skill'], first['progression']['skill'])
         self.seed_lesson('directions')
+        grant_earned_game_access(self.db)
         with transaction(self.db, write=True) as conn:
             for i in range(3):
                 award(conn, 'personal-learning', activity='test', content_key=str(i), source_key=str(i), title='Cap fixture')
@@ -192,6 +212,7 @@ class JourneyGamesTests(unittest.TestCase):
     def test_hints_exclude_assisted_rounds_from_skill_without_removing_participation(self):
         select_test_profile(self.client)
         self.seed_lesson('bag')
+        grant_earned_game_access(self.db)
         state = self.start()
         rounds = self.expected(state['id'])
         result = self.finish(state, hints=[item['id'] for item in rounds])
@@ -209,16 +230,16 @@ class JourneyGamesTests(unittest.TestCase):
         with transaction(self.db, write=True) as conn:
             before = [tuple(row) for row in conn.execute('SELECT * FROM first_steps_attempts ORDER BY id')]
             ledger = [tuple(row) for row in conn.execute('SELECT * FROM progression_events')]
-            for table in ('journey_game_preparations', 'journey_game_examples', 'journey_game_media', 'journey_game_sessions', 'journey_game_unlocks'):
+            for table in ('journey_game_purchases', 'journey_game_access', 'journey_route_audio_cache', 'journey_route_preparations', 'journey_route_actions', 'journey_route_state', 'journey_game_corrections', 'journey_game_preparations', 'journey_game_examples', 'journey_game_media', 'journey_game_sessions', 'journey_game_unlocks'):
                 conn.execute('DROP TABLE ' + table)
             conn.execute('DELETE FROM schema_migrations WHERE version>=30')
-        self.assertEqual(upgrade_database(self.db, backup=False)[0], 33)
+        self.assertEqual(upgrade_database(self.db, backup=False)[0], latest_schema_version())
         with transaction(self.db) as conn:
             self.assertEqual([tuple(row) for row in conn.execute('SELECT * FROM first_steps_attempts ORDER BY id')], before)
             self.assertEqual([tuple(row) for row in conn.execute('SELECT * FROM progression_events')], ledger)
             unlocks = conn.execute('SELECT * FROM journey_game_unlocks').fetchall()
-            self.assertEqual(len(unlocks), 5)
-            self.assertEqual({row['game_id'] for row in unlocks}, {'pack-bag', 'directions', 'pairs', 'missing-stamp', 'radio'})
+            self.assertEqual(len(unlocks), 6)
+            self.assertEqual({row['game_id'] for row in unlocks}, {'pack-bag', 'directions', 'pairs', 'missing-stamp', 'radio', 'scene-builder'})
             self.assertTrue(all(row['first_started_at'] is None for row in unlocks))
             self.assertTrue(all(json.loads(row['lesson_json'])['version'] == self.content['version'] for row in unlocks))
             self.assertEqual(conn.execute('PRAGMA integrity_check').fetchone()[0], 'ok')
@@ -245,6 +266,7 @@ class JourneyGamesTests(unittest.TestCase):
     def test_other_profiles_and_stale_tabs_cannot_read_or_write_games_or_audio(self):
         select_test_profile(self.client)
         self.seed_lesson('bag')
+        grant_earned_game_access(self.db)
         state = self.start()
         key = state['round']['clues'][0]['audio_key']
         other = self.app.test_client()
@@ -258,12 +280,15 @@ class JourneyGamesTests(unittest.TestCase):
         self.assertEqual(other.get('/api/v1/games/sessions/' + state['id'], headers={'X-Profile-ID': 'personal-learning'}).status_code, 409)
         self.assertEqual(self.client.post('/api/v1/games/pack-bag/start', json={'request_id': identifier()}).status_code, 403)
 
-    def test_guest_progress_is_claimed_only_by_new_profile_and_keeps_unlock_and_session(self):
+    def test_legacy_guest_progress_is_claimed_only_by_new_profile_and_keeps_saved_session(self):
         self.hello(profile=False)
         with self.client.session_transaction() as session:
             guest_token = session[GUEST_ATTEMPT_KEY]
         self.seed_lesson('bag', profile=None, guest=guest_token)
-        first = self.finish(self.start())
+        # Recreate a session saved under the retired introduction-unlock policy.
+        with patch('services.journey_games.require_access'):
+            state = self.start()
+        first = self.finish(state)
         self.assertIsNone(first['profile_id'])
         self.assertEqual(first['reward']['status'], 'pending')
         new_id = self.create_profile()
@@ -271,7 +296,8 @@ class JourneyGamesTests(unittest.TestCase):
         self.assertEqual(claimed['profile_id'], new_id)
         self.assertEqual(claimed['reward']['status'], 'credited')
         self.assertFalse(self.client.get('/api/v1/games').json['games'][0]['new'])
-        self.assertEqual(self.start()['game_id'], 'pack-bag')
+        self.assertTrue(self.client.get('/api/v1/games').json['games'][0]['unlocked'])
+        self.start()
         with transaction(self.db) as conn:
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM journey_game_sessions WHERE guest_token=?', (guest_token,)).fetchone()[0], 0)
         untouched = self.app.test_client()
@@ -279,13 +305,15 @@ class JourneyGamesTests(unittest.TestCase):
         with untouched.session_transaction() as session:
             guest_token = session[GUEST_ATTEMPT_KEY]
         self.seed_lesson('bag', profile=None, guest=guest_token)
-        guest = self.start(client=untouched)
+        with patch('services.journey_games.require_access'):
+            guest = self.start(client=untouched)
         select_test_profile(untouched)
         self.assertEqual(untouched.get('/api/v1/games/sessions/' + guest['id']).status_code, 404)
 
     def test_concurrent_starts_share_one_active_session(self):
         select_test_profile(self.client)
         self.seed_lesson('bag')
+        grant_earned_game_access(self.db)
         token = self.token()
         cookie = self.client.get_cookie(self.app.config['SESSION_COOKIE_NAME'])
         def start(index):
@@ -303,9 +331,13 @@ class JourneyGamesTests(unittest.TestCase):
         with self.client.session_transaction() as session:
             guest_token = session[GUEST_ATTEMPT_KEY]
         self.seed_lesson('bag', profile=None, guest=guest_token)
-        first = self.finish(self.start())
+        with patch('services.journey_games.require_access'):
+            state = self.start()
+        first = self.finish(state)
         self.assertEqual(first['reward']['amount'], 3)
-        replay = self.finish(self.start())
+        with patch('services.journey_games.require_access'):
+            state = self.start()
+        replay = self.finish(state)
         self.assertEqual(replay['reward']['amount'], 0)
         for lesson_id in ('directions', 'help', 'set-off'):
             self.seed_lesson(lesson_id, profile=None, guest=guest_token)
@@ -321,25 +353,26 @@ class JourneyGamesTests(unittest.TestCase):
         self.hello()
         for lesson_id in ('bag', 'directions', 'help', 'set-off'):
             self.seed_lesson(lesson_id)
+        grant_earned_game_access(self.db)
 
     def test_all_six_new_games_have_complete_owned_replayable_flows(self):
         self.seed_chapter()
         games = self.client.get('/api/v1/games').json['games']
         self.assertEqual(len(games), 8)
         self.assertTrue(all(game['unlocked'] for game in games))
-        for game in games[2:]:
+        for game in (game for game in games if game['id'] not in ('pack-bag', 'directions')):
             with self.subTest(game=game['id']):
                 request_id = identifier()
                 state = self.start(game['id'], request_id)
                 self.assertEqual(state['round']['mechanic'], game['id'])
-                self.assertEqual(state['source']['lesson_id'], game['lesson_id'])
+                self.assertEqual(state['source']['lesson_id'], 'scene-builder' if game['id']=='scene-builder' else game['lesson_id'])
                 self.assertNotIn('expected_answer', state['round'])
                 self.assertNotIn('answer_audio', state['round'])
                 self.assertNotIn('vocabulary_refs', state)
                 self.assertEqual(self.start(game['id'])['id'], state['id'])
                 complete = self.finish(state)
                 self.assertEqual(complete['phase'], 'completed')
-                self.assertEqual(complete['summary']['correct_rounds'], 3)
+                self.assertEqual(complete['summary']['correct_rounds'], 5 if game['id']=='scene-builder' else 3)
                 self.assertTrue(complete['study_available'])
                 self.assertEqual(self.start(game['id'], request_id)['id'], state['id'])
                 self.assertEqual(self.read(state['id'])['phase'], 'completed')
@@ -449,6 +482,7 @@ class JourneyGamesTests(unittest.TestCase):
     def test_related_lesson_language_remains_available_after_original_lessons_are_removed(self):
         self.seed_chapter()
         with transaction(self.db, write=True) as conn:
+            _snapshot_legacy_unlocks(conn, 'personal-learning', None)
             frozen = json.loads(conn.execute("SELECT lesson_json FROM journey_game_unlocks WHERE game_id='letter-back'").fetchone()[0])
             self.assertTrue({'hello', 'bag', 'directions', 'help'}.issubset({item['id'] for item in frozen['related_lessons']}))
             conn.execute('DELETE FROM first_steps_attempts')
@@ -457,10 +491,12 @@ class JourneyGamesTests(unittest.TestCase):
         for game in GAMES[2:]:
             state = self.start(game['id'])
             self.assertEqual(state['phase'], 'play')
-            self.assertEqual(state['source']['lesson_id'], game['lesson_id'])
+            self.assertEqual(state['source']['lesson_id'], 'scene-builder' if game['id']=='scene-builder' else game['lesson_id'])
 
     def test_schema_32_preserves_original_game_sessions_and_backfills_six_unlocks(self):
         self.seed_chapter()
+        with transaction(self.db, write=True) as conn:
+            _snapshot_legacy_unlocks(conn, 'personal-learning', None)
         finished = self.finish(self.start())
         active = self.start('directions')
         with sqlite3.connect(self.db) as conn:
@@ -469,19 +505,19 @@ class JourneyGamesTests(unittest.TestCase):
             unlock_columns = [row[1] for row in conn.execute('PRAGMA table_info(journey_game_unlocks)')]
             unlocks = conn.execute("SELECT rowid," + ','.join(unlock_columns) + " FROM journey_game_unlocks WHERE game_id IN ('pack-bag','directions') ORDER BY rowid").fetchall()
             events = conn.execute('SELECT * FROM progression_events ORDER BY rowid').fetchall()
-            conn.executescript('DROP TABLE journey_game_preparations; DROP TABLE journey_game_examples; DROP TABLE journey_game_sessions; DROP TABLE journey_game_unlocks;')
+            conn.executescript('DROP TABLE journey_game_purchases; DROP TABLE journey_game_access; DROP TABLE journey_route_audio_cache; DROP TABLE journey_route_preparations; DROP TABLE journey_route_actions; DROP TABLE journey_route_state; DROP TABLE journey_game_corrections; DROP TABLE journey_game_preparations; DROP TABLE journey_game_examples; DROP TABLE journey_game_sessions; DROP TABLE journey_game_unlocks;')
             conn.executescript((MIGRATION_DIR / '030_journey_games.sql').read_text())
             conn.execute('DELETE FROM journey_game_unlocks')
             conn.executemany('INSERT INTO journey_game_unlocks(rowid,' + ','.join(unlock_columns) + ') VALUES (' + ','.join('?' for _ in range(len(unlock_columns) + 1)) + ')', unlocks)
             conn.executemany('INSERT INTO journey_game_sessions(rowid,' + ','.join(columns) + ') VALUES (' + ','.join('?' for _ in range(len(columns) + 1)) + ')', sessions)
             conn.execute('DELETE FROM schema_migrations WHERE version>=32')
             self.assertNotIn('support_json', {row[1] for row in conn.execute('PRAGMA table_info(journey_game_sessions)')})
-        self.assertEqual(upgrade_database(self.db, backup=False)[0], 33)
+        self.assertEqual(upgrade_database(self.db, backup=False)[0], latest_schema_version())
         with sqlite3.connect(self.db) as conn:
             self.assertEqual(conn.execute('SELECT rowid,' + ','.join(columns) + ' FROM journey_game_sessions ORDER BY rowid').fetchall(), sessions)
             self.assertEqual(conn.execute("SELECT rowid," + ','.join(unlock_columns) + " FROM journey_game_unlocks WHERE game_id IN ('pack-bag','directions') ORDER BY rowid").fetchall(), unlocks)
             self.assertEqual(conn.execute('SELECT * FROM progression_events ORDER BY rowid').fetchall(), events)
-            self.assertEqual(conn.execute('SELECT COUNT(*) FROM journey_game_unlocks').fetchone()[0], 8)
+            self.assertEqual(conn.execute('SELECT COUNT(*) FROM journey_game_unlocks').fetchone()[0], 9)
             self.assertEqual({row[0] for row in conn.execute('SELECT support_json FROM journey_game_sessions')}, {'{}'})
             self.assertEqual(conn.execute('PRAGMA integrity_check').fetchone()[0], 'ok')
             self.assertEqual(conn.execute('PRAGMA foreign_key_check').fetchall(), [])

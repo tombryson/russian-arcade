@@ -39,9 +39,10 @@ def create_card_generation_blueprint(generator, authoring):
     @access_policy('adult')
     def game_cards(session_id):
         from services.first_steps_practice import create_game_flashcards
-        if body():
+        data = body()
+        if set(data) - {'items'} or ('items' in data and data['items'] is None):
             raise LearningError('invalid_input', 'Use the words from your saved game.')
-        return jsonify(create_game_flashcards(generator, access_id(), session_id)), 201
+        return jsonify(create_game_flashcards(generator, access_id(), session_id, data.get('items'))), 201
 
     @bp.get('/api/v1/card-generation/options')
     @access_policy('adult')

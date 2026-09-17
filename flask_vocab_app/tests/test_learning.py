@@ -118,6 +118,7 @@ class LearningTests(unittest.TestCase):
                 self.assertIn(response.status_code, (401,403))
             self.assertEqual(client.get('/static/js/household_security.js').status_code, 200)
             self.assertEqual(client.get('/static/images/barsik-running-v1.webp').status_code, 200)
+            self.assertEqual(client.get('/static/images/barsik-progress-run-v1.webp').status_code, 200)
         self.assertEqual(self.adult.get('/vocab').status_code, 200)
         self.assertIn('csrf-token', self.adult.get('/').get_data(as_text=True))
         self.assertEqual(self.adult.get('/').headers['Cache-Control'], 'no-store')

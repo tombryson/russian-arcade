@@ -4,14 +4,15 @@
 
 Local profiles are intended for a trusted installation. They are not internet accounts. Do not expose the development server or the local profile selector directly to the internet.
 
-The hosted entry point supports two modes:
+The hosted entry point supports these modes:
 
 - **Private installation:** HTTPS and site credentials protect all application routes and assets.
 - **Public sample demo:** a disposable database contains authored sample content. Each browser receives a separate profile. An explicit route list permits sample practice. AI generation, uploads, editing and profile switching are blocked. Provider credentials are blanked during startup.
+- **Signed-in AI trial:** GitHub OAuth selects an isolated, persistent workspace for each verified account. Dedicated demo credentials stay on the server. Provider calls reserve funds in a shared ledger before running. This mode requires explicit configuration and activation.
 
 The anonymous demo limits requests and writes in SQLite. Limits are shared across threads and browser sessions. New profiles have a separate admission limit and an atomic total cap. No IP addresses are stored. These controls bound application work; they do not replace an edge firewall or protect against every denial-of-service attack.
 
-Demo limits reset when its disposable database is recreated. They must not be used as a spending ledger. Paid AI remains disabled until verified identities, persistent cost reservations, provider limits and dedicated credentials are configured. See the [AI demo plan](docs/public-release-and-ai-demo.md).
+Sample limits reset when its disposable database is recreated. They are not the spending ledger. The optional signed-in trial uses persistent identity and budget stores, with global admission budgets of US$1 per UTC day and US$20 per calendar month. Missing budget storage or unsupported provider operations block new paid work. Lingocoins do not increase this allowance. Live speaking also requires a provider-side spending limit: a server failure can leave a call running beyond its one-minute application timer. The timer and ledger cannot guarantee a daily invoice cap in that case. See the [trial runbook](docs/operations-fly.md#funded-ai-trial) and [initial security review](docs/public-release-and-ai-demo.md).
 
 ## Credentials and publication
 

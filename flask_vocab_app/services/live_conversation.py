@@ -21,6 +21,8 @@ from services.speech_provider import SpeechError
 from repositories.speaking_repository import catalogue, choose_variant, validate_level
 from services.speaking_review import SpeakingReviewService
 from services.speaking_lifecycle import NaturalEnding
+from services.trial_live_budget import LiveTrialBudget, TRIAL_SECONDS
+from services.ai_trial_budget import TrialDenied
 
 
 class LiveConversationService:
@@ -32,6 +34,8 @@ class LiveConversationService:
         self.executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix='live-notes')
         self.slots = threading.BoundedSemaphore(2)
         self.reviews = SpeakingReviewService(db_path, self.root, assessor) if assessor else None
+        self.trial_budget = LiveTrialBudget(config)
+        self.max_seconds = TRIAL_SECONDS if self.trial_budget.enabled else 300
 
     def _owned(self, conn, access, sid):
         profile = require_access(conn, access, timestamp())
@@ -67,7 +71,7 @@ class LiveConversationService:
                 'selected_level':level, 'available_count':available_count, 'levels':listing['levels'],
                 'configured': bool(self.config.get('OPENAI_API_KEY')),
                 'notes_configured': bool(self.config.get('OPENROUTER_API_KEY')),
-                'model': self.config['LIVE_CONVERSATION_MODEL'], 'max_seconds': 300}
+                'model': self.config['LIVE_CONVERSATION_MODEL'], 'max_seconds': self.max_seconds}
 
     def start(self, access, body):
         key = valid_key(body.get('submission_id'))
@@ -133,13 +137,15 @@ class LiveConversationService:
                 session = self._owned(conn, access, sid)
             if session['offer_hash']:
                 if session['offer_hash'] == digest and sid in self.connections and session['answer_sdp']:
-                    return {'sdp': session['answer_sdp']}
+                    return {'sdp': session['answer_sdp'], 'server_controlled': self.trial_budget.enabled}
                 raise LearningError('connection_used', 'Start a new live conversation to reconnect.', 409)
             if session['state'] != 'new':
                 raise LearningError('completed', 'Start a new live conversation.', 409)
             if len(self.connections) >= 2:
                 raise LearningError('busy', 'Finish another live conversation before starting this one.', 409)
+            self.trial_budget.reserve(session, json.loads(session['scenario_json']))
             self._session(sid, state='connecting', offer_hash=digest, heartbeat_at=timestamp())
+            provider_id = None
             try:
                 provider_id, answer = self.provider.create(session, json.loads(session['scenario_json']), sdp)
                 self._session(sid, provider_id=provider_id, answer_sdp=answer)
@@ -154,8 +160,15 @@ class LiveConversationService:
                 if not runtime['ready'].wait(18) or runtime['error']:
                     runtime['stop'].set()
                     raise SpeechError('The recording connection could not start. Please start a new conversation.')
-                return {'sdp': answer}
+                return {'sdp': answer, 'server_controlled': self.trial_budget.enabled}
             except Exception as error:
+                if sid not in self.connections:
+                    if provider_id and self.trial_budget.enabled:
+                        try:
+                            self.provider.hangup(provider_id)
+                        except Exception:
+                            pass
+                    self.trial_budget.finish(sid)
                 message = str(error) if isinstance(error, SpeechError) else 'The live connection could not start.'
                 self._session(sid, state='failed', error=message, ended_at=timestamp(), answer_sdp=None)
                 raise LearningError('voice_unavailable', message, 502) from None
@@ -228,9 +241,15 @@ class LiveConversationService:
                     if event.get('type')=='session.closed':
                         self._event(sid,event)
                         self._session(sid,final_usage_json=encoded(event.get('usage',{})))
+                        self.trial_budget.finish(sid, event.get('usage'))
                         return
         except Exception:
             pass  # Already-expired provider sessions have no recoverable usage.
+        if self.trial_budget.enabled:
+            try:
+                self.provider.hangup(provider_id)
+            finally:
+                self.trial_budget.finish(sid)
 
     def _event(self, sid, event):
         kind = event.get('type', '')
@@ -253,12 +272,18 @@ class LiveConversationService:
         with transaction(self.db_path) as conn:
             scenario = json.loads(conn.execute('SELECT scenario_json FROM live_conversation_sessions WHERE id=?', (sid,)).fetchone()[0])
         ending = NaturalEnding(scenario)
+        delegation = None
+        if self.trial_budget.enabled:
+            from services.trial_live_delegation import TrialLiveDelegation
+            delegation = TrialLiveDelegation(self.config, scenario, ending, executor=self.executor)
         closing_at = None
         started = time.monotonic()
         checked_at = 0
         heartbeat_expired = False
         finalized = False
         time_warning = False
+        final_usage = None
+        greeting_sent = False
         try:
             with self.provider.attach(provider_id) as ws:
                 runtime['ready'].set()
@@ -269,7 +294,10 @@ class LiveConversationService:
                             row = conn.execute('SELECT heartbeat_at FROM live_conversation_sessions WHERE id=?', (sid,)).fetchone()
                         heartbeat_expired = not row or timestamp() - row[0] > 35
                         checked_at = now
-                    expired = heartbeat_expired or now - started >= 300
+                    expired = heartbeat_expired or now - started >= self.max_seconds
+                    if delegation and closing_at is None:
+                        for command in delegation.tick():
+                            ws.send(encoded(command))
                     natural_reason = ending.tick(now) if closing_at is None else None
                     if (runtime['stop'].is_set() or expired or natural_reason) and closing_at is None:
                         reason = ('user_ended' if runtime['stop'].is_set() else 'connection_lost' if heartbeat_expired
@@ -281,7 +309,7 @@ class LiveConversationService:
                                              (sid,'natural-ending','speaking.ending',encoded(ending.completion),timestamp()))
                         ws.send(encoded({'type':'session.close'}))
                         closing_at = time.monotonic()
-                    if now - started >= 270 and not time_warning and closing_at is None:
+                    if now - started >= self.max_seconds - 30 and not time_warning and closing_at is None:
                         time_warning = True
                         ws.send(encoded({'type':'session.instructions.append','event_id':identifier(),'delegation_id':None,
                             'content':'До конца беседы осталось около 30 секунд. Заверши текущую беседу естественно, без новых тем. Дай собеседнику ответить и попрощаться. Не объявляй таймер или оценку.'}))
@@ -292,15 +320,24 @@ class LiveConversationService:
                     except TimeoutError:
                         continue
                     kind = event.get('type')
+                    if delegation and not greeting_sent and kind in ('session.started', 'session.usage.updated', 'session.input_audio.append'):
+                        greeting_sent = True
+                        ws.send(encoded({'type': 'session.instructions.append', 'event_id': identifier(),
+                            'delegation_id': None, 'content': 'Поприветствуй собеседника сейчас только по-русски: «' +
+                            str(scenario.get('opening_ru') or scenario.get('opening') or 'Здравствуйте!') + '» Затем слушай.'}))
                     if kind == 'session.input_audio.append':
                         recorder.append(base64.b64decode(event['audio'], validate=True))
                     if closing_at is None:
                         for command in ending.receive(event, now=time.monotonic()):
                             ws.send(encoded(command))
+                        if delegation:
+                            for command in delegation.receive(event):
+                                ws.send(encoded(command))
                     self._event(sid, event)
                     if kind == 'session.started':
                         self._session(sid, state='live', started_at=timestamp())
                     if kind == 'session.closed':
+                        final_usage = event.get('usage', {})
                         self._session(sid, state='completed', final_usage_json=encoded(event.get('usage', {})))
                         finalized = True
                         break
@@ -311,18 +348,50 @@ class LiveConversationService:
             self._session(sid, error=runtime['error'])
         finally:
             try:
-                recorder.finish()
+                if delegation:
+                    delegation.close()
+                if self.trial_budget.enabled and not finalized:
+                    try:
+                        self.provider.hangup(provider_id)
+                    except Exception:
+                        pass
+                try:
+                    self.trial_budget.finish(sid, final_usage)
+                finally:
+                    recorder.finish()
             finally:
                 if not finalized:
                     self._session(sid, state='interrupted')
                 self._session(sid, ended_at=timestamp(), answer_sdp=None)
                 try:
-                    if self.reviews and scenario.get('seed'):
+                    if self.trial_budget.enabled:
+                        # Finish metered delegation, transcription and grading in
+                        # order; independent jobs must not exhaust their own
+                        # account's concurrency allowance.
+                        self.executor.submit(self._trial_review, sid, scenario, delegation)
+                    elif self.reviews and scenario.get('seed'):
                         self.reviews.request(sid)
                 finally:
                     runtime['ready'].set()
                     runtime['closed'].set()
                     self.connections.pop(sid, None)
+
+    def _trial_review(self, sid, scenario, delegation):
+        pending = delegation.pending[2] if delegation and delegation.pending else None
+        if pending and not pending.cancelled():
+            try:
+                pending.result(timeout=25)
+            except TimeoutError:
+                return  # Leave saved audio available for an explicit retry.
+            except Exception:
+                pass
+        with transaction(self.db_path) as conn:
+            queued = conn.execute("SELECT id FROM live_conversation_recordings WHERE session_id=? AND state='queued'", (sid,)).fetchall()
+        for row in queued:
+            self.slots.acquire()
+            self._analyse(row['id'])
+        if self.reviews and scenario.get('seed'):
+            self.reviews.request(sid)
 
     def dispatch(self, rid):
         if not self.slots.acquire(blocking=False):
@@ -439,5 +508,5 @@ class _ReceivedAudio:
         rid = self.rid
         self.writer = None
         self.count = self.silence = self.peak = 0
-        if state == 'queued':
+        if state == 'queued' and not self.service.trial_budget.enabled:
             self.service.dispatch(rid)

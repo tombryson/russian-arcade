@@ -140,7 +140,7 @@ def create_flashcards(generator, credential, lesson_id):
     return _create_context_flashcards(generator, credential, source)
 
 
-def create_game_flashcards(generator, credential, session_id):
+def create_game_flashcards(generator, credential, session_id, items=None):
     """Keep the contextual words from this completed game in native practice."""
     def source(conn):
         access = require_access(conn, credential, generator.clock(), adult=True)
@@ -152,6 +152,15 @@ def create_game_flashcards(generator, credential, session_id):
             raise LearningError('game_incomplete', 'Finish this game before making its flashcards.', 409)
         content = json.loads(row['content_json'])
         candidates = content.get('vocabulary_refs', [])
+        if items is not None:
+            if (not isinstance(items, list) or not items or len(items) > 100
+                    or any(not isinstance(item, str) for item in items)
+                    or len(set(items)) != len(items)):
+                raise LearningError('invalid_input', 'Choose at least one word from this game.')
+            available = {_identity(candidate) for candidate in candidates}
+            if not set(items) <= available:
+                raise LearningError('invalid_input', 'Choose words from this saved game.')
+            candidates = [candidate for candidate in candidates if _identity(candidate) in items]
         return (candidates, {'lesson_id': 'game:' + row['game_id'], 'title': content['title'], 'topic': 'Journey games',
                              'url': '/post/#games/session/' + row['id']}, 'journey-game:' + row['game_id'])
     return _create_context_flashcards(generator, credential, source)

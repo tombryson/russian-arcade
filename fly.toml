@@ -21,6 +21,8 @@ kill_timeout = 120
   GOOGLE_DRIVE_CACHE_FILE = "/data/drive-cache.txt"
   GOOGLE_DRIVE_AUTO_AUTH = "false"
   WORD_POST_HOUSEHOLD_ENABLED = "false"
+  HOSTED_TRIAL_ROOT = "/data/trial"
+  AI_TRIAL_ENABLED = "false"
   PERSONAL_STUDY_TIMEZONE = "Australia/Melbourne"
 
 [http_service]
@@ -44,3 +46,7 @@ kill_timeout = 120
   cpu_kind = "shared"
   cpus = 1
   memory = "2gb"
+
+[[mounts]]
+  source = "arcade_data"
+  destination = "/data"

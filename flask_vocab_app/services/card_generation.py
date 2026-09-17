@@ -51,12 +51,10 @@ class CardGenerationService:
         result['case'] = CASES.get(data.get('case'),data.get('case',''))
         return result
 
-    def select(self, conn, options):
+    def select(self, conn, options, owner=None):
         conditions, parameters = ['1=1'], []
         if options.get('word_id'):
             conditions.append('w.id=?'); parameters.append(options['word_id'])
-        if options.get('difficulty'):
-            conditions.append('w.lemma_difficulty=?'); parameters.append(options['difficulty'])
         if options.get('pos'):
             tags = sorted({options['pos']} | {k for k,v in POS_MAP.items() if v==options['pos']})
             conditions.append('w.pos IN ('+','.join('?' for _ in tags)+')'); parameters.extend(tags)
@@ -67,6 +65,9 @@ class CardGenerationService:
         conditions.append("(SELECT COUNT(DISTINCT d.id) FROM card_definitions d JOIN card_versions cv ON cv.card_id=d.id JOIN learning_content_versions v ON v.id=cv.content_version_id WHERE d.word_id=w.id AND d.retired=0 AND v.status='published' AND v.version=(SELECT MAX(v2.version) FROM learning_content_versions v2 WHERE v2.content_id=v.content_id AND v2.status='published')) < ?")
         parameters.append(options['max_cards'])
         rows = conn.execute('SELECT w.* FROM words w WHERE '+' AND '.join(conditions)+' ORDER BY w.id',parameters).fetchall()
+        from services.form_selection import coverage, choose_form
+        word_use, form_use, grammar_use = coverage(conn, owner)
+        rows = sorted(rows, key=lambda row: (word_use[row['id']], row['id']))
         selected = []
         for row in rows:
             form_sql = 'SELECT id,form,tags,form_difficulty FROM forms WHERE word_id=?'
@@ -74,8 +75,12 @@ class CardGenerationService:
             if options.get('case'):
                 form_sql += " AND json_extract(CASE WHEN json_valid(tags) THEN tags ELSE '{}' END,'$.case')=?"
                 args.append(options['case'])
-            form_sql += ' ORDER BY (form=?) DESC,id LIMIT 1'; args.append(row['lemma'])
-            form = conn.execute(form_sql,args).fetchone()
+            if options.get('difficulty'):
+                form_sql += ' AND COALESCE(form_difficulty,?)=?'
+                args.extend([row['lemma_difficulty'], options['difficulty']])
+            form = choose_form(conn.execute(form_sql, args).fetchall(), row['lemma'], form_use, grammar_use)
+            if options.get('difficulty') and not form and (row['lemma_difficulty'] != options['difficulty'] or conn.execute('SELECT 1 FROM forms WHERE word_id=?', (row['id'],)).fetchone()):
+                continue
             if options.get('case') and not form:
                 continue
             selected.append({'word_id':row['id'],'lemma':row['lemma'],'pos':row['pos'],
@@ -89,8 +94,8 @@ class CardGenerationService:
     def preview(self, credential, options):
         options = self.options(options)
         with transaction(self.db_path) as conn:
-            self._owner(conn,credential)
-            return self.select(conn,options)
+            owner = self._owner(conn,credential)
+            return self.select(conn,options,owner)
 
     def create(self, credential, data):
         fields(data, {'submission_id','options'}); key(data['submission_id'])
@@ -103,7 +108,7 @@ class CardGenerationService:
                     raise LearningError('idempotency_conflict','This generation request has different settings.',409)
                 batch = old['id']
             else:
-                selected = self.select(conn,options)
+                selected = self.select(conn,options,owner)
                 if not selected:
                     raise LearningError('no_matching_words','No words match. Change the filters or allow more cards per word.',409)
                 batch = identifier()

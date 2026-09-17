@@ -1,4 +1,4 @@
-"""Games unlocked by lessons and practised with the learner's wider library."""
+"""Games purchased with Lingocoins and played with a wider vocabulary."""
 import hashlib
 import json
 import random
@@ -11,7 +11,9 @@ from repositories.learning_repository import LearningError, encoded, identifier,
 from services.first_delivery import _owner
 from services.first_steps import completed_lessons
 from services.journey_game_content import NEW_GAMES
+from services.scene_builder import GAME as SCENE_GAME
 from services.progression import RULES, award, snapshot, study_day
+from services.game_access import access_state, require_access, mark_started, shop_state, preserve_played_access, GAME_IDS
 
 VERSION = 'journey-games-v1'
 GAMES = (
@@ -19,7 +21,7 @@ GAMES = (
      'lesson_id': 'bag', 'lesson_title': 'What’s in the bag?'},
     {'id': 'directions', 'title': 'Follow the directions', 'description': 'Follow Russian directions to guide Barsik through the streets.',
      'lesson_id': 'directions', 'lesson_title': 'Which way?'},
-) + NEW_GAMES
+) + (SCENE_GAME,) + NEW_GAMES
 OBJECTS = ({'id': 'letter', 'visual': 'letter', 'label': 'Letter'},
            {'id': 'map', 'visual': 'map', 'label': 'Map'},
            {'id': 'apple', 'visual': 'apple', 'label': 'Apple'},
@@ -49,7 +51,13 @@ def _lesson_sources(conn, profile_id, guest_token):
 
 
 def sync_unlocks(conn, profile_id, guest_token, *, now=None):
-    """Called by completion/claim writes. Catalogue reads remain side-effect free."""
+    """Compatibility hook for profile transfers; intro completion grants nothing."""
+    if profile_id:
+        preserve_played_access(conn, profile_id)
+
+
+def _snapshot_legacy_unlocks(conn, profile_id, guest_token, *, now=None):
+    """Historical migration 32 only. These snapshots no longer grant access."""
     now = timestamp() if now is None else now
     lessons = _lesson_sources(conn, profile_id, guest_token)
     for game in GAMES:
@@ -67,7 +75,7 @@ def backfill_unlocks(conn):
     try:
         owners = conn.execute('SELECT profile_id,guest_token FROM first_steps_attempts WHERE completed_at IS NOT NULL UNION SELECT profile_id,guest_token FROM journey_game_unlocks').fetchall()
         for owner in owners:
-            sync_unlocks(conn, owner['profile_id'], owner['guest_token'])
+            _snapshot_legacy_unlocks(conn, owner['profile_id'], owner['guest_token'])
     finally:
         conn.row_factory = previous
 
@@ -77,18 +85,46 @@ def read_catalogue():
         profile_id, guest_token = _owner(conn)
         where, params = _scope(profile_id, guest_token)
         lessons = _lesson_sources(conn, profile_id, guest_token)
-        unlocks = {row['game_id']: row for row in conn.execute('SELECT * FROM journey_game_unlocks WHERE ' + where, params)}
-        active = {row['game_id']: row['id'] for row in conn.execute("SELECT id,game_id FROM journey_game_sessions WHERE " + where + " AND completed_at IS NULL AND superseded_at IS NULL AND json_extract(content_json,'$.options.word_policy')='mixed-v1'", params)}
+        public_demo = bool(current_app.config.get('PUBLIC_DEMO'))
+        access = access_state(conn, profile_id, guest_token, enabled=not public_demo)
+        played = {row[0] for row in conn.execute('SELECT DISTINCT game_id FROM journey_game_sessions WHERE ' + where, params)}
+        active = {row['game_id']: row['id'] for row in conn.execute(
+            'SELECT id,game_id FROM journey_game_sessions WHERE ' + where
+            + " AND completed_at IS NULL AND superseded_at IS NULL AND (json_extract(content_json,'$.options.word_policy')='mixed-v1'"
+            + " OR json_extract(content_json,'$.version') IN ('journey-delivery-v2','scene-builder-v1'))", params)}
         games = []
         for game in GAMES:
-            unlock = unlocks.get(game['id'])
-            lesson = json.loads(unlock['lesson_json']) if unlock else lessons.get(game['lesson_id'])
+            if game['id'] == 'pairs':
+                continue  # Existing sessions/URLs remain readable; discovery now teaches grammar.
+            lesson = lessons.get(game['lesson_id'])
             games.append(dict(game) | {'lesson_title': lesson['title'] if lesson else game['lesson_title'],
-                                      'lesson_href': '#first-steps/' + game['lesson_id'], 'unlocked': bool(lesson),
-                                      'new': bool(lesson and (not unlock or unlock['first_started_at'] is None)),
-                                      'active_session_id': active.get(game['id']) if lesson else None})
+                                      'lesson_href': '#first-steps/' + game['lesson_id'],
+                                      **access[game['id']], 'new': access[game['id']]['new'] and game['id'] not in played,
+                                      'active_session_id': active.get(game['id'])})
+        games.sort(key=lambda game: GAME_IDS.index(game['id']))
+        if public_demo:
+            from services.demo_games import SAMPLE_GAMES
+            for entry in games:
+                sample = entry['id'] in SAMPLE_GAMES
+                entry.update(availability='sample' if sample else 'local-only', unlocked=sample, new=False,
+                             active_session_id=active.get(entry['id']) if sample else None)
         from services.journey_vocabulary import catalogue_sources
-        return {'profile_id': profile_id, 'games': games, 'sources': catalogue_sources(conn, profile_id, guest_token)}
+        if public_demo:
+            from services.route_dispatch import catalogue as delivery_catalogue
+        else:
+            from services.route_mission import catalogue as delivery_catalogue
+        return {'profile_id': profile_id, 'public_demo': public_demo, 'games': games,
+                'shop': shop_state(conn, profile_id, enabled=not public_demo), 'sources': catalogue_sources(conn, profile_id, guest_token),
+                'deliveries': delivery_catalogue() if current_app.config.get('DIRECTIONS_DELIVERIES_ENABLED', True) else []}
+
+
+def purchase_game(game_id, request_id, expected_price):
+    if current_app.config.get('PUBLIC_DEMO'):
+        raise LearningError('demo_unavailable', 'Game purchases are unavailable in the public demo.', 403)
+    from services.game_access import purchase
+    with transaction(current_app.config['DB_PATH'], write=True) as conn:
+        profile_id, _guest_token = _owner(conn)
+        return purchase(conn, profile_id, game_id, request_id, expected_price)
 
 
 def _clue(vocabulary):
@@ -154,6 +190,11 @@ def normalise_answer(item, answer, game_id):
     mechanic = item.get('mechanic', game_id)
     if mechanic not in ('pack-bag', 'directions') and len(answer) != item['max_choices']:
         raise LearningError('answer_incomplete', 'Try each item in this round before checking.')
+    if mechanic == 'scene-builder':
+        slots = item['scene_builder']['slots']
+        if any(value not in {choice['id'] for choice in slot['choices']} for slot, value in zip(slots, answer)):
+            raise LearningError('invalid_answer', 'Choose one form from each part of this sentence.')
+        return answer
     if mechanic in ('pairs', 'mailbox-sort'):
         left = {entry['id'] for entry in item['left' if mechanic == 'pairs' else 'sentences']}
         right = {entry['id'] for entry in item['right' if mechanic == 'pairs' else 'bins']}
@@ -249,6 +290,13 @@ def _reward(conn, row, awarded_now):
 
 def _public(conn, row, *, awarded_now=False):
     content = json.loads(row['content_json'])
+    if content.get('version') == 'journey-delivery-v2':
+        from services.route_jobs import public as preparation_public
+        preparing = preparation_public(conn, row)
+        if preparing:
+            return preparing
+        from services.route_delivery import public
+        return public(conn, row, awarded_now)
     is_radio = content.get('version') == 'radio-broadcast-v1'
     preparation = current_app.extensions['learning'].get('radio_broadcast' if is_radio else 'journey_game_preparation')
     pending = conn.execute('SELECT status FROM journey_game_preparations WHERE session_id=?', (row['id'],)).fetchone()
@@ -262,24 +310,41 @@ def _public(conn, row, *, awarded_now=False):
     index, total = len(acknowledged), len(content['rounds'])
     item = content['rounds'][index] if index < total and row['completed_at'] is None else None
     saved = answers.get(item['id']) if item else None
+    practice = support.get('_practice', {})
+    practising = practice.get('active', False)
     phase = 'completed' if row['completed_at'] is not None else 'ready' if index == total else 'feedback' if saved else 'play'
     if is_radio and row['completed_at'] is None and not support.get('broadcast', {}).get('started'):
         phase, item, saved = 'listening', None, None
+    if practising:
+        item = next(r for r in content['rounds'] if r['id'] == practice['queue'][practice['index']])
+        saved = {'answer': practice['answer']} if 'answer' in practice else None
+        phase = 'practice_feedback' if saved else 'practice'
     public_round, result = None, None
     if item:
         public_fields = ('id', 'mechanic', 'prompt', 'clues', 'objects', 'board', 'max_choices', 'left', 'right', 'sentences', 'bins',
-                         'sentence', 'translation', 'visual', 'image_url', 'choices', 'destinations', 'tiles', 'audio_required')
+                         'sentence', 'translation', 'objective', 'visual', 'image_url', 'choices', 'destinations', 'tiles', 'audio_required', 'scene_builder')
         public_round = {key: item[key] for key in public_fields if key in item}
+        if item.get('mechanic') == 'scene-builder':
+            public_round.pop('translation', None)
         round_support = {**support.get('broadcast', {}), **support.get(item['id'], {})} if is_radio else support.get(item['id'], {})
+        if practising and practice.get('transcript'):
+            round_support = dict(round_support, transcript=True)
         public_round['support'] = {'listened_audio_keys': round_support.get('listened_audio_keys', []), 'transcript': bool(round_support.get('transcript'))}
         if item.get('audio_required') and (is_radio or not saved) and not round_support.get('transcript'):
             public_round['clues'] = [{'audio_key': clue['audio_key']} for clue in item['clues']]
-        if item['id'] in hints:
+        if item['id'] in hints or practising and practice.get('hint'):
             public_round['hint'] = item['hint']
+            if item.get('hint_ru'):
+                public_round['hint_ru'] = item['hint_ru']
         if saved:
             assessment = assess_answer(item, saved['answer'])
-            result = {'answer': saved['answer'], **assessment, 'expected_answer': item['expected_answer'], 'feedback': item['feedback']}
-            if item.get('answer_audio'):
+            result = {'answer': saved['answer'], **assessment, 'expected_answer': item['expected_answer'], 'feedback': item['feedback'], 'explanation': item.get('explanation', ''), 'explanation_ru': item.get('explanation_ru', '')}
+            if item.get('mechanic') == 'scene-builder':
+                from services.scene_builder import slot_results
+                result.update(slot_results=slot_results(item, saved['answer']), correct_sentence=item['correct_sentence'], translation=item['translation'])
+            # The public preview has no game-media endpoints or speech provider.
+            # Do not advertise recordings (or a stranded Listen heading) there.
+            if item.get('answer_audio') and not (content.get('sample') or current_app.config.get('PUBLIC_DEMO')):
                 result['answer_audio'] = item['answer_audio'] if isinstance(item['answer_audio'], list) else [item['answer_audio']]
             if item.get('provenance'):
                 result['provenance'] = item['provenance']
@@ -287,26 +352,31 @@ def _public(conn, row, *, awarded_now=False):
                 result['path'] = movement_path(item['board'], item['expected_answer'])
     state = {'profile_id': row['profile_id'], 'id': row['id'], 'game_id': row['game_id'], 'title': content['title'],
              'phase': phase, 'round_index': index, 'total_rounds': total, 'round': public_round, 'result': result,
-             'source': content['source'], 'reward': None}
+             'source': content['source'], 'reward': None, 'sample': bool(content.get('sample'))}
+    if practising:
+        state['practice'] = {'mode': practice['mode'], 'index': practice['index'], 'total': len(practice['queue'])}
     if is_radio and content.get('broadcast'):
         broadcast = content['broadcast']
         support_record = support.get('broadcast', {})
+        if practising and practice.get('transcript'):
+            support_record = dict(support_record, transcript=True)
         state['broadcast'] = {key: broadcast[key] for key in ('title', 'audio_key', 'duration_seconds')}
         state['broadcast'].update(listened=broadcast['audio_key'] in support_record.get('listened_audio_keys', []),
                                   transcript=bool(support_record.get('transcript')))
         if support_record.get('transcript') or row['completed_at'] is not None:
             state['broadcast']['script'] = broadcast['script']
     if row['completed_at'] is not None:
+        from services.first_steps_practice import _identity
         state['reward'] = _reward(conn, row, awarded_now)
-        state['study_available'] = bool(not is_radio and content.get('vocabulary_refs') and current_app.config.get('NATIVE_FLASHCARDS_ENABLED'))
+        state['study_available'] = bool(not content.get('sample') and not is_radio and content.get('vocabulary_refs') and current_app.config.get('NATIVE_FLASHCARDS_ENABLED'))
         known = {r[0].lower().replace('ё', 'е') for r in conn.execute('SELECT lemma FROM words')}
         state['words'] = [{key: e.get(key, '') for key in ('lemma', 'form', 'sentence', 'translation', 'target_meaning', 'pos')}
-                          | {'in_vocabulary': e.get('lemma', '').lower().replace('ё', 'е') in known}
-                          for e in content.get('vocabulary_refs', []) if e.get('lemma')]
+                          | {'in_vocabulary': e.get('lemma', '').lower().replace('ё', 'е') in known, 'card_key': _identity(e)}
+                          for e in content.get('vocabulary_refs', []) if e.get('lemma') and not content.get('sample')]
         if is_radio:
             state['broadcast']['vocabulary'] = state['words']
         assessed = [assess_answer(item, answers[item['id']]['answer']) for item in content['rounds']]
-        state['summary'] = {'correct_rounds': sum(item['correct'] for item in assessed), 'total_rounds': total,
+        state['summary'] = {'correct_rounds': sum(item['correct'] for item in assessed), 'total_rounds': total, 'missed_rounds': sum(not item['correct'] for item in assessed),
                             'matched': sum(item['matched'] for item in assessed), 'total': sum(item['total'] for item in assessed)}
         if row['profile_id']:
             state['progression'] = snapshot(conn, row['profile_id'])
@@ -321,22 +391,23 @@ def _start_intro_game(game_id, request_id):
         profile_id, guest_token = _owner(conn)
         where, params = _scope(profile_id, guest_token)
         now = timestamp()
-        sync_unlocks(conn, profile_id, guest_token, now=now)
-        unlock = conn.execute('SELECT * FROM journey_game_unlocks WHERE ' + where + ' AND game_id=?', (*params, game_id)).fetchone()
-        lesson = json.loads(unlock['lesson_json']) if unlock else None
-        if not lesson:
-            raise LearningError('game_locked', f'Finish “{game["lesson_title"]}” to unlock this game.', 409)
         rows = conn.execute('SELECT * FROM journey_game_sessions WHERE ' + where + ' AND game_id=? ORDER BY created_at,rowid', (*params, game_id)).fetchall()
         original = next((row for row in rows if request_id in json.loads(row['request_ids_json'])), None)
         if original:
             return _public(conn, original)
-        conn.execute('UPDATE journey_game_unlocks SET first_started_at=COALESCE(first_started_at,?) WHERE ' + where + ' AND game_id=?', (now, *params, game_id))
         active = next((row for row in rows if row['completed_at'] is None and row['superseded_at'] is None), None)
         if active:
             requests = json.loads(active['request_ids_json'])
             requests.append(request_id)
             conn.execute('UPDATE journey_game_sessions SET request_ids_json=? WHERE id=?', (encoded(requests), active['id']))
             return _public(conn, active)
+        require_access(conn, profile_id, game_id, now=now)
+        lessons = _lesson_sources(conn, profile_id, guest_token)
+        lesson = lessons.get(game['lesson_id'])
+        if not lesson:
+            raise LearningError('game_content_unavailable', 'Choose vocabulary or lesson words for this game.', 409)
+        lesson = dict(lesson) | {'related_lessons': list(lessons.values())}
+        mark_started(conn, profile_id, game_id, now)
         session_id, seed = identifier(), identifier()
         conn.execute('INSERT INTO journey_game_sessions(id,profile_id,guest_token,game_id,seed,request_ids_json,content_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
                      (session_id, profile_id, guest_token, game_id, seed, encoded([request_id]), encoded(_content(game, lesson, seed)), now, now))
@@ -365,6 +436,16 @@ def _options(value):
 
 
 def start_game(game_id, request_id, options=None, *, new_game=False):
+    if game_id == 'scene-builder':
+        from services.scene_builder import start
+        return start(request_id, options, new_game=new_game, sample=bool(current_app.config.get('PUBLIC_DEMO')))
+    if (game_id == 'directions' and current_app.config.get('DIRECTIONS_DELIVERIES_ENABLED', True)
+            and (current_app.config.get('PUBLIC_DEMO') or not isinstance(options, dict) or options.get('source') != 'first_steps')):
+        from services.route_delivery import start
+        return start(request_id, new_game=new_game, sample=bool(current_app.config.get('PUBLIC_DEMO')), options=options)
+    if current_app.config.get('PUBLIC_DEMO'):
+        from services.demo_games import start_sample
+        return start_sample(game_id, request_id)
     from services.journey_vocabulary import select_examples
     from services.journey_vocabulary_games import VERSION
     from services.game_activity_policy import activity_policy, discovery_request
@@ -379,10 +460,6 @@ def start_game(game_id, request_id, options=None, *, new_game=False):
         profile_id, guest_token = _owner(conn)
         where, params = _scope(profile_id, guest_token)
         now = timestamp()
-        sync_unlocks(conn, profile_id, guest_token, now=now)
-        unlock = conn.execute('SELECT * FROM journey_game_unlocks WHERE '+where+' AND game_id=?', (*params, game_id)).fetchone()
-        if not unlock:
-            raise LearningError('game_locked', f'Finish “{game["lesson_title"]}” to unlock this game.', 409)
         rows = conn.execute('SELECT * FROM journey_game_sessions WHERE '+where+' AND game_id=? ORDER BY created_at,rowid', (*params, game_id)).fetchall()
         original = next((r for r in rows if request_id in json.loads(r['request_ids_json'])), None)
         if original:
@@ -394,6 +471,7 @@ def start_game(game_id, request_id, options=None, *, new_game=False):
             requests = [*json.loads(active['request_ids_json']), request_id]
             conn.execute('UPDATE journey_game_sessions SET request_ids_json=? WHERE id=?', (encoded(requests), active['id']))
             return _public(conn, active)
+        require_access(conn, profile_id, game_id, now=now)
         session_id, seed = identifier(), identifier()
         policy = activity_policy(game_id)
         known_lemmas = [word[0] for word in conn.execute('SELECT lemma FROM words')]
@@ -417,7 +495,7 @@ def start_game(game_id, request_id, options=None, *, new_game=False):
                        'source': source, 'options': options, 'vocabulary_refs': familiar, 'media_texts': [], 'activity_policy': policy}
         if active:
             conn.execute('UPDATE journey_game_sessions SET superseded_at=? WHERE id=?', (now, active['id']))
-        conn.execute('UPDATE journey_game_unlocks SET first_started_at=COALESCE(first_started_at,?) WHERE '+where+' AND game_id=?', (now,*params,game_id))
+        mark_started(conn, profile_id, game_id, now)
         conn.execute('INSERT INTO journey_game_sessions(id,profile_id,guest_token,game_id,seed,request_ids_json,content_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
                      (session_id, profile_id, guest_token, game_id, seed, encoded([request_id]), encoded(content), now, now))
         if prepared_items is not None:
@@ -435,6 +513,9 @@ def prepare_session(session_id, retry=False):
     from services.journey_vocabulary import select_examples
     with transaction(current_app.config['DB_PATH']) as conn:
         initial = json.loads(authorize_preparation(conn, session_id)['content_json'])
+    if initial.get('version') == 'journey-delivery-v2':
+        from services.route_jobs import advance
+        return advance(session_id, retry=retry)
     is_radio = initial.get('version') == 'radio-broadcast-v1'
     preparation = current_app.extensions['learning']['radio_broadcast' if is_radio else 'journey_game_preparation']
     preparation.advance(session_id, retry=retry)
@@ -477,10 +558,18 @@ def game_image(session_id, asset_id):
         row = authorize_preparation(conn, session_id)
         content = json.loads(row['content_json'])
         allowed = {a['id'] for e in content.get('vocabulary_refs', []) for a in e.get('assets', []) if a.get('kind') == 'image'}
+        media_prefix = 'image/'
+        if content.get('mission_id') == 'town-procedural':
+            from services.route_jobs import disclosed_asset_ids
+            allowed = disclosed_asset_ids(_public(conn, row))
+            media_prefix = 'audio/'
         asset = conn.execute('SELECT * FROM learning_assets WHERE id=?', (asset_id,)).fetchone() if asset_id in allowed else None
-        if not asset or not asset['media_type'].startswith('image/'):
-            raise LearningError('not_found', 'This picture was not found.', 404)
-        return current_app.extensions['learning']['assets'].path(asset['storage_key']), asset['media_type']
+        if not asset or not asset['media_type'].startswith(media_prefix):
+            raise LearningError('not_found', 'This media was not found.', 404)
+        path = current_app.extensions['learning']['assets'].path(asset['storage_key'])
+        if not path.is_file():
+            raise LearningError('asset_missing', 'This media is unavailable.', 404)
+        return path, asset['media_type']
 
 
 def read_session(session_id):
@@ -504,7 +593,7 @@ def _credit(conn, row, now):
     content = json.loads(row['content_json'])
     amount = award(conn, row['profile_id'], activity='journey_game',
                    content_key=f'journey-game:{row["game_id"]}:{content["lesson_version"]}', source_key=row['id'],
-                   title=content['title'], target_level=None if content.get('version') in ('journey-vocabulary-v1', 'radio-broadcast-v1') else 'A1', now=now,
+                   title=content['title'], target_level=None if content.get('version') in ('journey-vocabulary-v1', 'radio-broadcast-v1', 'journey-delivery-v2', 'scene-builder-v1') else 'A1', now=now,
                    evidence={'basis': 'first_unassisted_answers', 'game_id': row['game_id']})
     conn.execute('UPDATE journey_game_sessions SET reward_amount=? WHERE id=?', (amount, row['id']))
     return amount
@@ -514,8 +603,16 @@ def session_command(session_id, operation, data):
     with transaction(current_app.config['DB_PATH'], write=True) as conn:
         profile_id, guest_token = _owner(conn)
         row = _read_row(conn, session_id, profile_id, guest_token)
+        if json.loads(row['content_json']).get('version') == 'journey-delivery-v2':
+            raise LearningError('delivery_action_required', 'Use the actions in this delivery.', 409)
+        from services.journey_game_corrections import OPERATIONS, command
+        if operation in OPERATIONS:
+            command(conn, row, operation, data)
+            return _public(conn, _read_row(conn, session_id, profile_id, guest_token))
         if row['completed_at'] is not None:
             return _public(conn, row)
+        if json.loads(row['support_json']).get('_practice', {}).get('active'):
+            raise LearningError('practice_active', 'Continue or close this correction before returning to the game.', 409)
         content = json.loads(row['content_json'])
         rounds = content['rounds']
         if not rounds:
@@ -641,8 +738,12 @@ def allowlisted_media(conn, key):
     for row in conn.execute('SELECT lesson_json FROM journey_game_unlocks WHERE ' + where, params):
         frozen = json.loads(row['lesson_json'])
         texts.update(item['sentence'] for lesson in [frozen, *frozen.get('related_lessons', [])] for item in lesson['vocabulary'])
-    for row in conn.execute('SELECT content_json FROM journey_game_sessions WHERE ' + where, params):
+    for row in conn.execute('SELECT content_json,answers_json FROM journey_game_sessions WHERE ' + where, params):
         content = json.loads(row['content_json'])
+        if content.get('version') == 'scene-builder-v1':
+            answered = json.loads(row['answers_json'])
+            texts.update(audio['text'] for item in content['rounds'] if item['id'] in answered for audio in item.get('answer_audio', []))
+            continue
         texts.update(content.get('media_texts', []))
         texts.update(clue['text'] for item in content['rounds'] for clue in item['clues'])
     text = next((text for text in texts if hashlib.sha256(text.encode('utf-8')).hexdigest() == key), None)

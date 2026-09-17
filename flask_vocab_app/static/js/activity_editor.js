@@ -114,6 +114,13 @@
     });
     document.addEventListener('htmx:afterSwap', event => {
         if (event.detail.target?.id !== 'mainContent') return;
+        const main = document.getElementById('mainContent');
+        if (main?.classList.contains('activity-entry')) {
+            main.querySelector('h1')?.focus({ preventScroll: true });
+            // Entry navigation starts at the page top, including its header spacing.
+            window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+            return;
+        }
         const heading = document.getElementById('sentence-page-title');
         if (!heading) return;
         heading.focus({ preventScroll: true });

@@ -81,6 +81,12 @@ def upgrade_database(db_path, backup=True):
                 if version == 32:
                     from services.journey_games import backfill_unlocks
                     backfill_unlocks(conn)
+                if version == 38:
+                    from services.game_access import backfill_access
+                    backfill_access(conn)
+                if version == 39:
+                    from services.game_access import preserve_played_access
+                    preserve_played_access(conn)
                 conn.execute('INSERT INTO schema_migrations(version) VALUES (?)', (version,))
             if conn.execute('PRAGMA foreign_key_check').fetchone():
                 raise ValueError('Migration would leave orphaned references; no changes were committed.')

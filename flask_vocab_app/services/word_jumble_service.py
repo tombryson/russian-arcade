@@ -4,6 +4,8 @@ Draft revisions prevent stale tabs or in-flight checks from overwriting newer wo
 The legacy game row retains the latest check for backwards compatibility; every
 check also has its own immutable-by-convention attempt record.
 """
+from .trial_provider import config_snapshot, openai_client
+from .ai_trial_budget import TrialDenied
 import json
 import random
 import re
@@ -49,9 +51,10 @@ class WordJumbleService:
     WORD_COUNTS = {'easy': 3, 'intermediate': 4, 'expert': 5}
     MAX_RESPONSE = 1000
 
-    def __init__(self, db_path, openai_service, api_key):
+    def __init__(self, db_path, openai_service, api_key, config=None):
         self.db_path = db_path
-        self.client = LazyService('OpenAI client', lambda: openai.OpenAI(api_key=api_key, timeout=60.0))
+        self.config = config_snapshot(config)
+        self.client = LazyService('OpenAI client', lambda: openai_client(config=self.config, api_key=api_key, timeout=60.0))
 
     def get_topics(self):
         with connect_db(self.db_path) as conn:
@@ -129,6 +132,8 @@ not an exam classification. For topic 'any', choose a coherent everyday theme.''
                 if attempt:
                     raise PreparationUnavailable('Word selection unavailable') from error
                 repair = '\nCheck the output carefully: ' + str(error)
+            except TrialDenied:
+                raise
             except Exception as error:
                 raise PreparationUnavailable('Word selection unavailable') from error
 
@@ -298,6 +303,8 @@ just the corrected spelling, not a claim about nominative or accusative forms.''
             validate_feedback(evaluation, user_response, language)
             evaluation = tidy_corrections(evaluation, user_response)
             return evaluation
+        except TrialDenied:
+            raise
         except Exception as error:
             # Neither incomplete/refused output nor provider errors become a grade.
             raise AssessmentUnavailable('Sentence check unavailable') from error

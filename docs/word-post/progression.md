@@ -1,6 +1,6 @@
 # Shared progression: Lingocoins, memory and Elo-style difficulty
 
-> **Current implementation (15 September 2026):** [Practice levels, shared coins and Barsik’s journey](levels-and-progression.md) is the authoritative release contract. Earlier proposals below remain design history where they conflict. Native review participation rewards and compensating undo are now implemented; authored A1/A2 contracts apply to Speaking.
+> **Current implementation (17 September 2026):** [Practice levels, shared coins and Barsik’s journey](levels-and-progression.md) records the current progression policy. [Game access](game-access.md) records shop purchases: 25 Lingocoins for the first paid game, then 50 each. Review rewards, compensating undo and permanent purchases are implemented. The design notes below preserve earlier proposals and are not the current release contract.
 Status: owner requested progression across activities, 8 September 2026. Mechanisms below are proposed product policies. They are not a claim of measured proficiency or implemented rewards in the Word Post preview.
 
 Implementation update: [Stage 1](stage-1.md) now implements the activity participation policy in the shared backend ledger, using the provisional 3-per-activity / 12-per-day values. The [native MVP](native-flashcards-mvp.md) now stores FSRS reviews and self-reported/supported word evidence. It does not write coin rewards or Elo. Native review rewards, configurable economy, spending and Elo adaptation remain later work.
@@ -8,6 +8,8 @@ Implementation update: [Stage 1](stage-1.md) now implements the activity partici
 **Approved 9 September refinement:** eligible Lingocoins earned across practice unlock worlds on Barsik's route; spending does not reduce that earned-progress total or relock worlds. The journey ends with an exam-style letter comprehension challenge based on practised language. [The canonical campaign brief](barsik-journey.md) defines these requirements. Reward values, thresholds and grading calibration remain proposals. Unlocks and the final assessment are not implemented by the welcome hero.
 
 The first-delivery tutorial now explains the current learner participation rules and demonstrates answer/hint controls. It awards no coins and displays no invented balance. Its copy must stay consistent with the versioned backend policy if those amounts or eligibility rules change. A replayable interface tutorial is not a qualifying learning session.
+
+**17 September 2026 update:** optional games are chosen in Barsik’s shop and bought from the visible Lingocoin balance. Introductory lessons and automatic coin milestones do not grant games. Existing ownership is preserved. Spending does not reduce journey earnings or provisional skill ratings. See [game access](game-access.md) for the current policy.
 
 ## Current evidence and what changes
 

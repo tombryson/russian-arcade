@@ -1,7 +1,7 @@
 """Fly-only entry point. Local development continues to use app.create_app.
 
-Supports a private installation behind HTTP Basic auth, or an isolated sample
-demo with providers disabled. Local files and credentials are never published.
+Supports a private installation or a public sample site with optional,
+authenticated AI workspaces. Local files and credentials are never published.
 """
 import hashlib
 import hmac
@@ -95,7 +95,37 @@ def create_hosted_app():
     if public:
         from public_demo import install_demo
         install_demo(app)
-    app.wsgi_app = PrivateSite(app.wsgi_app, values.get('HOSTED_ACCESS_USERNAME', ''),
+    application = app.wsgi_app
+    if public and os.environ.get('HOSTED_TRIAL_ROOT'):
+        from hosted_trial import HostedTrialDispatcher
+        from services.ai_trial_budget import AITrialBudget
+        root = Path(os.environ['HOSTED_TRIAL_ROOT']).resolve()
+        ledger_path = root / 'ai-budget.sqlite3'
+        enabled = os.environ.get('AI_TRIAL_ENABLED') == 'true'
+        app.config['HOSTED_TRIAL_AVAILABLE'] = enabled
+        if enabled:
+            required = ('GITHUB_OAUTH_CLIENT_ID', 'GITHUB_OAUTH_CLIENT_SECRET',
+                        'DEMO_OPENAI_API_KEY', 'DEMO_ELEVENLABS_API_KEY', 'DEMO_OPENROUTER_API_KEY')
+            if any(not os.environ.get(key) for key in required):
+                raise RuntimeError('The whole-app AI trial needs dedicated demo provider keys and GitHub OAuth credentials.')
+            # Initialization is an explicit administrative step. A missing volume
+            # must never reset the spending allowance during a restart.
+            with AITrialBudget(ledger_path, enabled=True)._transaction() as conn:
+                conn.execute('SELECT halted FROM trial_control WHERE id=1').fetchone()
+        trial_config = {
+            'AI_TRIAL_ENABLED': enabled,
+            'OPENAI_API_KEY': os.environ.get('DEMO_OPENAI_API_KEY', ''),
+            'ELEVENLABS_API_KEY': os.environ.get('DEMO_ELEVENLABS_API_KEY', ''),
+            'OPENROUTER_API_KEY': os.environ.get('DEMO_OPENROUTER_API_KEY', ''),
+            'YANDEX_API_KEY': '',
+        }
+        application = HostedTrialDispatcher(application, create_app, root=root,
+            ledger_path=ledger_path, secret=values['FLASK_SECRET_KEY'],
+            hostname=values['HOSTED_HOSTNAME'], enabled=enabled, app_config=trial_config,
+            client_id=os.environ.get('GITHUB_OAUTH_CLIENT_ID', ''),
+            client_secret=os.environ.get('GITHUB_OAUTH_CLIENT_SECRET', ''))
+        app.extensions['hosted_trial'] = application
+    app.wsgi_app = PrivateSite(application, values.get('HOSTED_ACCESS_USERNAME', ''),
                               values.get('HOSTED_ACCESS_PASSWORD', ''), values['VOCAB_DB_PATH'],
                               values['HOSTED_HOSTNAME'], public=public)
     # Fly terminates HTTPS; trust its protocol header, never forwarded host/IP.
@@ -110,11 +140,32 @@ def main():
     values = settings()
     from migrations import upgrade_database
     upgrade_database(values['VOCAB_DB_PATH'])  # Transactional, with pre-migration backup.
+    if os.environ.get('AI_TRIAL_ENABLED') == 'true':
+        recover_trial_voice_sessions(os.environ['HOSTED_TRIAL_ROOT'], os.environ.get('DEMO_OPENAI_API_KEY', ''))
     # One process owns in-process background jobs. Threads serve concurrent requests.
     os.execvp('gunicorn', ['gunicorn', '--bind', '0.0.0.0:8080', '--workers', '1',
                          '--worker-class', 'gthread', '--threads', '8', '--timeout', '300',
                          '--graceful-timeout', '110', '--error-logfile', '-',
                          'hosted:create_hosted_app()'])
+
+
+def recover_trial_voice_sessions(root, api_key):
+    """Hang up calls left by a process restart; retain their unconfirmed spend.
+
+    A WebRTC connection can outlive the application server. Never interpret a
+    restart as proof that provider billing stopped or restore its allowance.
+    """
+    from services.live_voice_provider import LiveVoiceProvider
+    provider = LiveVoiceProvider({'OPENAI_API_KEY': api_key})
+    for database in (Path(root) / 'tenants').glob('*/vocab.db'):
+        with closing(sqlite3.connect(database, timeout=5)) as conn:
+            rows = conn.execute("SELECT id,provider_id FROM live_conversation_sessions WHERE state IN ('connecting','live','ending')").fetchall()
+            for sid, provider_id in rows:
+                if provider_id:
+                    provider.hangup(provider_id)
+                conn.execute("UPDATE live_conversation_sessions SET state='interrupted',answer_sdp=NULL,error=? WHERE id=?",
+                             ('The server restarted. Start a new conversation when you are ready.', sid))
+            conn.commit()
 
 
 if __name__ == '__main__':

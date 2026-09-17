@@ -1,7 +1,7 @@
-"""Persistent admission ledger for a future authenticated AI trial.
+"""Persistent admission ledger for an authenticated AI trial.
 
-No public route calls this yet. The caller must verify identity and constrain
-the complete provider workflow before requesting its maximum cost. Amounts are
+Every provider operation reserves its bounded cost before making the request.
+The caller supplies a server-verified account identity. Amounts are
 integer millionths of a US dollar; there is no floating-point money arithmetic.
 """
 from contextlib import contextmanager
@@ -12,6 +12,7 @@ import time
 
 DAILY_LIMIT = 1_000_000
 MONTHLY_LIMIT = 20_000_000
+ACCOUNT_OPERATIONS_PER_DAY = 120
 
 
 class TrialDenied(ValueError):
@@ -40,6 +41,9 @@ class AITrialBudget:
                     settled_at INTEGER, state TEXT NOT NULL CHECK(state IN ('reserved','uncertain','settled')),
                     PRIMARY KEY(identity,request_id));
             ''')
+            columns = {row[1] for row in conn.execute('PRAGMA table_info(trial_requests)')}
+            if 'lane' not in columns:
+                conn.execute("ALTER TABLE trial_requests ADD COLUMN lane TEXT NOT NULL DEFAULT 'operation' CHECK(lane IN ('operation','voice'))")
 
     @contextmanager
     def _transaction(self):
@@ -65,11 +69,13 @@ class AITrialBudget:
         with self._transaction() as conn:
             conn.execute('INSERT OR IGNORE INTO trial_accounts(identity,enabled) VALUES (?,1)', (verified_identity,))
 
-    def reserve(self, identity, request_id, payload_hash, maximum_cost):
+    def reserve(self, identity, request_id, payload_hash, maximum_cost, *, lane='operation'):
         if not self.enabled:
             raise TrialDenied('The AI trial is disabled.')
         if type(maximum_cost) is not int or not 0 < maximum_cost <= DAILY_LIMIT:
             raise TrialDenied('A bounded maximum cost is required.')
+        if lane not in ('operation', 'voice'):
+            raise TrialDenied('Unknown provider operation.')
         if not isinstance(request_id, str) or not 1 <= len(request_id) <= 128:
             raise TrialDenied('A request ID is required.')
         if not isinstance(payload_hash, str) or len(payload_hash) != 64 or any(c not in '0123456789abcdef' for c in payload_hash):
@@ -84,15 +90,18 @@ class AITrialBudget:
                 raise TrialDenied('A verified trial account is required.')
             previous = conn.execute('SELECT * FROM trial_requests WHERE identity=? AND request_id=?', (identity, request_id)).fetchone()
             if previous:
-                if previous['payload_hash'] != payload_hash or previous['reserved'] != maximum_cost:
+                if previous['payload_hash'] != payload_hash or previous['reserved'] != maximum_cost or previous['lane'] != lane:
                     raise TrialDenied('That request ID already belongs to another request.')
                 return dict(previous) | {'created': False}
             if conn.execute('SELECT halted FROM trial_control WHERE id=1').fetchone()['halted']:
                 raise TrialDenied('AI spending is paused pending review.')
-            pending = conn.execute("SELECT identity,reserved FROM trial_requests WHERE state!='settled'").fetchall()
-            if len(pending) >= 2 or any(row['identity'] == identity for row in pending):
+            pending = conn.execute("SELECT identity,reserved,lane FROM trial_requests WHERE state!='settled'").fetchall()
+            # A server-limited voice session retains its hold while its bounded
+            # text delegate runs. Two text operations (or voice sessions) from
+            # one account may never bypass each other's admission.
+            if len(pending) >= 2 or any(row['identity'] == identity and row['lane'] == lane for row in pending):
                 raise TrialDenied('Please wait for the current AI request to finish.')
-            if conn.execute('SELECT COUNT(*) FROM trial_requests WHERE identity=? AND created_at>=?', (identity, day)).fetchone()[0] >= 3:
+            if conn.execute('SELECT COUNT(*) FROM trial_requests WHERE identity=? AND created_at>=?', (identity, day)).fetchone()[0] >= ACCOUNT_OPERATIONS_PER_DAY:
                 raise TrialDenied('Your daily trial allowance is used.')
             # Reservations from earlier periods still count until reconciled.
             held = sum(row['reserved'] for row in pending)
@@ -100,8 +109,8 @@ class AITrialBudget:
                 spent = conn.execute("SELECT COALESCE(SUM(actual),0) FROM trial_requests WHERE state='settled' AND settled_at>=?", (start,)).fetchone()[0]
                 if spent + held + maximum_cost > limit:
                     raise TrialDenied('The shared AI budget is used. Sample practice is still available.')
-            conn.execute("INSERT INTO trial_requests(identity,request_id,payload_hash,reserved,created_at,state) VALUES (?,?,?,?,?,'reserved')",
-                         (identity, request_id, payload_hash, maximum_cost, now))
+            conn.execute("INSERT INTO trial_requests(identity,request_id,payload_hash,reserved,created_at,state,lane) VALUES (?,?,?,?,?,'reserved',?)",
+                         (identity, request_id, payload_hash, maximum_cost, now, lane))
             return {'identity': identity, 'request_id': request_id, 'reserved': maximum_cost, 'state': 'reserved', 'created': True}
 
     def uncertain(self, identity, request_id):
@@ -127,3 +136,19 @@ class AITrialBudget:
                 # Preserve the real bill, then stop all new admissions. Do not
                 # hide an underestimated workflow cost by rolling back usage.
                 conn.execute('UPDATE trial_control SET halted=1 WHERE id=1')
+
+    def charge_reservation(self, identity, request_id):
+        """Conservatively account for an operation without trustworthy usage.
+
+This is a budget charge, not a claim about the provider's final invoice. A
+timeout may still have incurred the full bounded cost. Process crashes retain
+their unsettled hold until an administrator reconciles them.
+"""
+        with self._transaction() as conn:
+            row = conn.execute('SELECT reserved,state FROM trial_requests WHERE identity=? AND request_id=?',
+                               (identity, request_id)).fetchone()
+            if not row:
+                raise TrialDenied('No reservation was found.')
+            if row['state'] != 'settled':
+                conn.execute("UPDATE trial_requests SET actual=reserved,settled_at=?,state='settled' WHERE identity=? AND request_id=?",
+                             (int(self.clock()), identity, request_id))

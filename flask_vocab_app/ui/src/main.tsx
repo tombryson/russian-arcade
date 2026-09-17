@@ -9,6 +9,8 @@ import './styles/tokens.generated.css';
 import './styles/word-post.css';
 import './styles/flashcards.css';
 import './styles/activity-workspace.css';
+import '../../static/css/navigation_layout.css';
+import '../../static/css/activity_entry.css';
 import { render, type ComponentChild } from 'preact';
 import { App } from './App';
 import { bindUserSession } from './learning-api';
@@ -26,6 +28,6 @@ if (root) {
   } else {
     const profile=JSON.parse(root.dataset.profile ?? 'null');
     bindUserSession(root.dataset.household === 'true' ? undefined : profile?.id ?? '',root.dataset.csrf ?? '');
-    mount(<App initialOnboarding={JSON.parse(root.dataset.onboarding ?? 'null') ?? undefined} initialProfile={JSON.parse(root.dataset.profile ?? 'null')} householdEnabled={root.dataset.household === 'true'} nativeEnabled={root.dataset.native !== 'false'} language={root.dataset.language === 'ru' ? 'ru' : 'en'} csrfToken={root.dataset.csrf ?? ''} navigation={JSON.parse(root.dataset.navigation ?? 'null')} />);
+    mount(<App navigationLayout={root.dataset.navigationLayout === 'sidebar' ? 'sidebar' : 'top'} initialOnboarding={JSON.parse(root.dataset.onboarding ?? 'null') ?? undefined} initialProfile={JSON.parse(root.dataset.profile ?? 'null')} householdEnabled={root.dataset.household === 'true'} nativeEnabled={root.dataset.native !== 'false'} language={root.dataset.language === 'ru' ? 'ru' : 'en'} csrfToken={root.dataset.csrf ?? ''} navigation={JSON.parse(root.dataset.navigation ?? 'null')} />);
   }
 }

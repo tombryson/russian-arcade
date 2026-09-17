@@ -1,13 +1,18 @@
 {% extends "base.html" %}
+{% from '_activity_header.html' import activity_header %}
 {% set page_title = ui_t('comprehension.title') %}
 
 {% block main_content %}
-<main class="main-content" id="mainContent" data-page="comprehension">
-    <div class="reading-workspace" data-leave-message="{{ ui_t('comprehension.leave_draft') }}" hx-sync="closest .reading-workspace:drop">
+<main class="main-content{% if not story %} activity-entry{% endif %}" id="mainContent" data-page="comprehension">
+    <div class="reading-workspace{% if not story %} activity-entry-content{% endif %}" data-leave-message="{{ ui_t('comprehension.leave_draft') }}" hx-sync="closest .reading-workspace:drop">
+        {% if story %}
         <header class="reading-intro">
             <h1>{{ ui_t('comprehension.title') }}</h1>
             <p>{{ ui_t('comprehension.intro') }}</p>
         </header>
+        {% else %}
+        {{ activity_header(ui_t('comprehension.title'), ui_t('comprehension.entry_description'), 'reading-page-title') }}
+        {% endif %}
         <details id="saved-stories" class="reading-disclosure" {% if not story %}open{% endif %}>
             <summary>{{ ui_t('comprehension.saved') }} <span class="reading-count">{{ saved_stories|length }}</span></summary>
             {% if saved_stories %}

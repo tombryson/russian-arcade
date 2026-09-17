@@ -49,6 +49,189 @@ class PublicDemoTests(unittest.TestCase):
             self.assertEqual(self.a.post(path, base_url=self.base, json={},
                           headers={'X-CSRF-Token': state['csrf_token']}).status_code, 403, path)
 
+    def test_shop_is_visible_but_purchases_are_disabled(self):
+        from repositories.learning_repository import transaction
+        catalogue = self.a.get('/api/v1/games', base_url=self.base).json
+        self.assertFalse(catalogue['shop']['enabled'])
+        self.assertTrue(all(not game['purchase']['can_purchase'] for game in catalogue['games']))
+        response = self.a.post('/api/v1/games/scene-builder/purchase', base_url=self.base,
+                               headers={'X-CSRF-Token': catalogue['csrf_token']},
+                               json={'request_id': 'demo-purchase', 'expected_price': 25})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json['error']['code'], 'demo_unavailable')
+        with transaction(self.app.config['DB_PATH']) as conn:
+            self.assertEqual(conn.execute('SELECT COUNT(*) FROM journey_game_purchases').fetchone()[0], 0)
+            self.assertEqual(conn.execute('SELECT COUNT(*) FROM journey_game_access').fetchone()[0], 0)
+
+    def test_advertised_samples_are_playable_without_providers_and_owned(self):
+        import json
+        from repositories.learning_repository import transaction
+        from services.demo_games import SAMPLE_GAMES
+        visitor = self.state(self.a)
+        headers = {'X-CSRF-Token':visitor['csrf_token']}
+        catalogue = self.a.get('/api/v1/games',base_url=self.base).json
+        self.assertEqual({g['id'] for g in catalogue['games'] if g['unlocked']}, SAMPLE_GAMES)
+        for game in catalogue['games']:
+            if game['id'] not in SAMPLE_GAMES:
+                self.assertEqual(game['availability'],'local-only')
+                continue
+            options = {'grammar_focus':'mixed'} if game['id']=='scene-builder' else {'source':'vocabulary','topic':'custom provider bypass'}
+            response = self.a.post('/api/v1/games/'+game['id']+'/start',base_url=self.base,headers=headers,
+                                   json={'request_id':'sample-'+game['id'],'options':options})
+            self.assertEqual(response.status_code,200,response.text)
+            state = response.json
+            self.assertTrue(state['sample'])
+            self.assertEqual(state['phase'],'play')
+            root = '/api/v1/games/sessions/'+state['id']
+            self.assertEqual(self.b.get(root,base_url=self.base).status_code,404)
+            self.assertEqual(self.a.post(root+'/prepare',base_url=self.base,headers=headers,json={}).status_code,403)
+            with transaction(self.app.config['DB_PATH']) as conn:
+                content = json.loads(conn.execute('SELECT content_json FROM journey_game_sessions WHERE id=?',(state['id'],)).fetchone()[0])
+                rounds = content['rounds']
+            if state.get('delivery'):
+                for index, leg in enumerate(content['legs']):
+                    questions = [('ask', {'question_id': leg['required_question']})] if leg.get('required_question') else []
+                    for action,payload in [*questions, ('begin',{}),('go',{'path':leg['route']}),('deliver' if index == len(content['legs']) - 1 else 'talk',{})]:
+                        result=self.a.post(root+'/route-command',base_url=self.base,headers=headers,json={
+                            'request_id':f'demo-route-{state["delivery"]["revision"]}', 'revision':state['delivery']['revision'],
+                            'action':action,'payload':payload})
+                        self.assertEqual(result.status_code,200,result.text)
+                        state=result.json
+                self.assertEqual(state['phase'],'completed')
+                self.assertFalse(state['study_available'])
+                self.assertEqual(state['words'],[])
+                continue
+            for item in rounds:
+                for action, data in [('answer',{'round_id':item['id'],'answer':item['expected_answer']}),('continue',{'round_id':item['id']})]:
+                    checked = self.a.post(root+'/'+action,base_url=self.base,headers=headers,json=data)
+                    self.assertEqual(checked.status_code,200,checked.text)
+                    if action == 'answer':
+                        self.assertNotIn('answer_audio',checked.json['result'])
+                        if game['id']=='scene-builder':
+                            self.assertEqual(checked.json['result']['correct_sentence'],item['correct_sentence'])
+                            key=item['answer_audio'][0]['audio_key']
+                            self.assertEqual(self.a.post('/api/v1/games/media/'+key+'/prepare',base_url=self.base,
+                                                        headers=headers,json={}).status_code,403)
+            done = self.a.post(root+'/complete',base_url=self.base,headers=headers,json={})
+            self.assertEqual(done.json['phase'],'completed')
+            self.assertEqual(done.json['words'],[])
+            self.assertFalse(done.json['study_available'])
+
+    def test_riverside_listening_and_section_review_work_without_provider_access(self):
+        from services.route_content import build_mission
+        visitor = self.state(self.a)
+        headers = {'X-CSRF-Token': visitor['csrf_token']}
+        result = self.a.post('/api/v1/games/directions/start', base_url=self.base, headers=headers,
+                             json={'request_id': 'riverside-listening-demo', 'options': {'delivery_id': 'irina', 'delivery_mode': 'listening'}})
+        self.assertEqual(result.status_code, 200)
+        state = result.json
+        root = '/api/v1/games/sessions/'+state['id']
+        def command(action, payload=None):
+            nonlocal state
+            response = self.a.post(root+'/route-command', base_url=self.base, headers=headers,
+                json={'request_id': 'demo-delivery-'+str(state['delivery']['revision']), 'revision': state['delivery']['revision'], 'action': action, 'payload': payload or {}})
+            self.assertEqual(response.status_code, 200, response.text)
+            state = response.json
+        pack = build_mission(mission_id='irina')
+        for index, leg in enumerate(pack['legs']):
+            self.assertNotIn('text', state['delivery']['lines'][0])
+            for line in leg['lines']:
+                command('listen', {'leg': index, 'line_id': line['id']})
+            command('begin')
+            command('go', {'path': leg['route']})
+            command('deliver' if index == 2 else 'talk')
+        self.assertEqual(state['words'], [])
+        self.assertFalse(state['study_available'])
+        checks = state['delivery']['first_checks']
+        reward = state['reward']['amount']
+        command('review_start', {'leg': 1})
+        self.assertEqual(state['phase'], 'practice')
+        command('review_exit')
+        self.assertEqual(state['delivery']['first_checks'], checks)
+        self.assertEqual(state['reward']['amount'], reward)
+        for suffix in ('words', 'flashcards'):
+            response = self.a.post(root+'/'+suffix, base_url=self.base, headers=headers, json={})
+            self.assertEqual(response.status_code, 403)
+
+    def test_all_town_missions_are_owned_offline_samples_with_recorded_audio(self):
+        import json
+        from repositories.learning_repository import transaction
+        from services.route_town import TOWN_MISSION_IDS
+
+        other_headers = {'X-CSRF-Token': self.state(self.b)['csrf_token']}
+        audio_urls = set()
+        self.assertEqual(len(TOWN_MISSION_IDS), 8)
+        for mission_id in TOWN_MISSION_IDS:
+            with self.subTest(mission=mission_id):
+                # Each visitor plays one full mission within the normal write limit.
+                client = self.app.test_client()
+                headers = {'X-CSRF-Token': self.state(client)['csrf_token']}
+                response = client.post('/api/v1/games/directions/start', base_url=self.base, headers=headers,
+                    json={'request_id': 'demo-'+mission_id, 'new_game': True,
+                          'options': {'delivery_id': mission_id, 'delivery_mode': 'listening'}})
+                self.assertEqual(response.status_code, 200, response.text)
+                state = response.json
+                self.assertTrue(state['sample'])
+                self.assertEqual(state['delivery']['map']['scene'], 'town')
+                self.assertEqual(state['delivery']['mode'], 'listening')
+                root = '/api/v1/games/sessions/'+state['id']
+                with transaction(self.app.config['DB_PATH']) as conn:
+                    pack = json.loads(conn.execute('SELECT content_json FROM journey_game_sessions WHERE id=?',
+                                                   (state['id'],)).fetchone()[0])
+                self.assertEqual(pack['mission_id'], mission_id)
+                self.assertEqual(self.b.get(root, base_url=self.base).status_code, 404)
+                denied = self.b.post(root+'/route-command', base_url=self.base, headers=other_headers,
+                    json={'request_id': 'other-'+mission_id, 'revision': state['delivery']['revision'],
+                          'action': 'begin', 'payload': {}})
+                self.assertEqual(denied.status_code, 404, denied.text)
+
+                def command(action, payload=None):
+                    nonlocal state
+                    result = client.post(root+'/route-command', base_url=self.base, headers=headers,
+                        json={'request_id': 'demo-town-'+str(state['delivery']['revision']),
+                              'revision': state['delivery']['revision'], 'action': action, 'payload': payload or {}})
+                    self.assertEqual(result.status_code, 200, result.text)
+                    state = result.json
+
+                for index, leg in enumerate(pack['legs']):
+                    audio_urls.update(line['audio_url'] for line in
+                                      [*leg['lines'], leg['clarify'], *(q['reply'] for q in leg.get('questions', []))])
+                    self.assertFalse(state['delivery']['can_go'])
+                    if leg.get('required_question'):
+                        self.assertTrue(state['delivery']['question_required'])
+                        command('ask', {'question_id': leg['required_question']})
+                        self.assertFalse(state['delivery']['question_required'])
+                    for line in state['delivery']['lines']:
+                        self.assertNotIn('text', line)
+                        command('listen', {'leg': index, 'line_id': line['id']})
+                    self.assertTrue(state['delivery']['can_go'])
+                    command('begin')
+                    if leg.get('transport'):
+                        command('board', {'transport_id': leg['transport']['id']})
+                        self.assertEqual(state['delivery']['transport']['status'], 'aboard')
+                        command('ride', {'stop_id': leg['target']})
+                        self.assertEqual(state['delivery']['transport']['stop_id'], leg['target'])
+                        command('alight')
+                    else:
+                        command('go', {'path': leg['route']})
+                    self.assertEqual(state['delivery']['phase'], 'arrived', state['delivery']['feedback'])
+                    command('deliver' if index == len(pack['legs'])-1 else 'talk')
+                audio_urls.add(state['delivery']['ending']['audio_url'])
+                self.assertEqual(state['phase'], 'completed')
+                self.assertFalse(state['study_available'])
+                self.assertEqual(state['words'], [])
+                for suffix in ('words', 'flashcards'):
+                    denied = client.post(root+'/'+suffix, base_url=self.base, headers=headers, json={})
+                    self.assertEqual(denied.status_code, 403)
+
+        self.assertTrue(audio_urls)
+        for url in sorted(audio_urls):
+            with self.subTest(audio=url):
+                with self.a.get(url, base_url=self.base) as audio:
+                    self.assertEqual(audio.status_code, 200)
+                    self.assertEqual(audio.mimetype, 'audio/mpeg')
+                    self.assertGreater(len(audio.data), 0)
+
     def test_new_routes_in_public_modules_are_denied_by_default(self):
         self.app.add_url_rule('/test-provider', endpoint='onboarding.future_provider', view_func=lambda: self.fail('Provider executed'))
         self.assertEqual(self.a.get('/test-provider', base_url=self.base).status_code, 403)

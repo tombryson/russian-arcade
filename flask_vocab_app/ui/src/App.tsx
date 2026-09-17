@@ -1,9 +1,11 @@
+import {GameLanguage} from './GameLocale';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { Sheet, ActivityLink } from './components';
 import { WelcomeHero } from './WelcomeHero';
 import { FirstDelivery } from './FirstDelivery';
 import { FirstSteps } from './FirstSteps';
 import { JourneyGame, GameCatalogue } from './JourneyGames';
+import { GameShop } from './GameShop';
 import { api, type Household, type LearningHome, type Progress, type PracticeSession } from './learning-api';
 import { Practice } from './Practice';
 import { Flashcards, FlashcardsSetup } from './Flashcards';
@@ -16,10 +18,13 @@ import { SkillProgress } from './SkillProgress';
 import { UserSessionLink, type UserProfile } from './UserSessionLink';
 import {useOnboarding, type OnboardingState} from './Onboarding';
 import { ActivitySidebar, type ActivityNavigation } from './ActivitySidebar';
+import { AppearancePicker } from './AppearancePicker';
+import { ActivitiesMenu } from './ActivitiesMenu';
+import { ActivityHeader } from './ActivityHeader';
 import type { Language } from './review-types';
 import sleepingBarsik from './assets/barsik-sleeping-v1.webp';
 
-type Page = 'home' | 'activities' | 'words' | 'practice' | 'first-delivery' | 'first-steps' | 'flashcards' | 'review' | 'generate' | 'conversation' | 'speech-lab' | 'speaking' | 'journey' | 'game';
+type Page = 'home' | 'activities' | 'words' | 'practice' | 'first-delivery' | 'first-steps' | 'flashcards' | 'review' | 'generate' | 'conversation' | 'speech-lab' | 'speaking' | 'journey' | 'game' | 'games' | 'shop';
 type Route = { page: Page; gameId?:string; sessionId?: string; worldId?:string; wordId?: number; lessonId?: string; topic?:string; scenarioId?:string; canonicalHash?: string };
 function route(): Route {
   const hash = window.location.hash.slice(1);
@@ -52,6 +57,8 @@ function route(): Route {
   const session = /^practice\/([A-Za-z0-9_.:-]+)$/.exec(hash);
   if (session) return { page: 'practice', sessionId: session[1] };
   if (hash === 'first-delivery') return { page: 'first-delivery' };
+  if (hash === 'shop') return { page: 'shop' };
+  if (hash === 'games') return { page: 'games' };
   if (hash === 'activities' || hash === 'letter') return { page: 'activities' };
   if (hash === 'words' || hash === 'pocket') return { page: 'words' };
   return { page: 'home' };
@@ -67,7 +74,7 @@ const activities = [
 ];
 type State = { mode: 'loading' | 'legacy' | 'adult' | 'locked' | 'child' | 'personal' | 'error'; household?: Household; home?: LearningHome; progress?: Progress; error?: string };
 
-export function App({ householdEnabled = false, nativeEnabled = true, language = 'en', csrfToken = '', navigation, initialProfile, initialOnboarding }: { householdEnabled?: boolean; nativeEnabled?: boolean; language?: Language; csrfToken?: string; navigation?: ActivityNavigation | null; initialProfile?: UserProfile | null; initialOnboarding?: OnboardingState }) {
+export function App({ householdEnabled = false, nativeEnabled = true, language = 'en', csrfToken = '', navigation, navigationLayout = 'top', initialProfile, initialOnboarding }: { householdEnabled?: boolean; nativeEnabled?: boolean; language?: Language; csrfToken?: string; navigation?: ActivityNavigation | null; navigationLayout?: 'top' | 'sidebar'; initialProfile?: UserProfile | null; initialOnboarding?: OnboardingState }) {
   const [location, setLocation] = useState<Route>(route);
   const onboarding=useOnboarding(initialOnboarding);
   const [state, setState] = useState<State>({ mode: householdEnabled ? 'loading' : 'legacy' });
@@ -84,7 +91,13 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
   const navigated = useRef(false);
   const workspace = useRef<HTMLDivElement>(null);
   const header = useRef<HTMLElement>(null);
-  const activityWorkspace = Boolean(navigation && ['flashcards', 'review', 'generate'].includes(location.page));
+  const activityWorkspace = Boolean(navigation && navigationLayout === 'sidebar');
+  const activeNavigationPage = ['flashcards','review','generate'].includes(location.page) ? 'native_flashcards'
+    : ['conversation','speech-lab','speaking'].includes(location.page) ? 'speaking'
+    : location.page === 'words' ? 'vocab'
+    : ['home','first-delivery','first-steps'].includes(location.page) ? 'home'
+    : ['game','games'].includes(location.page) ? 'games'
+    : location.page === 'activities' ? 'activities' : location.page === 'shop' ? 'shop' : '';
 
   useEffect(() => {
     if (location.canonicalHash && window.location.hash !== location.canonicalHash) {
@@ -92,20 +105,32 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
     }
   }, [location]);
   useEffect(() => {
-    if (!header.current || !workspace.current) return;
+    if (!workspace.current) return;
+    const sidebar = workspace.current.querySelector<HTMLElement>('.activity-sidebar');
+    const brand = sidebar?.querySelector<HTMLElement>('.sidebar-brand-row');
+    const toggle = sidebar?.querySelector<HTMLElement>('.activity-menu-toggle');
     const measure = () => {
-      const height = `${header.current?.getBoundingClientRect().height ?? 143}px`;
+      let pixels = header.current?.getBoundingClientRect().height ?? 0;
+      if (activityWorkspace && sidebar && brand && toggle && getComputedStyle(toggle).display !== 'none') {
+        // The expanded menu scrolls independently; only its compact shell
+        // needs to clear focused headings and profile anchors.
+        const style = getComputedStyle(sidebar);
+        pixels = toggle.getBoundingClientRect().bottom - sidebar.getBoundingClientRect().top + (parseFloat(style.paddingBottom) || 0);
+      }
+      const height = `${Math.max(0, pixels)}px`;
       workspace.current?.style.setProperty('--activity-header-height', height);
       document.documentElement.style.setProperty('--skill-header-height', height);
     };
     measure();
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', measure);
-      return () => window.removeEventListener('resize', measure);
+    window.addEventListener('resize', measure);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    for (const element of [header.current, brand, toggle]) {
+      if (element) observer?.observe(element);
     }
-    const observer = new ResizeObserver(measure);
-    observer.observe(header.current);
-    return () => observer.disconnect();
+    return () => {
+      window.removeEventListener('resize', measure);
+      observer?.disconnect();
+    };
   }, [activityWorkspace]);
 
   useEffect(() => {
@@ -172,6 +197,21 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
   }
 
   const legacy = state.mode === 'legacy' || state.mode === 'adult' || state.mode === 'personal';
+  const wordsHref = householdEnabled && !legacy ? '#words' : '/vocab';
+  const menuActivities = (navigation?.activities ?? [
+    {page:'native_flashcards', href:'#flashcards', label:language === 'ru' ? 'Карточки' : 'Flashcards', boost:false},
+    {page:'comprehension', href:'/comprehension', label:language === 'ru' ? 'Читать историю' : 'Read a story', boost:false},
+    {page:'speaking', href:'#speaking', label:language === 'ru' ? 'Разговорная практика' : 'Speaking', boost:false},
+    {page:'writing', href:'/writing', label:language === 'ru' ? 'Письменная практика' : 'Writing', boost:false},
+    {page:'lessons', href:'/lessons', label:language === 'ru' ? 'Уроки' : 'Lessons', boost:false},
+    {page:'word_jumble', href:'/word_jumble', label:language === 'ru' ? 'Слова вперемешку' : 'Word Jumble', boost:false},
+    {page:'sentences', href:'/sentences', label:language === 'ru' ? 'Перевести предложение' : 'Translate a sentence', boost:false},
+  ]).filter(item => nativeEnabled || item.page !== 'native_flashcards');
+  const profileControl = <UserSessionLink profile={profile} language={language} household={householdEnabled} />;
+  const appearanceControl = <AppearancePicker language={language} navigationLayout={navigationLayout} csrfToken={csrfToken} />;
+  const coinBalance = onboarding.state.coins_introduced && <ProgressionBadge progression={progression} language={language} introductory={signedOut || householdEnabled && !profile} />;
+  const languageControl = <details class="post-language"><summary aria-label={language === 'ru' ? 'Язык интерфейса' : 'Interface language'}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h12M9 3v2M12 5c-1 5-4 8-8 10M5 8c1 3 4 6 7 7M13 21l4.5-11L22 21M15 17h5"/></svg></summary><form method="post" action="/ui-language"><input type="hidden" name="csrf_token" value={csrfToken} /><input type="hidden" name="next" value={`/post/${window.location.hash}`} /><button name="lang" value="en" lang="en" aria-current={language === 'en' ? 'true' : undefined}>English</button><button name="lang" value="ru" lang="ru" aria-current={language === 'ru' ? 'true' : undefined}>Русский</button></form></details>;
+  const skillProgress = onboarding.state.progress_introduced && <SkillProgress progression={progression} language={language} introductory={signedOut || householdEnabled && !profile} profileHref={householdEnabled ? "/post/household#skill-progress" : "/post/profiles#skill-progress"} />;
   const ready = state.home?.content.filter(item => item.kind === 'activity') ?? [];
   const nativeReady = nativeEnabled && state.home?.content.some(item => item.kind === 'deck');
   const resumable = state.home?.sessions.find(item => item.status === 'active' && item.content_status === 'published');
@@ -196,25 +236,32 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
     </>;
   }
 
-  return <div ref={workspace} class={activityWorkspace ? 'activity-workspace' : undefined}>
+  return <GameLanguage.Provider value={language}><div ref={workspace} class={`navigation-layout-${navigationLayout}${activityWorkspace ? ' activity-workspace' : ''}`}>
     <a class="skip-link" href="#main">Skip to content</a>
-    <header ref={header} class="top"><a class="brand" href="#home" aria-label="Russian Arcade home"><span class="mark" lang="ru" aria-hidden="true">Я</span><span><span class="brand-name">Russian Arcade</span><span class="origin">Learn and practise Russian</span></span></a>
-      <nav class="nav" aria-label="Main navigation">{(['home', 'activities', 'words'] as const).map((page, index) => <a key={page} href={`#${page}`} aria-current={location.page === page || (page === 'activities' && ['practice','review','flashcards','generate','conversation','speech-lab','speaking','game'].includes(location.page)) || (page === 'home' && ['first-delivery','first-steps'].includes(location.page)) ? 'page' : undefined}>{(language === 'ru' ? ['Главная', 'Занятия', 'Мои слова'] : ['Home', 'Activities', 'My words'])[index]}</a>)}</nav>
-      {onboarding.state.coins_introduced && <ProgressionBadge progression={progression} language={language} introductory={signedOut || householdEnabled && !profile} />}
-      <details class="post-language"><summary aria-label={language === 'ru' ? 'Язык интерфейса' : 'Interface language'}>🌐</summary><form method="post" action="/ui-language"><input type="hidden" name="csrf_token" value={csrfToken} /><input type="hidden" name="next" value={`/post/${window.location.hash}`} /><button name="lang" value="en" lang="en" aria-current={language === 'en' ? 'true' : undefined}>English</button><button name="lang" value="ru" lang="ru" aria-current={language === 'ru' ? 'true' : undefined}>Русский</button></form></details>
-      <UserSessionLink profile={profile} language={language} household={householdEnabled} />
-      {onboarding.state.progress_introduced && <SkillProgress progression={progression} language={language} introductory={signedOut || householdEnabled && !profile} profileHref={householdEnabled ? "/post/household#skill-progress" : "/post/profiles#skill-progress"} />}
-    </header>
+    {!activityWorkspace && <header ref={header} class="top"><a class="brand" href="#home" aria-label="Russian Arcade home"><span class="mark" lang="ru" aria-hidden="true">Я</span><span><span class="brand-name">Russian Arcade</span><span class="origin">Learn and practise Russian</span></span></a>
+      <nav class="nav" aria-label={language === 'ru' ? 'Главное меню' : 'Main navigation'}>
+        <a href="#home" aria-current={['home','first-delivery','first-steps'].includes(location.page) ? 'page' : undefined}>{language === 'ru' ? 'Главная' : 'Home'}</a>
+        <ActivitiesMenu items={menuActivities} language={language} active={['activities','practice','review','flashcards','generate','conversation','speech-lab','speaking','game','games'].includes(location.page)} activePage={activeNavigationPage} />
+        <a href={wordsHref} aria-current={location.page === 'words' ? 'page' : undefined}>{language === 'ru' ? 'Мои слова' : 'My words'}</a>
+      </nav>
+      {coinBalance}
+      {languageControl}
+      {appearanceControl}
+      {profileControl}
+      {skillProgress}
+    </header>}
     <div class={activityWorkspace ? 'activity-layout' : undefined}>
-    {activityWorkspace && navigation && <ActivitySidebar navigation={navigation} />}
+    {activityWorkspace && navigation && <ActivitySidebar navigation={navigation} activePage={activeNavigationPage} language={language} profileControl={profileControl} coinBalance={coinBalance} languageControl={languageControl} appearanceControl={appearanceControl} skillProgress={skillProgress} wordsHref={wordsHref} showSavedSentences={!householdEnabled || state.mode === 'adult'} />}
     <div class={activityWorkspace ? 'activity-workspace-content' : undefined}>
     <main id="main" class={location.page==='game'?'game-workspace':undefined} tabIndex={-1}>
       {householdEnabled && state.home && location.page !== 'home' && <div class="learner-bar"><span>{language === 'ru' ? 'Учится' : 'Learning as'} {state.home.profile.display_name}</span><a href="/post/household">{language === 'ru' ? 'Сменить ученика' : 'Change learner'}</a></div>}
-      {signedOut && !['home','activities','words','first-delivery','first-steps','game'].includes(location.page) ? <section class="page"><p class="kicker">Russian Arcade</p><h1 ref={heading} tabIndex={-1}>{language === 'ru' ? 'Кто занимается?' : 'Who’s learning?'}</h1><p>{language === 'ru' ? 'Выберите профиль, чтобы сохранить занятия и продолжить с того же места.' : 'Choose your profile to save your practice and pick up where you left off.'}</p><a class="cta" href="/post/profiles">{language === 'ru' ? 'Выбрать профиль' : 'Choose your profile'}</a></section>
+      {signedOut && !['home','activities','words','first-delivery','first-steps','game','games','shop'].includes(location.page) ? <section class="page"><p class="kicker">Russian Arcade</p><h1 ref={heading} tabIndex={-1}>{language === 'ru' ? 'Кто занимается?' : 'Who’s learning?'}</h1><p>{language === 'ru' ? 'Выберите профиль, чтобы сохранить занятия и продолжить с того же места.' : 'Choose your profile to save your practice and pick up where you left off.'}</p><a class="cta" href="/post/profiles">{language === 'ru' ? 'Выбрать профиль' : 'Choose your profile'}</a></section>
         : state.mode === 'loading' ? <section class="page"><h1 ref={heading} tabIndex={-1}>Opening your activities…</h1><p role="status">Checking your saved learning.</p></section>
         : state.mode === 'error' ? <section class="page"><h1 ref={heading} tabIndex={-1}>Your activities could not open.</h1><p role="alert">{state.error}</p><div class="action-row"><button class="cta" onClick={() => setRefresh(value => value + 1)}>Try again</button>{householdEnabled ? <a href="/post/household">Choose a learner</a> : <a href="#activities">Back to activities</a>}</div></section>
         : location.page === 'game' ? <JourneyGame key={`${profile?.id ?? state.mode}:${location.sessionId ?? location.gameId}`} gameId={location.gameId} sessionId={location.sessionId} profileHref={householdEnabled ? '/post/household' : '/post/profiles'}/>
         : location.page === 'first-steps' ? <FirstSteps key={`${profile?.id ?? state.mode}:${location.lessonId ?? 'overview'}`} lessonId={location.lessonId} profileHref={householdEnabled ? '/post/household' : '/post/profiles'} />
+        : location.page === 'shop' ? <GameShop key={profile?.id ?? state.mode} profileHref={householdEnabled ? '/post/household' : '/post/profiles'} />
+        : location.page === 'games' ? <section class="page activity-entry games-page"><div class="activity-entry-content"><ActivityHeader title={language === 'ru' ? 'Игры' : 'Games'} description={language === 'ru' ? 'Выберите игру. Новые игры можно открыть в магазине Барсика.' : 'Choose a game to play. Unlock more in Barsik’s shop.'} headingRef={heading} headingTabIndex={-1} actions={<a class="text-link" href="#shop">{language === 'ru' ? 'Магазин Барсика' : 'Barsik’s shop'} <span aria-hidden="true">→</span></a>} /><GameCatalogue key={profile?.id ?? state.mode} context="games" /></div></section>
         : location.page === 'first-delivery' ? <><FirstDelivery key={state.home?.profile.id ?? state.mode} next={tutorialNext} onIntroduce={onboarding.introduce} profileHref={householdEnabled ? "/post/household" : "/post/profiles"} />{onboarding.error && <div class="page onboarding-save-note" role="status"><p>{language==='ru' ? 'Не удалось сохранить знакомство с приложением.' : 'Your introduction could not be saved.'} {onboarding.error}</p><button class="text-link" onClick={()=>void onboarding.retry()}>{language==='ru' ? 'Попробовать ещё раз' : 'Try saving again'}</button></div>}</>
         : location.page === 'journey' && !onboarding.state.coins_introduced ? <section class="page"><h1>Your first delivery</h1><p>Meet Barsik and see how your practice helps his journey.</p><a class="cta" href="#first-delivery">Let’s begin</a></section>
         : location.page === 'journey' ? <Journey key={`${state.home?.profile.id ?? state.mode}:${location.worldId ?? 'map'}`} worldId={location.worldId} language={language} progression={progression} />
@@ -253,8 +300,8 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
                 <p class="quiet section-note">This list shows vocabulary from your recent saved activity answers.</p></>}
         </section>}
     </main>
-    <footer class="bottom"><span>Russian Arcade · Learn and practise Russian</span>{householdEnabled && <a class="text-link" href="/post/household">Household settings</a>}{legacy && <a class="text-link" href="/">Vocabulary & Anki tools</a>}</footer>
+    <footer class="bottom"><span>Russian Arcade - Tom Bryson 2026</span></footer>
     </div>
     </div>
-  </div>;
+  </div></GameLanguage.Provider>;
 }

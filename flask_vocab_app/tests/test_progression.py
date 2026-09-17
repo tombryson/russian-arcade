@@ -11,7 +11,7 @@ from unittest.mock import patch
 from migrations import MIGRATION_DIR, upgrade_database
 from repositories.learning_repository import transaction, timestamp
 from services.progression import award, reverse, snapshot, personal_profile, award_speaking, study_day
-from tests.support import isolated_app
+from tests.support import isolated_app, latest_schema_version
 
 
 class ProgressionTests(unittest.TestCase):
@@ -144,7 +144,7 @@ class ProgressionMigrationTests(unittest.TestCase):
                 conn.execute("INSERT INTO learning_sessions(id,profile_id,kind,start_key,start_hash,start_result,created_at,updated_at) VALUES ('old-session',?,'review','old-key','hash','{}',?,?)",(pid,now,now))
                 conn.execute("INSERT INTO activity_attempts VALUES ('old-attempt','old-session','old-item','old-submit','{}',0,'correct','old-policy',?)",(now,))
                 conn.execute("INSERT INTO learning_reward_entries VALUES ('old-reward',?,'old-attempt',?,?,3,'activity','old-policy',?)",(pid,'activity:old-content:'+day,day,now))
-            self.assertEqual(upgrade_database(db,backup=False)[0],33)
+            self.assertEqual(upgrade_database(db,backup=False)[0],latest_schema_version())
             with transaction(db) as conn:
                 state=snapshot(conn,'personal-learning')
                 self.assertEqual((state['balance'],state['legacy_balance'],state['earned_total']),(733,730,3))

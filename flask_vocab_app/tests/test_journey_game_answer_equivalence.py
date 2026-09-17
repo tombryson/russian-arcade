@@ -44,7 +44,7 @@ class ReplyTileEquivalenceTests(unittest.TestCase):
         with sqlite3.connect(':memory:') as conn:
             conn.execute('CREATE TABLE journey_game_sessions(id TEXT,game_id TEXT,content_json TEXT,answers_json TEXT,acknowledged_json TEXT,completed_at INTEGER,profile_id TEXT,created_at INTEGER)')
             content = {'version': 'journey-vocabulary-v1', 'lesson_version': 'test', 'word_difficulty': 8,
-                       'rounds': [{'id': 'r1', 'mechanic': 'directions', 'expected_answer': ['left']}]}
+                       'rounds': [{'id': 'r1', 'mechanic': 'directions', 'clues': [{'text':'Налево.'}], 'expected_answer': ['left']}]}
             answers = {'r1': {'answer': ['left'], 'hint_used': False, 'transcript_used': False}}
             conn.execute('INSERT INTO journey_game_sessions VALUES (?,?,?,?,?,?,?,?)',
                          ('s1', 'directions', json.dumps(content), json.dumps(answers), '["r1"]', 1, 'p1', 1))

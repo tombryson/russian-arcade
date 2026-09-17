@@ -1,5 +1,9 @@
 # Word Post migration programme
 
+[Describe the scene](scene-builder.md) replaces Postcard Pairs in the catalogue with focused grammar practice. Learners select Russian words and endings to describe a simple illustration and situation. Existing Postcard Pairs sessions remain available.
+
+Follow the directions uses the [procedural directions engine](procedural-directions-implementation.md). It assembles neighbourhood blocks, binds delivery events to real places and prepares short AI conversations around checked Russian directions. Each assignment includes similar buildings or entrances that require a spatial distinction. Towns stay stable between deliveries. [Earlier generators](procedural-deliveries.md) remain available for saved sessions and prepared demo content. The [wider redesign specification](directions-game-redesign.md) covers later assessment and spoken interactions.
+
 [Journey games](journey-games.md) includes eight mechanics discovered through the [First steps lessons](first-steps.md), then available in Activities. [Mixed vocabulary and radio practice](mixed-vocabulary-and-radio.md) combines familiar words from SQLite or tutor lessons with useful new vocabulary that learners can explicitly save. Picture games prepare four examples; text games do not require pictures. Post Office Radio has one roughly one-minute programme and four comprehension questions. Prepared content is cached, contextual-example games offer explicit native-card export, and shared profiles, rewards and provisional skill observations remain in place.
 
 The [Lessons companion](lessons-companion.md) provides versioned annotated tutor material, reading bookmarks and individual practice with saved answers. [Lesson-driven practice](lesson-driven-practice.md) lets learners highlight words on the scanned page, save pending selections and create contextual native flashcards with pictures, audio and the existing review schedule. The [original lesson audit](lessons-audit-and-direction.md) records its rationale; writing, conversation, recap and completion rewards remain later stages.
@@ -16,13 +20,15 @@ The application helps individuals and households build, remember and use Russian
 
 ## Read in this order
 
+Directions engine: [Implementation and operating details](procedural-directions-implementation.md) describe the current build, migration, preparation and limits. The [design document](procedural-directions-engine-design.md) explains the architecture and later extensions.
+
 Current cleanup review: [activity audit and uplift recommendations](activity-audit.md) covers the running games, concrete save/load/display defects and a focused order before further story work. It is an audit, not a claim that its fixes are implemented.
 
 Lesson integration proposal: [Lessons as a source of practice](lesson-driven-practice.md) maps the current annotated lesson to contextual flashcards, vocabulary capture, writing and conversation, with the existing implementation boundaries and a phased first build.
 
 1. [Prioritised product backlog](product-backlog.md): current order, ease, existing game adaptations and new ideas.
 2. [Native flashcards and Anki Link](native-flashcards.md): requirements for the first usable learning slice. [Anki-to-native migration](anki-to-native-migration.md) adds the 9 September code/data audit, interface flow and implementation gates.
-3. [Shared progression](progression.md) and [storage/hosting](storage-and-hosting.md): Lingocoins, Elo-style adaptation, local data and Fly.io preparation.
+3. [Levels and progression](levels-and-progression.md), [game shop](game-access.md) and [storage/hosting](storage-and-hosting.md): Lingocoins, skill estimates, permanent game purchases, local data and Fly.io preparation. [Shared progression](progression.md) retains the earlier design notes.
 4. [Migration strategy](migration-strategy.md) and [technical architecture](technical-architecture.md): feature mapping, common data contracts and cutover.
 5. [Design system](design-system.md), [delivery gates](delivery-plan.md) and [approved reference](reference/README.md): presentation, verification and preserved artwork.
 

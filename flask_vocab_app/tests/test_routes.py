@@ -35,6 +35,9 @@ class RouteSmokeTests(unittest.TestCase):
         self.assertIn("total_pages", data)
 
     def test_full_pages_use_single_shared_shell(self):
+        self.client.set_cookie('ui_navigation', 'sidebar')
+        with self.client.session_transaction() as session:
+            session.pop('ui_navigation', None)
         for path, expected_page in [
             ("/", "flashcards"),
             ("/vocab", "vocab"),
@@ -53,16 +56,22 @@ class RouteSmokeTests(unittest.TestCase):
                 self.assertEqual(html.count("<!DOCTYPE html>"), 1)
                 self.assertEqual(html.count('id="sidebar"'), 1)
                 self.assertEqual(html.count('id="mainContent"'), 1)
-                self.assertIn('<main class="main-content" id="mainContent"', html)
+                self.assertRegex(html, r'<main class="main-content(?: [^"]*)?" id="mainContent"')
                 self.assertIn('/static/css/style.css?', html)
                 self.assertEqual(html.count('/static/js/app_shell.js?'), 1)
                 self.assertIn(f'data-page="{expected_page}"', html)
 
     def test_htmx_sidebar_navigation_returns_swappable_main_content(self):
+        self.client.set_cookie('ui_navigation', 'sidebar')
+        with self.client.session_transaction() as session:
+            session.pop('ui_navigation', None)
         for path, expected_page in [
             ("/vocab", "vocab"),
             ("/", "flashcards"),
             ("/comprehension", "comprehension"),
+            ("/writing", "writing"),
+            ("/lessons", "lessons"),
+            ("/word_jumble", "word_jumble"),
             ("/sentences", "sentences"),
         ]:
             with self.subTest(path=path):
@@ -77,7 +86,7 @@ class RouteSmokeTests(unittest.TestCase):
 
                 self.assertEqual(response.status_code, 200)
                 self.assertIn('id="mainContent"', html)
-                self.assertIn('<main class="main-content" id="mainContent"', html)
+                self.assertRegex(html, r'<main class="main-content(?: [^"]*)?" id="mainContent"')
                 self.assertIn(f'data-page="{expected_page}"', html)
                 self.assertNotIn("<!DOCTYPE html>", html)
                 self.assertNotIn('id="sidebar"', html)
@@ -137,6 +146,9 @@ class RouteSmokeTests(unittest.TestCase):
         self.assertIn("Create Story", english_again)
 
     def test_sidebar_navigation_sequence_preserves_main_content_contract(self):
+        self.client.set_cookie('ui_navigation', 'sidebar')
+        with self.client.session_transaction() as session:
+            session.pop('ui_navigation', None)
         sequence = [
             ("/", "flashcards", 0),
             ("/comprehension", "comprehension", 1),

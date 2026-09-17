@@ -5,12 +5,15 @@ import math
 from config import ELEVENLABS_MODEL, ELEVENLABS_VOICE_IDS
 import requests
 import logging
+from .trial_provider import config_snapshot, elevenlabs_call
+from .ai_trial_budget import TrialDenied
 from pydub import AudioSegment
 
 logger = logging.getLogger(__name__)
 
 class ElevenLabsService:
-    def __init__(self, api_key, media_dir, voice_ids=ELEVENLABS_VOICE_IDS, model=ELEVENLABS_MODEL):
+    def __init__(self, api_key, media_dir, voice_ids=ELEVENLABS_VOICE_IDS, model=ELEVENLABS_MODEL, config=None):
+        self.config = config_snapshot(config)
         self.api_key = api_key
         self.media_dir = media_dir
         self.voice_ids = tuple(voice_ids)
@@ -29,7 +32,8 @@ class ElevenLabsService:
         }
         logger.info(f"Generating audio for sentence: {sentence} with filename: {filename}")
         try:
-            response = requests.post(url, json=data, headers=headers, timeout=60)
+            response = elevenlabs_call(self.config, sentence, self.model, voice_id,
+                lambda: requests.post(url, json=data, headers=headers, timeout=60))
             response.raise_for_status()
             audio_file = os.path.join(self.media_dir, filename)
             os.makedirs(os.path.dirname(audio_file), exist_ok=True)
@@ -49,6 +53,8 @@ class ElevenLabsService:
                     os.unlink(temporary)
 
             return os.path.basename(audio_file)
+        except TrialDenied:
+            raise
         except Exception as e:
             logger.error(f"Audio generation failed: {str(e)}")
             return None

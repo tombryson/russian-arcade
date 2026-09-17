@@ -1,3 +1,5 @@
+from .trial_provider import config_snapshot, openai_client
+from .ai_trial_budget import TrialDenied
 from config import model_for
 from contextlib import closing
 from pathlib import Path
@@ -20,12 +22,13 @@ from datetime import datetime
 logger = logging.getLogger('SyncService')
 
 class SyncService:
-    def __init__(self, db_path, drive_service=None, api_key=None):
+    def __init__(self, db_path, drive_service=None, api_key=None, config=None):
         self.db_path = db_path
         self.drive_service = drive_service if drive_service is not None else GoogleDriveService()
         self.morph = pymorphy3.MorphAnalyzer()
         self.api_key = OPENAI_API_KEY if api_key is None else api_key
-        self.openai_client = LazyService("OpenAI sync client", lambda: OpenAI(api_key=self.api_key, timeout=60.0))
+        self.config = config_snapshot(config)
+        self.openai_client = LazyService("OpenAI sync client", lambda: openai_client(config=self.config, factory=OpenAI, api_key=self.api_key, timeout=60.0))
         self.TOPICS = [
             "greetings", "numbers", "family", "home", "food", "daily_activities", "colors", "clothing",
             "places", "weather", "shopping", "travel", "restaurant", "body", "school", "hobbies",
@@ -47,6 +50,8 @@ class SyncService:
             if not parsed.tag.POS:
                 return False, "No valid POS tag"
             return True, ""
+        except TrialDenied:
+            raise
         except Exception as e:
             logger.error(f"Validation error for '{word}': {str(e)}")
             return False, f"Parse error: {str(e)}"
@@ -288,6 +293,8 @@ class SyncService:
             except sqlite3.Error as e:
                 logger.error(f"Database error for '{lemma}': {str(e)}")
                 return False
+        except TrialDenied:
+            raise
         except Exception as e:
             logger.error(f"Failed to process '{lemma}': {str(e)}")
             return False
@@ -408,6 +415,8 @@ class SyncService:
 
             logger.info(f"Preview: {len(preview['to_add'])} to add, {len(preview['rejected'])} rejected")
             return preview, None
+        except TrialDenied:
+            raise
         except Exception as e:
             logger.error(f"Preview sync error: {str(e)}")
             return {"to_add": [], "rejected": []}, str(e)
@@ -563,6 +572,8 @@ class SyncService:
             logger.debug(f"To keep: {to_keep}")
             logger.info(f"Sanitization: {len(sanitization['to_remove'])} to remove, {len(to_keep)} to keep")
             return sanitization, to_keep, None
+        except TrialDenied:
+            raise
         except Exception as e:
             logger.error(f"Sanitize vocab error: {str(e)}")
             return {"to_remove": []}, [], str(e)
@@ -574,6 +585,8 @@ class SyncService:
             self.drive_service.update_vocab_list(content)
             logger.info("Sanitization applied to vocab_list.txt")
             return None
+        except TrialDenied:
+            raise
         except Exception as e:
             logger.error(f"Apply sanitization error: {str(e)}")
             return str(e)
@@ -635,6 +648,8 @@ class SyncService:
             except json.JSONDecodeError as e:
                 logger.error(f"JSON decode error on attempt {attempt + 1}: {str(e)}")
                 logger.error(f"Raw content: {raw_content}")
+            except TrialDenied:
+                raise
             except Exception as e:
                 logger.error(f"OpenAI error on attempt {attempt + 1}: {str(e)}")
             
@@ -656,6 +671,8 @@ class SyncService:
             with connect_db(self.db_path) as conn:
                 db_words = {row[0] for row in conn.execute('SELECT DISTINCT lemma FROM words')}
             return sorted(db_words - cloud_words), sorted(cloud_words - db_words), None
+        except TrialDenied:
+            raise
         except Exception as error:
             logger.exception("Could not compare vocabulary")
             return [], [], str(error)
@@ -736,10 +753,14 @@ class SyncService:
                     if not self.drive_service.append_words(to_export):
                         raise RuntimeError("Drive did not confirm the vocabulary export.")
                     result["exported"] = to_export
+                except TrialDenied:
+                    raise
                 except Exception:
                     logger.exception("Imported vocabulary, but Drive export failed")
                     result["warnings"].append("Words were retained in SQLite, but export to Drive failed. Retry sync.")
             result["status"] = "partial" if result["failed"] or result["enrichment_pending"] or result["warnings"] else "completed"
+        except TrialDenied:
+            raise
         except Exception:
             logger.exception("Sync interrupted after run %s started", run_id)
             result["status"] = "failed"

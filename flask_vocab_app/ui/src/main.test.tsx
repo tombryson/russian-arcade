@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { render } from 'preact';
-import { screen } from '@testing-library/preact';
+import { screen, within } from '@testing-library/preact';
 
 it('replaces the server loading fallback when the application mounts', async () => {
   const root = document.createElement('div');
@@ -12,7 +12,7 @@ it('replaces the server loading fallback when the application mounts', async () 
     await import('./main');
     expect(screen.queryByRole('heading', { name: 'Opening your activities…' })).toBeNull();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    expect(screen.getByRole('link', { name: /^Read a story/ })).toBeTruthy();
+    expect(within(screen.getByRole('main')).getByRole('link', { name: /^Read a story/ })).toBeTruthy();
   } finally {
     render(null, root);
     root.remove();

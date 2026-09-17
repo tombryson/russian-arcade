@@ -1,14 +1,19 @@
 {% extends "base.html" %}
+{% from '_activity_header.html' import activity_header %}
 {% set page_title = exercise.display_title if exercise else ui_t('writing.title') %}
 {% block main_content %}
-<main class="main-content" id="mainContent" data-page="writing">
-  <div class="sentence-page writing-page">
+<main class="main-content{% if not exercise %} activity-entry{% endif %}" id="mainContent" data-page="writing">
+  <div class="sentence-page writing-page{% if not exercise %} activity-entry-content{% endif %}">
+    {% if exercise %}
     <header class="sentence-heading">
       <div><p class="sentence-eyebrow">{{ ui_t('writing.eyebrow') }}</p>
-        <h1 id="sentence-page-title" tabindex="-1">{{ exercise.display_title if exercise else ui_t('writing.title') }}</h1>
+        <h1 id="sentence-page-title" tabindex="-1">{{ exercise.display_title }}</h1>
         <p>{{ ui_t('writing.intro') }}</p></div>
-      {% if exercise %}<a class="sentence-text-link" href="/writing" hx-get="/writing" hx-target="#mainContent" hx-swap="outerHTML" hx-push-url="true">{{ ui_t('writing.choose_another') }}</a>{% endif %}
+      <a class="sentence-text-link" href="/writing" hx-get="/writing" hx-target="#mainContent" hx-swap="outerHTML" hx-push-url="true">{{ ui_t('writing.choose_another') }}</a>
     </header>
+    {% else %}
+    {{ activity_header(ui_t('writing.title'), ui_t('writing.entry_description'), 'sentence-page-title') }}
+    {% endif %}
     {% if exercise %}<div id="writing-content">{% include '_writing_content.html' %}</div>
     {% else %}
       {% if error %}<p class="alert alert-warning" role="alert">{{ error }}</p>{% endif %}

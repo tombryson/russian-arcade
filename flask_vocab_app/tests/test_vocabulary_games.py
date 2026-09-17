@@ -1,5 +1,4 @@
 """Library-sized practice, with real frozen contexts and no tutorial fallback."""
-from copy import deepcopy
 import io
 import json
 import random
@@ -7,11 +6,12 @@ import unittest
 from PIL import Image
 
 from repositories.learning_repository import encoded, identifier, transaction
-from services.first_steps import chapter_content
-from services.journey_games import GAMES, sync_unlocks
+from services.journey_games import GAMES
 from services.journey_vocabulary import _vocabulary
 from services.journey_vocabulary_games import _others
 from services.learning_assets import import_asset
+from services.route_content import MISSION_IDS
+from tests.game_fixtures import grant_earned_game_access
 from tests.support import isolated_app
 from tests.test_card_media import MediaProvider
 from tests.test_personal_flashcards import Provider
@@ -73,17 +73,14 @@ class VocabularyGameTests(unittest.TestCase):
                                       'GameDiscovery': discover}, demo=False)
         self.client = self.app.test_client(); self.db = self.app.config['DB_PATH']
         self.csrf = self.client.get('/api/v1/games').json['csrf_token']
+        grant_earned_game_access(self.db)
         self.examples = {}
         with transaction(self.db, write=True) as conn:
             for lemma, form, sentence, translation, meaning, case in EXAMPLES:
                 word_id = conn.execute("INSERT INTO words(lemma,pos,count,lemma_difficulty,topic) VALUES (?,'NOUN',0,4,'[\"Everyday\"]')", (lemma,)).lastrowid
                 conn.execute('INSERT INTO forms(word_id,form,count,tags,form_difficulty) VALUES (?,?,0,?,5)', (word_id, form, encoded({'case':case,'number':'sing'})))
                 self.examples[lemma] = (sentence,translation,meaning)
-            chapter = chapter_content()
-            for lesson in chapter['lessons']:
-                frozen = deepcopy(lesson) | {'version': chapter['version'], 'chapter_id': 'first-steps'}
-                conn.execute("INSERT INTO first_steps_attempts(id,profile_id,chapter_id,lesson_id,version,content_json,completed_at,created_at,updated_at) VALUES (?,'personal-learning','first-steps',?,?,?,1,1,1)", (identifier(),lesson['id'],chapter['version'],encoded(frozen)))
-            sync_unlocks(conn, 'personal-learning', None)
+
             candidates = _vocabulary(conn)
         store = self.app.extensions['learning']['assets']
         for index, record in enumerate(candidates):
@@ -125,7 +122,8 @@ class VocabularyGameTests(unittest.TestCase):
         return self.post(root+'/complete')
 
     def test_example_games_mix_familiar_and_new_words_without_unneeded_media_or_publication(self):
-        for game in (g for g in GAMES if g['id'] not in ('radio', 'directions')):
+        # Scene Builder has a separate authored grammar curriculum and suite.
+        for game in (g for g in GAMES if g['id'] not in ('radio', 'directions', 'scene-builder')):
             before = len(self.provider.calls)
             state=self.ready(self.start(game['id']))
             content=self.stored(state)
@@ -150,13 +148,19 @@ class VocabularyGameTests(unittest.TestCase):
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM words').fetchone()[0], 20)
         self.assertEqual(len(self.discoveries), 6)
 
-    def test_routes_open_immediately_without_any_generation(self):
-        state = self.start('directions')
+    def test_authored_routes_open_immediately_without_any_generation(self):
+        state = self.start('directions', options={'delivery_id': MISSION_IDS[0]})
         self.assertEqual(state['phase'], 'play')
         self.assertEqual(self.provider.calls, [])
         self.assertEqual(self.discoveries, [])
-        self.assertFalse(self.stored(state)['vocabulary_refs'])
-        self.assertEqual(self.finish(state)['phase'], 'completed')
+        self.assertEqual(self.stored(state)['version'], 'journey-delivery-v2')
+        self.assertTrue(self.stored(state)['vocabulary_refs'])
+        for leg in self.stored(state)['legs']:
+            for action,payload in [('begin',{}),('go',{'path':leg['route']}),
+                                   ('deliver' if leg['id']=='recipient' else 'talk',{})]:
+                state=self.post('/api/v1/games/sessions/'+state['id']+'/route-command',
+                                {'request_id':identifier(),'revision':state['delivery']['revision'],'action':action,'payload':payload})
+        self.assertEqual(state['phase'], 'completed')
 
     def test_replay_selects_fresh_words_and_identical_request_never_restarts_preparation(self):
         request={'request_id':identifier()}
@@ -198,8 +202,13 @@ class VocabularyGameTests(unittest.TestCase):
             self.assertEqual(len(evidence),2)
             for row in evidence:
                 self.assertIsNone(row['target_level'])
-                self.assertIn('reading',json.loads(row['evidence_json'])['_skill']['scores'])
-                self.assertEqual(json.loads(row['evidence_json'])['_skill']['task_rating'],1400)
+                receipt = json.loads(row['evidence_json'])
+                if receipt['unassisted_count']:
+                    self.assertIn('reading',receipt['_skill']['scores'])
+                    self.assertEqual(receipt['_skill']['task_rating'],1000)
+                else:
+                    self.assertNotIn('_skill',receipt)  # Shuffled familiar pairs are supported practice.
+            self.assertIn('_skill',json.loads(evidence[0]['evidence_json']))
 
 
 if __name__=='__main__': unittest.main()

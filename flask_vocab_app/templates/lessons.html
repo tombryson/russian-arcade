@@ -1,10 +1,13 @@
 {% extends 'base.html' %}
+{% from '_activity_header.html' import activity_header %}
 {% set page_title = lt('Lessons', 'Уроки') %}
 {% block main_content %}
-<main class="main-content" id="mainContent" data-page="lessons">
-<div class="lesson-page">
+<main class="main-content{% if not lesson %} activity-entry{% endif %}" id="mainContent" data-page="lessons">
+<div class="lesson-page{% if not lesson %} activity-entry-content{% endif %}">
 {% if lesson %}<div id="lesson-content">{% include '_lesson_content.html' %}</div>{% else %}
-<header class="lesson-heading"><div><p class="lesson-eyebrow">{{ lt('WITH YOUR TUTOR · ON YOUR OWN', 'С ПРЕПОДАВАТЕЛЕМ · САМОСТОЯТЕЛЬНО') }}</p><h1>{{ lt('Your lessons', 'Ваши уроки') }}</h1><p>{{ lt('Bring your notes. Pick up where you left off.', 'Добавляйте конспекты и продолжайте с того места, где остановились.') }}</p></div><a class="btn btn-primary" href="#new-lesson" data-open-lesson>{{ lt('Add a lesson', 'Добавить урок') }} +</a></header>
+{% call activity_header(page_title, ui_t('lessons.entry_description'), 'lesson-page-title') %}
+<a class="btn btn-primary activity-header-action" href="#new-lesson" data-open-lesson>{{ lt('Add a lesson', 'Добавить урок') }} +</a>
+{% endcall %}
 {% if error %}<p class="alert alert-warning" role="alert">{{ error }}</p>{% endif %}
 {% if saved_lessons %}{% set recent=saved_lessons[0] %}
 <section class="lesson-paper lesson-resume"><div><p class="lesson-eyebrow">{{ lt('PICK UP HERE', 'ПРОДОЛЖИТЬ') }}</p><h2>{{ recent.plan.title[lesson_language] if recent.plan else recent.title }}</h2><p>{{ recent.plan.introduction[lesson_language] if recent.plan else lt('Your saved material and exercises are ready to open.', 'Откройте сохранённые материалы и задания.') }}</p><a class="btn btn-primary" href="/lessons/load/{{ recent.id }}">{{ lt('Open lesson', 'Открыть урок') }} →</a></div><aside><span aria-hidden="true">Aa</span><p>{{ lt('Read. Try it. Remember it.', 'Читайте. Пробуйте. Запоминайте.') }}</p></aside></section>

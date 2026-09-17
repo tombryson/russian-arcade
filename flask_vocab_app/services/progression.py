@@ -230,7 +230,7 @@ def snapshot(conn, profile_id):
     worlds=[]
     for w in conn.execute('SELECT w.*,p.unlocked_at,p.visited_at,p.completed_at FROM journey_worlds w LEFT JOIN journey_progress p ON p.world_id=w.id AND p.profile_id=? ORDER BY w.sort_order',(profile_id,)):
         worlds.append({k:w[k] for k in ('id','title','title_ru','threshold','prerequisite','scene_id')} | {'unlocked':w['threshold']==0 or w['unlocked_at'] is not None,'visited':w['visited_at'] is not None,'completed':w['completed_at'] is not None})
-    rewards=[dict(r) for r in conn.execute('SELECT e.id,e.amount,e.title,e.created_at,COALESCE(p.activity,\'legacy\') AS activity FROM progression_entries e LEFT JOIN progression_events p ON p.id=e.event_id WHERE e.profile_id=? ORDER BY e.created_at DESC,e.rowid DESC LIMIT 30',(profile_id,))]
+    rewards=[dict(r) for r in conn.execute('SELECT e.id,e.amount,e.title,e.created_at,COALESCE(p.activity,CASE WHEN e.category=\'purchase\' THEN \'purchase\' ELSE \'legacy\' END) AS activity FROM progression_entries e LEFT JOIN progression_events p ON p.id=e.event_id WHERE e.profile_id=? ORDER BY e.created_at DESC,e.rowid DESC LIMIT 30',(profile_id,))]
     return {'profile_id':profile_id,'balance':totals[0],'earned_total':max(0,totals[1]),'legacy_balance':totals[2],
         'preferred_level':row[0] if row else 'A1','levels':LEVELS,'policy':RULES,'recent_rewards':rewards,
         'journey':{'worlds':worlds,'next_world':next((w for w in worlds if not w['completed']),None)},

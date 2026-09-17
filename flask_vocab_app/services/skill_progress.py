@@ -15,8 +15,10 @@ rubric (0..4 or 0..10; Speaking 1..5 becomes 0..1).
 Only the first recorded written assessment per content and skill counts. Speaking
 samples the first scored conversation per variant/skill/study day, allowing new
 speech on later days. Retries with feedback cannot repeatedly increase ability.
-Internal visual stages
-are 200 points wide from 1000; a lower rating stays at the start of stage 1 with
+New journey-game receipts use a separate chance-aware policy. Replaying an old
+receipt retains its original formula. Games use a conservative 1000 task prior
+until calibrated task benchmarks exist. Feedback-exposed items are excluded.
+Internal visual stages are 200 points wide from 1000; a lower rating stays at the start of stage 1 with
 the actual remaining gap displayed. Unobserved skills have rating=None, not a
 fictional measured 1000. All observed ratings remain explicitly provisional.
 """
@@ -24,6 +26,7 @@ import json
 import math
 
 POLICY = 'practice-elo-v1'
+GAME_POLICY = 'game-evidence-v2'
 PRIOR = 1000
 STAGE_WIDTH = 200
 K = 24
@@ -109,6 +112,11 @@ def freeze_evidence(conn, activity, content_key, source_key, target_level, evide
         if not row or row[4] is None:
             return result
         content, answers, acknowledged = json.loads(row[1]), json.loads(row[2]), json.loads(row[3])
+        if content.get('version') == 'journey-delivery-v2':
+            # Map/landmark decisions need their own reviewed chance model.
+            # Completion is valid participation, not three-arrow Elo evidence.
+            result.update(basis='guided_delivery', game_id=row[0])
+            return result
         if str(content_key) != f'journey-game:{row[0]}:{content["lesson_version"]}':
             return result
         first = conn.execute("SELECT id FROM journey_game_sessions WHERE profile_id=? AND game_id=? "
@@ -120,31 +128,39 @@ def freeze_evidence(conn, activity, content_key, source_key, target_level, evide
         if acknowledged != [item['id'] for item in rounds] or any(item['id'] not in answers for item in rounds):
             return result
         listening = row[0] == 'radio' or (row[0] == 'letter-back' and content.get('version') == 'journey-vocabulary-v1')
-        unassisted = [item for item in rounds if not answers[item['id']].get('hint_used')
-                      and not answers[item['id']].get('transcript_used')]
-        if listening:
-            # A saved play receipt means the browser started the prepared clip;
-            # it is not proof of attention, pronunciation or spoken fluency.
-            unassisted = [item for item in unassisted if item.get('clues') and
-                          {clue['audio_key'] for clue in item['clues']}.issubset(
-                              set(answers[item['id']].get('listened_audio_keys', [])))]
-        result.update({'basis': 'audio_recognition' if listening else 'contextual_reading_with_optional_audio', 'game_id': row[0],
-                       'round_count': len(rounds), 'unassisted_count': len(unassisted)})
+        from services.game_assessment import chance_score, evidence_keys
+        from services.journey_games import assess_answer
+        # Earlier feedback can reveal an answer even if no hint was requested.
+        exposed = {}
+        for prior in conn.execute("SELECT content_json,answers_json,created_at FROM journey_game_sessions WHERE profile_id=? AND id<>?", (row[5], source_key)):
+            old_content, old_answers = json.loads(prior[0]), json.loads(prior[1])
+            for old_round in old_content.get('rounds', []):
+                if old_round['id'] in old_answers:
+                    shown_at = old_answers[old_round['id']].get('answered_at', prior[2])
+                    for key in evidence_keys(old_round):
+                        exposed[key] = min(exposed.get(key, shown_at), shown_at)
+        unassisted, chances = [], []
+        for item in rounds:
+            answer = answers[item['id']]
+            keys = evidence_keys(item)
+            answered_at = answer.get('answered_at', row[4])
+            chance = chance_score(item, row[0])
+            assisted = answer.get('hint_used') or answer.get('transcript_used')
+            heard = not listening or (item.get('clues') and
+                {clue['audio_key'] for clue in item['clues']}.issubset(answer.get('listened_audio_keys', [])))
+            if keys and not any(exposed.get(key, float('inf')) <= answered_at for key in keys) and not assisted and heard and chance is not None and chance < 1:
+                unassisted.append(item)
+                chances.append(chance)
+            for key in keys:
+                exposed[key] = min(exposed.get(key, answered_at), answered_at)
+        result.update({'basis': 'audio_recognition' if listening else 'contextual_reading_with_optional_audio',
+                       'game_id': row[0], 'round_count': len(rounds), 'unassisted_count': len(unassisted)})
         if not unassisted:
             return result
-        # Picture choices, classification and supported phrase assembly are
-        # comprehension evidence; they do not establish independent writing.
-        from services.journey_games import assess_answer
-        difficulty, raw_difficulty = PRIOR, 'first-steps-game-beginner'
-        if row[0] == 'directions' and content.get('version') in ('journey-vocabulary-v1', 'journey-routes-v1'):
-            # Following the route can succeed without identifying the picture's
-            # vocabulary. Credit the direction language actually required.
-            difficulty, raw_difficulty = PRIOR, {'basis': 'direction-route'}
-        elif content.get('version') in ('journey-vocabulary-v1', 'radio-broadcast-v1'):
-            word_difficulty = content.get('word_difficulty')
-            # Vocabulary bands are local task priors, not a TORFL placement.
-            difficulty = 1000 + ((word_difficulty - 1) // 2) * 200 if type(word_difficulty) is int and 1 <= word_difficulty <= 8 else PRIOR
-            raw_difficulty = {'basis': 'broadcast-comprehension' if content.get('broadcast') else 'vocabulary-word-difficulty', 'value': word_difficulty}
+        # Word-frequency bands alone do not establish task difficulty. Until
+        # reviewed benchmarks exist, use one conservative prior for games.
+        difficulty = PRIOR
+        raw_difficulty = {'basis': 'direction-route' if row[0] == 'directions' else 'uncalibrated-game-task', 'word_difficulty': content.get('word_difficulty')}
         scores['listening' if listening else 'reading'] = sum(
             assess_answer(item, answers[item['id']]['answer'])['score'] for item in unassisted
         ) / len(unassisted)
@@ -183,6 +199,8 @@ def freeze_evidence(conn, activity, content_key, source_key, target_level, evide
     if difficulty is not None and scores:
         result['_skill'] = {'policy_version': POLICY, 'task_rating': difficulty,
                             'task_difficulty': raw_difficulty, 'scores': scores}
+        if activity == 'journey_game':
+            result['_skill'].update(policy_version=GAME_POLICY, chance=sum(chances) / len(chances))
         if activity == 'speaking':
             result['_skill']['study_day'] = result.get('study_day')
     return result
@@ -203,7 +221,7 @@ def snapshot(conn, profile_id):
             receipt = json.loads(evidence_json).get('_skill')
         except (ValueError, TypeError, AttributeError):
             continue
-        if not isinstance(receipt, dict) or receipt.get('policy_version') != POLICY:
+        if not isinstance(receipt, dict) or receipt.get('policy_version') not in (POLICY, GAME_POLICY):
             continue
         difficulty, scores = receipt.get('task_rating'), receipt.get('scores')
         if difficulty not in (1000, 1200, 1400, 1600, 1800) or not isinstance(scores, dict):
@@ -219,7 +237,12 @@ def snapshot(conn, profile_id):
                 continue
             seen.add(identity)
             item = state[key]
-            expected = 1 / (1 + 10 ** ((difficulty - item['rating']) / 400))
+            from services.game_assessment import expected_score
+            chance = receipt.get('chance') if receipt['policy_version'] == GAME_POLICY else 0
+            if not _number(chance, 0, 1) or chance == 1:
+                seen.discard(identity)
+                continue
+            expected = expected_score(item['rating'], difficulty, chance)
             item['rating'] += K * (observed - expected)
             item['observations'] += 1
             item['last_updated'] = created_at

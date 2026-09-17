@@ -1,8 +1,8 @@
 # Public release and AI demo review
 
-Reviewed on 16 September 2026 against commit `e1f6f814`.
+Initial audit: 16 September 2026, commit `e1f6f814`. Implementation update: 17 September 2026.
 
-The original development repository must remain private. The owner selected a new, independent `russian-arcade` repository with reviewed source and no inherited history. The sample demo has no AI provider credentials. Paid AI needs verified identities, dedicated credentials and persistent spending controls.
+The original development repository must remain private. The owner selected a new, independent `russian-arcade` repository with reviewed source and no inherited history. Anonymous samples have no AI provider access. The optional funded trial uses verified identities, dedicated credentials and persistent spending controls. See the [release procedure](release-process.md) and [current trial runbook](operations-fly.md#funded-ai-trial).
 
 ## Approved decisions
 
@@ -66,7 +66,7 @@ An initial policy could be:
 | Spending | An owner-approved daily application budget and monthly provider-project hard limit |
 | Limit reached | Keep saved/sample practice available and show when the trial allowance resets |
 
-The owner approved the US$1 daily and US$20 monthly ceilings. The per-user allowance and initial feature scope remain proposed. Paid AI is still disabled.
+The owner approved the US$1 daily and US$20 monthly ceilings. The table above records the initial proposal. The later implementation supports the application's provider-backed activities under shared spending limits; it is not limited to sentence feedback. Deployment activation is a separate step described in the runbook.
 
 ## Request and spending controls
 
@@ -134,19 +134,28 @@ limits. Profile creation has an atomic cap. Hosted HTTPS responses include HSTS.
 These controls do not enable paid providers.
 
 `services/ai_trial_budget.py` provides the separate spending ledger. It defaults
-to disabled and uses integer microdollars. The US$1 daily and US$20 monthly caps
-apply globally. Reservations are atomic and idempotent. The initial allowance is
-three requests per account per day, with one in flight per account and two in
-total. Pending charges remain reserved across date changes and process restarts.
+to disabled and uses integer microdollars. The US$1 daily and US$20 monthly
+admission budgets apply globally. Reservations are atomic and idempotent. The initial allowance is
+120 provider operations per account per day, with one ordinary operation per
+account and two in total. A voice reservation permits that account's metered
+delegation call alongside it. One activity can require several operations. Pending charges remain
+reserved across date changes and process restarts.
 Missing storage blocks admission. An underestimated charge is recorded and
 halts further admissions for review.
 
-The ledger is a tested backend component, not an enabled trial. No public route
-uses it yet. Before connection to a paid feature, implement verified sign-in,
-bind the verified account to its learner profile, mount persistent ledger storage,
-and define the complete workflow's maximum cost. Add trusted provider usage
-settlement and recovery for interrupted jobs. Browser-supplied identity, prices
-or usage must never be passed through as authoritative values.
+The hosted trial adds GitHub OAuth with state and PKCE, an independent workspace
+for each verified identity, and provider adapters that reserve spend before
+calls. The public sample application remains separate. Browser-supplied identity,
+prices and usage are never authoritative. Hosted activation still requires a
+configured OAuth app, dedicated demo credentials, a persistent ledger and live
+verification. Source publication does not establish that paid access is enabled.
+
+Live speaking closes after one minute and uses at most two metered delegation
+calls. The provider has no configurable duration limit for its primary voice
+session. If the application server dies, an existing call can continue billing.
+The ledger blocks further work but cannot stop that call. A verified provider
+hard monthly limit is required; the application does not guarantee a US$1 daily
+invoice under this failure. See the current runbook before enabling live trials.
 
 Credential rotation remains an account-owner task. No environment file or
 existing provider credential was changed by this remediation. Create and verify

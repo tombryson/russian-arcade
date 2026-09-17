@@ -1,4 +1,6 @@
 """Scenario dialogue and provisional grammar coaching are separate model calls."""
+from .trial_provider import config_snapshot, openai_client
+from .ai_trial_budget import TrialDenied
 import json
 import re
 import time
@@ -23,14 +25,14 @@ def object_schema(properties):
 
 class ConversationAI:
     def __init__(self, config):
-        self.config = config
+        self.config = config_snapshot(config)
 
     def _call(self, name, instruction, data, schema):
         if not self.config.get('OPENAI_API_KEY'):
             raise SpeechError('Conversation replies need OPENAI_API_KEY in your existing .env file.')
         import openai
         try:
-            client = openai.OpenAI(api_key=self.config['OPENAI_API_KEY'], timeout=60, max_retries=0)
+            client = openai_client(config=self.config, api_key=self.config['OPENAI_API_KEY'], timeout=60, max_retries=0)
             response = client.chat.completions.create(model=self.config['CONVERSATION_MODEL'],
                 messages=[{'role': 'system', 'content': instruction},
                           {'role': 'user', 'content': json.dumps(data, ensure_ascii=False)}],
@@ -40,6 +42,8 @@ class ConversationAI:
             if choice.finish_reason != 'stop' or choice.message.refusal or not choice.message.content:
                 raise ValueError()
             return json.loads(choice.message.content)
+        except TrialDenied:
+            raise
         except Exception:
             raise SpeechError('The conversation model could not finish. Your recording and transcript are kept.') from None
 

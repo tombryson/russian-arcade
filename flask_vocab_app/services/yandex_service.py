@@ -1,11 +1,14 @@
 import requests
 import logging
 import pymorphy3
+from .trial_provider import config_snapshot, yandex_call
+from .ai_trial_budget import TrialDenied
 
 logger = logging.getLogger(__name__)
 
 class YandexService:
-    def __init__(self, api_key):
+    def __init__(self, api_key, config=None):
+        self.config = config_snapshot(config)
         self.api_key = api_key
         self.url = "https://translate.api.cloud.yandex.net/translate/v2/translate"
         self.morph = pymorphy3.MorphAnalyzer()
@@ -15,15 +18,17 @@ class YandexService:
         if not self.api_key:
             return {"translation": None, "error": "Yandex Cloud API key is missing."}
         try:
-            response = requests.post(
+            response = yandex_call(self.config, text, target_lang, lambda: requests.post(
                 self.url, headers={"Authorization": f"Api-Key {self.api_key}"},
                 json={"texts": [text], "sourceLanguageCode": "ru" if target_lang != "ru" else "en",
-                      "targetLanguageCode": target_lang}, timeout=20)
+                      "targetLanguageCode": target_lang}, timeout=20))
             response.raise_for_status()
             translation = response.json()["translations"][0]["text"]
             if not translation.strip():
                 raise ValueError("Empty translation")
             return {"translation": translation}
+        except TrialDenied:
+            raise
         except Exception as exc:
             # Do not expose authenticated request details or manufacture a translation.
             logger.warning("Yandex translation failed (%s)", type(exc).__name__)

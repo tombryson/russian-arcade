@@ -1,4 +1,6 @@
 """Evidence extraction, exercise preparation and assessment are separate calls."""
+from .trial_provider import config_snapshot, openai_client
+from .ai_trial_budget import TrialDenied
 import base64
 import json
 from typing import Literal
@@ -130,6 +132,7 @@ class LessonAI:
     POLICY = "lesson-evidence-v1"
 
     def __init__(self, config):
+        self.config = config_snapshot(config)
         self.model = config.get("OPENAI_MODEL_LESSONS", "gpt-6-astra")
         self.effort = config.get("OPENAI_LESSONS_REASONING_EFFORT", "low")
         self.api_key = config.get("OPENAI_API_KEY", "")
@@ -157,8 +160,8 @@ class LessonAI:
                 ]
             )
         try:
-            with openai.OpenAI(
-                api_key=self.api_key, timeout=120, max_retries=0
+            with openai_client(
+                config=self.config, api_key=self.api_key, timeout=120, max_retries=0
             ) as client:
                 response = client.responses.create(
                     model=self.model,
@@ -179,6 +182,8 @@ class LessonAI:
             if response.status != "completed" or not response.output_text:
                 raise ValueError("Incomplete response")
             return shape.model_validate_json(response.output_text).model_dump()
+        except TrialDenied:
+            raise
         except Exception:
             raise LearningError(
                 "lesson_provider",

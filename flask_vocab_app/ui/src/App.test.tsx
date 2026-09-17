@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/preact';
+import { act, fireEvent, render, screen, within } from '@testing-library/preact';
 import { App } from './App';
 
 async function navigate(hash: string) {
@@ -13,13 +13,25 @@ beforeEach(()=>vi.spyOn(window,'scrollTo').mockImplementation(()=>{}));
 afterEach(() => {vi.unstubAllGlobals();vi.restoreAllMocks();});
 
 describe('Russian Arcade activity home', () => {
+  it('opens the Games catalogue from navigation without starting or purchasing a game',async()=>{
+    window.history.replaceState(null,'','/post/#home');
+    const fetch=vi.fn((url:string)=>response(url==='/api/v1/games'?{profile_id:null,games:[]}:{profile_id:null,lessons:[],completed_count:0,complete:false,next_lesson:null}));
+    vi.stubGlobal('fetch',fetch);render(<App initialProfile={null}/>);
+    expect(screen.getByRole('link',{name:'Games',hidden:true}).getAttribute('href')).toBe('#games');
+    await navigate('games');
+    expect(await screen.findByRole('heading',{name:'Games',level:1})).toBeTruthy();
+    expect(screen.getByLabelText('Activities').getAttribute('data-active')).toBe('true');
+    expect(screen.getByRole('link',{name:'Games',hidden:true}).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByRole('link',{name:/Barsik’s shop/}).getAttribute('href')).toBe('#shop');
+    expect(fetch.mock.calls.every(([url])=>['/api/v1/games','/api/v1/first-steps'].includes(url))).toBe(true);
+  });
   it.each(['pairs','mailbox-sort','missing-stamp','radio','detective','letter-back'])('opens the new %s game as a standalone activity',async id=>{
     window.history.replaceState(null,'',`/post/#games/${id}`);
     const fetch=vi.fn((url:string)=>response(url==='/api/v1/games'?{profile_id:null,games:[{id,title:'A discovered game',description:'A game from your lesson.',lesson_id:'bag',lesson_title:'What’s in the bag?',lesson_href:'#first-steps/bag',unlocked:true,new:true,active_session_id:null}]}:{}));
     vi.stubGlobal('fetch',fetch);render(<App initialProfile={null}/>);
     expect(await screen.findByRole('heading',{name:'A discovered game',level:1})).toBeTruthy();
     expect(screen.getByRole('button',{name:id==='radio'?'Tune in':'Let’s play'})).toBeTruthy();
-    expect(screen.getByRole('link',{name:'Activities'}).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByLabelText('Activities').getAttribute('data-active')).toBe('true');
     expect(fetch.mock.calls.every(([url])=>url==='/api/v1/games')).toBe(true);
   });
   it('opens an old post-office link as the chapter for a guest without loading the retired quiz', async () => {
@@ -35,11 +47,11 @@ describe('Russian Arcade activity home', () => {
   it('keeps working activity routes discoverable without contacting household services in legacy mode', async () => {
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
     render(<App />);
-    expect(screen.getByRole('link', { name: /^Read a story/ }).getAttribute('href')).toBe('/comprehension');
+    expect(within(screen.getByRole('main')).getByRole('link', { name: /^Read a story/ }).getAttribute('href')).toBe('/comprehension');
     expect(screen.getByText('Hello! I’m Barsik.')).toBeTruthy();
     await navigate('activities');
     for (const [name, href] of [['Read a story', '/comprehension'], ['Word Jumble', '/word_jumble'], ['Translate a sentence', '/sentences'], ['Writing', '/writing'], ['Lessons', '/lessons'], ['^Speaking', '#speaking']]) {
-      expect(screen.getByRole('link', { name: new RegExp(name) }).getAttribute('href')).toBe(href);
+      expect(within(screen.getByRole('main')).getByRole('link', { name: new RegExp(name) }).getAttribute('href')).toBe(href);
     }
     expect(screen.getByRole('link', { name: /Open existing Anki/ }).getAttribute('href')).toBe('/');
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Choose an activity.' }));
@@ -55,7 +67,7 @@ describe('Russian Arcade activity home', () => {
     render(<App />);
     expect(await screen.findByRole('heading', {name:'Speaking'})).toBeTruthy();
     expect(window.location.hash).toBe('#speaking');
-    expect(screen.getByRole('link', {name:'Activities'}).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByLabelText('Activities').getAttribute('data-active')).toBe('true');
     expect(fetch.mock.calls.some(([url]) => url.endsWith('/connect') || url === '/api/v1/conversations')).toBe(false);
   });
   it.each(['live-conversation/live-one','speaking/live-one'])('keeps saved live links working: %s', async hash => {
@@ -108,7 +120,7 @@ describe('Russian Arcade activity home', () => {
     render(<App />);
     await navigate('choose-practice');
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Choose what to practise' }));
-    expect(screen.getByRole('link', { name: /^Read a story/ }).getAttribute('href')).toBe('/comprehension');
+    expect(within(screen.getByRole('main')).getByRole('link', { name: /^Read a story/ }).getAttribute('href')).toBe('/comprehension');
     expect(screen.getByRole('link', { name: /^My words Find/ }).getAttribute('href')).toBe('/vocab');
     expect(screen.getByRole('link', { name: 'Home' }).getAttribute('aria-current')).toBe('page');
     expect(fetch.mock.calls.every(([url])=>['/api/v1/progression','/api/v1/first-steps','/api/v1/games'].includes(url))).toBe(true);
@@ -153,7 +165,7 @@ describe('Russian Arcade activity home', () => {
     render(<App householdEnabled />);
     expect((await screen.findByRole('link', { name: /Continue: Food words/ })).getAttribute('href')).toBe('#practice/saved-session');
     expect(screen.queryByText('Unplayable native deck')).toBeNull();
-    expect(screen.queryByRole('link', { name: /Word Jumble/ })).toBeNull();
+    expect(within(screen.getByRole('main')).queryByRole('link', { name: /Word Jumble/ })).toBeNull();
   });
   it('starts approved practice with the selected learner and a CSRF-protected command', async () => {
     const fetch = vi.fn((url: string, options?: RequestInit) => response(url.endsWith('/household') ? { configured: true, adult: false, profile: { id: 'river', display_name: 'River' }, csrf_token: 'test-csrf' }

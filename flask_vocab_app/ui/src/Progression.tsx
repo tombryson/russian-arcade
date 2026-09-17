@@ -66,7 +66,7 @@ export function ProgressionBadge({progression,language='en',introductory=false}:
     setGaining(increased);
     if (increased) {const timer=setTimeout(()=>setGaining(false),900);return()=>clearTimeout(timer);}
   },[introductory,progression.data?.profile_id,balance]);
-  return <a class={`progression-badge${gaining ? ' is-gaining' : ''}`} href="#journey" aria-label={`${label}: ${balance ?? (progression.error ? language==='ru' ? 'недоступно' : 'unavailable' : language==='ru' ? 'загружаем' : 'loading')}`} title={language==='ru' ? 'Путешествие Барсика' : 'Barsik’s journey'}>
+  return <a class={`progression-badge${gaining ? ' is-gaining' : ''}`} href="#shop" aria-label={`${label}: ${balance ?? (progression.error ? language==='ru' ? 'недоступно' : 'unavailable' : language==='ru' ? 'загружаем' : 'loading')}`} title={language==='ru' ? 'Магазин Барсика' : 'Barsik’s shop'}>
     <span class="progression-coin" aria-hidden="true">Л</span><strong>{balance ?? '—'}</strong>
   </a>;
 }
@@ -130,8 +130,7 @@ export function Journey({worldId,language='en',progression}:{worldId?:string;lan
           </li>;
         })}</ol>
         <GameCatalogue key={data.profile_id} context="journey"/>
-        <p class="quiet">{t('The main practice activities are always available. New games stay in Activities once you discover them along the journey.','Основные занятия всегда доступны. Новые игры остаются в разделе занятий после знакомства с ними в путешествии.')}</p>
-        <section class="journey-rewards"><h2>{t('Coin history','История монет')}</h2>{data.recent_rewards.length ? <ul>{data.recent_rewards.map(reward=><li key={reward.id}><div><strong>{reward.title}</strong><small>{new Date(reward.created_at*1000).toLocaleDateString(language==='ru' ? 'ru-RU' : 'en-AU',{day:'numeric',month:'short'})}</small></div><span>{reward.amount>0 ? '+' : ''}{reward.amount} <span class="sr-only">{t('Lingo coins','лингокоинов')}</span></span></li>)}</ul> : <p class="quiet">{t('Finish some practice to collect your first coins.','Завершите занятие, чтобы получить первые монеты.')}</p>}</section>
+        <p class="quiet">{t('The main practice activities are always available. Games you buy from Barsik stay in Activities. Spending coins does not change your journey progress.','Основные занятия всегда доступны. Купленные у Барсика игры остаются в разделе занятий. Покупки не меняют прогресс путешествия.')}</p>
         <details class="journey-rules"><summary>{t('How coins work','Как начисляются монеты')}</summary><p>{t(`Complete a practice activity to earn ${data.policy.activity_coins} coins, up to ${data.policy.activity_daily_cap} a day. Review a flashcard to earn ${data.policy.review_coins} coin, up to ${data.policy.review_daily_cap} a day. Repeating the same activity or card that day does not earn extra coins.`,`За завершённое занятие вы получаете ${data.policy.activity_coins} монеты, до ${data.policy.activity_daily_cap} в день. За повторение карточки — ${data.policy.review_coins} монету, до ${data.policy.review_daily_cap} в день. Повтор того же занятия или карточки в этот день не добавляет монеты.`)}</p><p>{t('Coins recognise practice, not your Russian level. Hints and corrections are part of learning.','Монеты отмечают практику, а не уровень владения русским. Подсказки и исправления — часть обучения.')}</p></details>
       </> : progression.loading ? <p role="status">{t('Loading your progress…','Загружаем ваш прогресс…')}</p> : <div><p role="alert">{progression.error || t('Your progress could not load.','Не удалось загрузить прогресс.')}</p><button class="live-mute" onClick={progression.refresh}>{t('Try again','Попробовать ещё раз')}</button></div>}
     </>}

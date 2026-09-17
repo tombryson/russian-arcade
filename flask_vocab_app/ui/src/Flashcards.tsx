@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { api } from './learning-api';
 import { CardTags, CardMedia, cardLabel } from './CardDetails';
 import { Sheet } from './components';
+import { ActivityHeader } from './ActivityHeader';
 import { nextTime, ratingLabel, words, type CardOverview, type CardScope, type CardHistory, type Language, type LibraryCard, type ReviewSession } from './review-types';
 
 export function Flashcards({ profileId, language = 'en', personal = false, wordId, lessonId, topic }: { profileId: string; language?: Language; personal?: boolean; wordId?: number; lessonId?: string; topic?: string }) {
@@ -98,11 +99,9 @@ export function Flashcards({ profileId, language = 'en', personal = false, wordI
   }
   const label = (value: string) => ({ new: t('New', 'Новая'), learning: t('Learning', 'Изучаю'), reviewing: t('Reviewing', 'Повторяю'), suspended: t('Set aside', 'Отложена') })[value] ?? value;
   const decks = data?.facets?.decks ?? Array.from(new Map(data?.cards.flatMap(c => c.decks).map(d => [d.content_id, d])).values());
-  return <section class="page flashcards-page">
-    <header class="flashcards-heading"><div><p class="kicker">{t('Study', 'Учить')}</p><h1 ref={heading} tabIndex={-1}>{t('Flashcards', 'Карточки')}</h1></div>
-      {personal && <a class="cta" href={data?.lesson?.url ?? (scope.word_id ? `#generate?word_id=${scope.word_id}` : '#generate')}>{t('Generate cards','Создать карточки')} <span aria-hidden="true">＋</span></a>}
-      <p class="intro">{t('Study your vocabulary and pick up where you left off.', 'Учите слова и продолжайте с того места, где остановились.')}</p>
-    </header>
+  return <section class="page flashcards-page activity-entry"><div class="activity-entry-content">
+    <ActivityHeader title={t('Flashcards', 'Карточки')} description={t('Review your Russian vocabulary with flashcards.', 'Повторяйте русские слова с помощью карточек.')} headingRef={heading} headingTabIndex={-1}
+      actions={personal && <a class="cta activity-header-action" href={data?.lesson?.url ?? (scope.word_id ? `#generate?word_id=${scope.word_id}` : '#generate')}>{t('Generate cards','Создать карточки')} <span aria-hidden="true">＋</span></a>} />
     {data?.lesson && <div class="letter lesson-card-context"><strong>{data.lesson.title}</strong><div class="action-row"><a class="text-link" href={data.lesson.url}>{t("Back to lesson", "К уроку")} →</a><a class="text-link" href="#flashcards">{t("All flashcards", "Все карточки")}</a></div></div>}
     {scope.word_id && <p class="intro">{t('Showing cards for this vocabulary word.', 'Карточки выбранного слова.')} <button class="text-link" disabled={busy || !!pending.current} onClick={() => setScope(lessonId ? {lesson_id:lessonId} : {})}>{t('Show all cards', 'Показать все карточки')}</button></p>}
     {error && <div class="error-note" role="alert"><p>{error}</p><div class="action-row"><button class="text-link" onClick={() => { pending.current = undefined; setRevision(v => v + 1); }}>{t('Reload cards', 'Обновить карточки')}</button>{!personal && <a href="/post/household">{t('Choose a learner', 'Выбрать ученика')}</a>}</div></div>}
@@ -138,10 +137,13 @@ export function Flashcards({ profileId, language = 'en', personal = false, wordI
         </article>)}</div>{!data.cards.length && <p>{t('No cards match this selection.', 'Нет карточек с такими условиями.')}</p>}
       </details>
     </>}
-  </section>;
+  </div></section>;
 }
 
 export function FlashcardsSetup({ adult, language='en' }: { adult: boolean; language?: Language }) {
   const t=words(language);
-  return <section class="page"><p class="kicker">{t('Flashcards', 'Карточки')}</p><h1>{t('Set up flashcard practice.', 'Настроим практику с карточками.')}</h1><Sheet><h2>{t('One learner. Their own practice.', 'У каждого своя практика.')}</h2><p>{t('Choose a learner to save their cards and review schedule. A grown-up can prepare cards, explain tricky meanings and approve them before practice.', 'Выберите ученика, чтобы сохранять его карточки и расписание. Взрослый может подготовить карточки, объяснить сложные значения и одобрить материал.')}</p><div class="action-row"><a class="cta" href="/post/household">{t('Choose a learner', 'Выбрать ученика')}</a>{adult && <a class="text-link" href="/post/flashcards/manage">{t('Prepare & review cards', 'Подготовить и проверить карточки')}</a>}</div></Sheet></section>;
+  return <section class="page flashcards-page activity-entry"><div class="activity-entry-content">
+    <ActivityHeader title={t('Flashcards', 'Карточки')} description={t('Review your Russian vocabulary with flashcards.', 'Повторяйте русские слова с помощью карточек.')} />
+    <Sheet><h2>{t('One learner. Their own practice.', 'У каждого своя практика.')}</h2><p>{t('Choose a learner to save their cards and review schedule. A grown-up can prepare cards, explain tricky meanings and approve them before practice.', 'Выберите ученика, чтобы сохранять его карточки и расписание. Взрослый может подготовить карточки, объяснить сложные значения и одобрить материал.')}</p><div class="action-row"><a class="cta" href="/post/household">{t('Choose a learner', 'Выбрать ученика')}</a>{adult && <a class="text-link" href="/post/flashcards/manage">{t('Prepare & review cards', 'Подготовить и проверить карточки')}</a>}</div></Sheet>
+  </div></section>;
 }

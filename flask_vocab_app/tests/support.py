@@ -11,16 +11,23 @@ def latest_schema_version():
 
 
 def strip_progression_and_levels(conn):
-    """Remove migrations 023–033 when a test constructs an older SQLite shape.
+    """Remove migrations 023 onward when a test constructs an older SQLite shape.
 
     This helper is test-only. Dropping their version markers alone would leave
     tables/indexes behind and prevent the real migrations from being exercised.
     """
+    conn.execute('DROP TABLE IF EXISTS journey_route_preparations')
+    conn.execute('DROP TABLE IF EXISTS journey_route_audio_cache')
+    conn.execute('DROP TABLE IF EXISTS journey_route_actions')
+    conn.execute('DROP TABLE IF EXISTS journey_route_state')
+    conn.execute('DROP TABLE IF EXISTS journey_game_corrections')
     conn.execute('DROP TABLE IF EXISTS journey_game_preparations')
     conn.execute('DROP TABLE IF EXISTS journey_game_examples')
     conn.execute('DROP TABLE IF EXISTS journey_game_media')
     conn.execute('DROP TABLE IF EXISTS journey_game_sessions')
     conn.execute('DROP TABLE IF EXISTS journey_game_unlocks')
+    conn.execute('DROP TABLE IF EXISTS journey_game_purchases')
+    conn.execute('DROP TABLE IF EXISTS journey_game_access')
     conn.execute('DROP TABLE IF EXISTS first_steps_attempts')
     conn.execute('DROP TABLE IF EXISTS first_delivery_attempts')
     conn.execute('DROP TABLE IF EXISTS profile_onboarding')

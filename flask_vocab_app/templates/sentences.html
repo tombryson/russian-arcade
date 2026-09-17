@@ -1,12 +1,17 @@
 {% extends 'base.html' %}
+{% from '_activity_header.html' import activity_header %}
 {% set page_title = ui_t('translation.title') %}
 {% block main_content %}
-<main class="main-content" id="mainContent" data-page="sentences">
-  <div class="sentence-page translation-page">
+<main class="main-content{% if not practice %} activity-entry{% endif %}" id="mainContent" data-page="sentences">
+  <div class="sentence-page translation-page{% if not practice %} activity-entry-content{% endif %}">
+    {% if practice %}
     <header class="sentence-heading">
       <div><p class="sentence-eyebrow">{{ ui_t('translation.direction') }}</p><h1 id="sentence-page-title" tabindex="-1">{{ ui_t('translation.title') }}</h1><p>{{ ui_t('translation.intro') }}</p></div>
-      {% if practice %}<a class="sentence-text-link" href="/sentences" hx-get="/sentences" hx-target="#mainContent" hx-swap="outerHTML" hx-push-url="true">{{ ui_t('translation.choose_another') }} <span aria-hidden="true">↗</span></a>{% endif %}
+      <a class="sentence-text-link" href="/sentences" hx-get="/sentences" hx-target="#mainContent" hx-swap="outerHTML" hx-push-url="true">{{ ui_t('translation.choose_another') }} <span aria-hidden="true">↗</span></a>
     </header>
+    {% else %}
+    {{ activity_header(ui_t('translation.title'), ui_t('translation.entry_description'), 'sentence-page-title') }}
+    {% endif %}
     {% if error and not practice %}<p class="alert alert-warning" role="alert">{{ error }}</p>{% endif %}
     {% if practice %}{% include '_translation_content.html' %}
     {% elif sentences %}
