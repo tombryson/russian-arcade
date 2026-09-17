@@ -238,7 +238,7 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
     </>;
   }
 
-  return <GameLanguage.Provider value={language}><div ref={workspace} class={`navigation-layout-${navigationLayout}${activityWorkspace ? ' activity-workspace' : ''}${lessonWorkspace ? ' lesson-workspace' : ''}`}>
+  return <GameLanguage.Provider value={language}><div ref={workspace} class={`navigation-layout-${navigationLayout}${activityWorkspace ? ' activity-workspace' : ''}${lessonWorkspace ? ' lesson-workspace' : ''}${lessonWorkspace || location.page === 'speaking' ? ' learning-workspace' : ''}${location.page === 'speaking' ? ' speaking-workspace' : ''}`}>
     <a class="skip-link" href="#main">Skip to content</a>
     {!activityWorkspace && <header ref={header} class="top"><a class="brand" href="#home" aria-label="Russian Arcade home"><span class="mark" lang="ru" aria-hidden="true">Я</span><span><span class="brand-name">Russian Arcade</span><span class="origin">Learn and practise Russian</span></span></a>
       <nav class="nav" aria-label={language === 'ru' ? 'Главное меню' : 'Main navigation'}>

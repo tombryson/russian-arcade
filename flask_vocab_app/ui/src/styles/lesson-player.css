@@ -1,8 +1,8 @@
 /* Learning screens put the current task ahead of repeated page furniture. */
-.lesson-workspace > .top { padding-top:10px; padding-bottom:10px; }
-.lesson-workspace > .top:has(>.skill-rail) { padding-bottom:42px; }
-.lesson-workspace > .top .origin { display:none; }
-.lesson-workspace > .top .mark { font-size:22px; padding:9px 7px; }
+.learning-workspace > .top { padding-top:10px; padding-bottom:10px; }
+.learning-workspace > .top:has(>.skill-rail) { padding-bottom:42px; }
+.learning-workspace > .top .origin { display:none; }
+.learning-workspace > .top .mark { font-size:22px; padding:9px 7px; }
 .lesson-workspace main { max-width:1240px; width:100%; }
 .page.lesson-player { max-width:none; padding:16px 32px 32px; }
 .lesson-player-nav { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px 24px; padding-bottom:12px; margin-bottom:16px; border-bottom:1px solid var(--wp-border-subtle); }

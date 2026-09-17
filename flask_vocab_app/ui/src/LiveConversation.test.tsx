@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/preact';
+import { act, fireEvent, render, screen, within } from '@testing-library/preact';
 import { LiveConversation } from './LiveConversation';
 import { LiveConnection, captionRows, type Caption } from './live-connection';
 
@@ -54,7 +54,7 @@ function fakeMedia() {
   return {getUserMedia,track,microphone,events,speaker};
 }
 beforeEach(()=>{vi.stubGlobal('scrollTo',vi.fn());});
-afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();});
+afterEach(()=>{vi.useRealTimers();vi.restoreAllMocks();vi.unstubAllGlobals();});
 
 describe('Speaking activity',()=>{
   it('opens a suggested directions scenario without starting the microphone',async()=>{
@@ -114,14 +114,21 @@ describe('Speaking activity',()=>{
     expect(JSON.parse(events.send.mock.calls[0][0]).content).toContain(shopScenario.opening);
     events.onmessage({data:JSON.stringify({type:'session.output_transcript.delta',event_id:'hello',delta:'Здравствуйте! Что вы ищете?',start_ms:0,end_ms:1000})});
     expect(await screen.findByText('Shop assistant')).toBeTruthy();
+    expect(screen.getByLabelText('Conversation captions').closest('.live-scene')).toBeTruthy();
+    expect(screen.getAllByRole('heading',{level:1})).toHaveLength(1);
     expect(screen.queryByText('Café worker')).toBeNull();
   });
   it('lets the learner return to the catalogue and choose another place without opening a call',async()=>{
     const fetch=vi.fn((url:string)=>response(url.includes('/scenarios') ? catalogue : {...options,scenario:url.includes('scenario_id=shop') ? shopScenario : scenario}));
     vi.stubGlobal('fetch',fetch);const {getUserMedia}=fakeMedia();render(<LiveConversation />);
-    await chooseCafe();fireEvent.click(screen.getByRole('button',{name:'← All scenarios'}));
+    await chooseCafe();
+    await vi.waitFor(()=>expect(document.activeElement).toBe(screen.getByRole('heading',{level:1,name:'Time to warm up'})));
+    expect(screen.getAllByRole('heading',{level:1})).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button',{name:'← All scenarios'}));
+    await vi.waitFor(()=>expect(document.activeElement).toBe(screen.getByRole('heading',{level:1,name:'Speaking'})));
     fireEvent.click(await scenarioButton('At the shop'));
     await screen.findByRole('heading',{name:'A notebook for class'});
+    await vi.waitFor(()=>expect(document.activeElement).toBe(screen.getByRole('heading',{level:1,name:'A notebook for class'})));
     expect(screen.queryByRole('heading',{name:'Time to warm up'})).toBeNull();
     expect(getUserMedia).not.toHaveBeenCalled();expect(fetch.mock.calls.some(([url])=>url==='/api/v1/live-conversations')).toBe(false);
   });
@@ -237,6 +244,76 @@ describe('Speaking activity',()=>{
     const view=render(<LiveConversation />);await chooseCafe();fireEvent.click(await screen.findByRole('button',{name:/Start talking/}));
     await vi.waitFor(()=>expect(getUserMedia).toHaveBeenCalled());view.unmount();grant(microphone);
     await vi.waitFor(()=>expect(track.stop).toHaveBeenCalled());
+  });
+  it('closes a late-created session without opening the microphone after returning to scenarios',async()=>{
+    let resolveCreation:(value:unknown)=>void=()=>{};
+    const fetch=vi.fn((url:string)=>url==='/api/v1/live-conversations'
+      ? new Promise(resolve=>{resolveCreation=resolve;})
+      : response(url.includes('/scenarios') ? catalogue : url.includes('/options') ? {...options,scenario} : saved));
+    vi.stubGlobal('fetch',fetch);const {getUserMedia}=fakeMedia();render(<LiveConversation />);
+    await chooseCafe();fireEvent.click(screen.getByRole('button',{name:/Start talking/}));
+    await vi.waitFor(()=>expect(fetch.mock.calls.some(([url])=>url==='/api/v1/live-conversations')).toBe(true));
+    fireEvent.click(screen.getByRole('link',{name:'← All scenarios'}));
+    await screen.findByRole('heading',{level:1,name:'Speaking'});
+    await act(async()=>{resolveCreation(await response(saved));});
+    await vi.waitFor(()=>expect(fetch.mock.calls.some(([url])=>url==='/api/v1/live-conversations/live-one/finish')).toBe(true));
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(fetch.mock.calls.some(([url])=>url.endsWith('/connect'))).toBe(false);
+    expect(screen.getByRole('heading',{level:1,name:'Speaking'})).toBeTruthy();
+    expect(screen.queryByText('Your conversation is saved.')).toBeNull();
+    expect(window.location.hash).toBe('#speaking');
+    await chooseCafe();
+    expect(screen.getByRole('button',{name:/Start talking/}).hasAttribute('disabled')).toBe(false);
+  });
+  it.each(['response','failure'])('ignores a late heartbeat %s after returning to scenarios',async outcome=>{
+    let resolveHeartbeat:(value:unknown)=>void=()=>{};
+    let rejectHeartbeat:(reason:Error)=>void=()=>{};
+    const fetch=vi.fn((url:string)=>url.endsWith('/heartbeat')
+      ? new Promise((resolve,reject)=>{resolveHeartbeat=resolve;rejectHeartbeat=reject;})
+      : response(url.includes('/scenarios') ? catalogue : url.includes('/options') ? {...options,scenario} : url.endsWith('/connect') ? {sdp:'v=0 answer'} : {...saved,scenario}));
+    vi.stubGlobal('fetch',fetch);const intervals=vi.spyOn(globalThis,'setInterval');
+    const {events,track,getUserMedia}=fakeMedia();render(<LiveConversation />);
+    await chooseCafe();fireEvent.click(screen.getByRole('button',{name:/Start talking/}));
+    await vi.waitFor(()=>expect(fetch.mock.calls.some(([url])=>url.endsWith('/connect'))).toBe(true));
+    events.onmessage({data:JSON.stringify({type:'session.started'})});
+    await screen.findByText('The conversation is live');
+    await vi.waitFor(()=>expect(intervals.mock.calls.some(([,delay])=>delay===10000)).toBe(true));
+    const heartbeat=intervals.mock.calls.find(([,delay])=>delay===10000)![0] as ()=>void;
+    act(()=>heartbeat());
+    fireEvent.click(screen.getByRole('link',{name:'← All scenarios'}));
+    await screen.findByRole('heading',{level:1,name:'Speaking'});
+    await act(async()=>{
+      if(outcome==='response') resolveHeartbeat(await response({...saved,state:'completed',scenario}));
+      else rejectHeartbeat(new Error('Old heartbeat failed.'));
+    });
+    expect(screen.getByRole('heading',{level:1,name:'Speaking'})).toBeTruthy();
+    expect(screen.queryByText('Your conversation is saved.')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByRole('heading',{name:'Time to warm up'})).toBeNull();
+    expect(track.stop).toHaveBeenCalled();expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(window.location.hash).toBe('#speaking');
+  });
+  it('keeps the catalogue open when a saved-session read arrives after leaving it',async()=>{
+    let resolveSaved:(value:unknown)=>void=()=>{};
+    vi.stubGlobal('fetch',vi.fn((url:string)=>url==='/api/v1/live-conversations/live-one'
+      ? new Promise(resolve=>{resolveSaved=resolve;}) : response(catalogue)));
+    const {getUserMedia}=fakeMedia();render(<LiveConversation sessionId="live-one" />);
+    expect(screen.getByRole('heading',{level:1,name:'Your conversation'})).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toBe('Loading your conversation…');
+    fireEvent.click(screen.getByRole('link',{name:'← All scenarios'}));
+    await screen.findByRole('heading',{level:1,name:'Speaking'});
+    await act(async()=>{resolveSaved(await response({...saved,state:'completed',scenario}));});
+    expect(screen.getByRole('heading',{level:1,name:'Speaking'})).toBeTruthy();
+    expect(screen.queryByRole('heading',{name:'Time to warm up'})).toBeNull();
+    expect(getUserMedia).not.toHaveBeenCalled();
+  });
+  it('keeps a heading and removes the loading message when a saved conversation fails to load',async()=>{
+    vi.stubGlobal('fetch',vi.fn(()=>Promise.reject(new Error('This conversation could not load.'))));
+    render(<LiveConversation sessionId="live-one" />);
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent','This conversation could not load.');
+    expect(screen.getByRole('heading',{level:1,name:'Your conversation'})).toBeTruthy();
+    expect(screen.queryByText('Loading your conversation…')).toBeNull();
+    expect(screen.getByRole('link',{name:'← All scenarios'})).toBeTruthy();
   });
   it('opening a saved session does not request microphone or reconnect a provider',async()=>{
     const fetch=setup({...saved,state:'completed',captions:[{type:'session.output_transcript.delta',event_id:'a',delta:'Здравствуйте!',start_ms:1,end_ms:500}]});

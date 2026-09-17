@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { api } from './learning-api';
+import { api, endOnLeave } from './learning-api';
 import { captionRows, LiveConnection, type Caption, type VoiceState } from './live-connection';
 import type { Language } from './review-types';
 import './styles/conversation.css';
@@ -51,20 +51,26 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
   const [refresh,setRefresh] = useState(0);
   const call = useRef<LiveConnection>();
   const mounted = useRef(true);
+  const viewGeneration = useRef(0);
   const starting = useRef(false);
   const startKey = useRef(crypto.randomUUID());
   const panel = useRef<HTMLDivElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const focusNextView = useRef(false);
   const scenarioRequest = useRef(0);
   const rewardedReview = useRef<string>();
   const active = ['connecting','listening','ending'].includes(state);
+  const isCurrentView = (generation:number) => mounted.current && generation===viewGeneration.current;
 
   useEffect(() => {
     mounted.current = true;
+    const generation=viewGeneration.current;
     const abort = new AbortController();
     if (sessionId) void api<Saved>(`/api/v1/live-conversations/${sessionId}`,undefined,abort.signal).then(value => {
+      if (!isCurrentView(generation) || abort.signal.aborted) return;
       setSaved(value); setCaptions(value.captions); setState('review');
-    }).catch(e => { if (!abort.signal.aborted) setError(e.message); });
-    const leave = () => call.current?.dispose();
+    }).catch(e => { if (isCurrentView(generation) && !abort.signal.aborted) setError(e.message); });
+    const leave = () => { viewGeneration.current++; call.current?.dispose(); };
     window.addEventListener('pagehide',leave);
     return () => { mounted.current=false; abort.abort(); leave(); window.removeEventListener('pagehide',leave); };
   },[]);
@@ -88,18 +94,20 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
 
   useEffect(() => {
     if (!saved || !active) return;
+    const generation=viewGeneration.current;
+    let stopped = false;
     let busy = false;
     const heartbeat = setInterval(() => {
-      if (busy) return;
+      if (busy || stopped || !isCurrentView(generation)) return;
       busy = true;
       void api<Saved>(`/api/v1/live-conversations/${saved.id}/heartbeat`,{}).then(value => {
-        if (!mounted.current) return;
+        if (stopped || !isCurrentView(generation)) return;
         setSaved(value);
         if (['completed','interrupted','failed'].includes(value.state)) { call.current?.dispose(); setState('ended'); }
-      }).catch(() => { if (mounted.current) setError(t('The app connection is unavailable. The call will end if it cannot reconnect.','Нет соединения с приложением. Разговор завершится, если связь не восстановится.')); })
+      }).catch(() => { if (!stopped && isCurrentView(generation)) setError(t('The app connection is unavailable. The call will end if it cannot reconnect.','Нет соединения с приложением. Разговор завершится, если связь не восстановится.')); })
         .finally(() => { busy=false; });
     },10000);
-    return () => clearInterval(heartbeat);
+    return () => { stopped=true; clearInterval(heartbeat); };
   },[saved?.id,active]);
 
   useEffect(() => {
@@ -111,13 +119,14 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
 
   useEffect(() => {
     if (!saved || !['ended','review'].includes(state)) return;
+    const generation=viewGeneration.current;
     let stopped = false;
     let timeout: ReturnType<typeof setTimeout>;
     let awaitingReview = 0;
     const read = async () => {
       try {
         const value = await api<Saved>(`/api/v1/live-conversations/${saved.id}`);
-        if (stopped) return;
+        if (stopped || !isCurrentView(generation)) return;
         setSaved(value);
         // Original provider fragments from the server replace, never concatenate
         // with, the copies received through the browser data channel.
@@ -128,7 +137,7 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
         // old conversations simply because someone opened their history.
         const reviewNotQueuedYet = value.scenario?.seed && !value.review && ++awaitingReview <= 4;
         if (value.connected || reviewPending || reviewNotQueuedYet || value.recordings.some(r => ['queued','capturing','analysing'].includes(r.state) && !r.retryable)) timeout=setTimeout(read,2500);
-      } catch(e) { if (!stopped) setError(e instanceof Error ? e.message : t('The saved conversation could not load.','Не удалось открыть разговор.')); }
+      } catch(e) { if (!stopped && isCurrentView(generation)) setError(e instanceof Error ? e.message : t('The saved conversation could not load.','Не удалось открыть разговор.')); }
     };
     void read();
     return () => { stopped=true; clearTimeout(timeout); };
@@ -143,43 +152,83 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
 
   async function start() {
     if (starting.current || !selectedScenarioId || !options?.scenario || changingScenario) return;
+    const generation=viewGeneration.current;
     starting.current=true; setError(''); setState('connecting');
     try {
       const value = await api<Saved>('/api/v1/live-conversations',{submission_id:startKey.current,language,scenario_id:selectedScenarioId,scenario_seed:options.scenario.seed,target_level:level});
-      if (!mounted.current) return;
+      if (!isCurrentView(generation)) {
+        // Creation may finish after the learner leaves. Close the unused session
+        // without requesting microphone access or connecting to the provider.
+        endOnLeave(`/api/v1/live-conversations/${value.id}/finish`);
+        return;
+      }
       setSaved(value);
       history.replaceState(null,'',`#speaking/${value.id}`);
       const connection = new LiveConnection(value.id,{
-        status:next => { if (mounted.current) setState(next); },
-        caption:fragment => { if (mounted.current) setCaptions(previous => [...previous,fragment]); },
-        error:message => { if (mounted.current) setError(message); },
-        playbackBlocked:() => { if (mounted.current) setPlaybackBlocked(true); },
+        status:next => { if (isCurrentView(generation)) setState(next); },
+        caption:fragment => { if (isCurrentView(generation)) setCaptions(previous => [...previous,fragment]); },
+        error:message => { if (isCurrentView(generation)) setError(message); },
+        playbackBlocked:() => { if (isCurrentView(generation)) setPlaybackBlocked(true); },
       },value.scenario?.opening);
       call.current=connection;
       await connection.start();
     } catch(e) {
-      if (mounted.current) {
+      if (isCurrentView(generation)) {
         setError(e instanceof DOMException && ['NotAllowedError','PermissionDeniedError'].includes(e.name)
           ? t('Microphone access was declined. Allow it in your browser, then start a new conversation.','Доступ к микрофону отклонён. Разрешите его в браузере и начните новый разговор.')
           : e instanceof Error ? e.message : t('The call could not start.','Не удалось начать разговор.'));
         setState('ended');
       }
-    } finally { starting.current=false; }
+    } finally { if (isCurrentView(generation)) starting.current=false; }
   }
 
   async function retry(recording:Recording) {
     if (!saved) return;
+    const generation=viewGeneration.current;
     setError('');
-    try { setSaved(await api<Saved>(`/api/v1/live-conversations/${saved.id}/recordings/${recording.id}/retry`,{})); setState('ended'); setRefresh(v=>v+1); }
-    catch(e) { setError(e instanceof Error ? e.message : 'Please retry.'); }
+    try {
+      const value=await api<Saved>(`/api/v1/live-conversations/${saved.id}/recordings/${recording.id}/retry`,{});
+      if (isCurrentView(generation)) { setSaved(value); setState('ended'); setRefresh(v=>v+1); }
+    } catch(e) { if (isCurrentView(generation)) setError(e instanceof Error ? e.message : 'Please retry.'); }
   }
 
   async function requestReview() {
     if (!saved || requestingReview) return;
+    const generation=viewGeneration.current;
     setError(''); setRequestingReview(true);
-    try { setSaved(await api<Saved>(`/api/v1/live-conversations/${saved.id}/review`,{})); setRefresh(v=>v+1); }
-    catch(e) { setError(e instanceof Error ? e.message : t('The feedback could not start. Please try again.','Не удалось начать разбор. Попробуйте ещё раз.')); }
-    finally { setRequestingReview(false); }
+    try {
+      const value=await api<Saved>(`/api/v1/live-conversations/${saved.id}/review`,{});
+      if (isCurrentView(generation)) { setSaved(value); setRefresh(v=>v+1); }
+    } catch(e) { if (isCurrentView(generation)) setError(e instanceof Error ? e.message : t('The feedback could not start. Please try again.','Не удалось начать разбор. Попробуйте ещё раз.')); }
+    finally { if (isCurrentView(generation)) setRequestingReview(false); }
+  }
+
+  async function finishSaved() {
+    if (!saved) return;
+    const generation=viewGeneration.current;
+    try {
+      const value=await api<Saved>(`/api/v1/live-conversations/${saved.id}/finish`,{});
+      if (isCurrentView(generation)) { setSaved(value); setRefresh(v=>v+1); }
+    } catch(e) { if (isCurrentView(generation)) setError(e instanceof Error ? e.message : 'Please retry.'); }
+  }
+
+  async function deleteSaved() {
+    if (!saved || deleting) return;
+    const generation=viewGeneration.current;
+    setDeleting(true);
+    try {
+      await api(`/api/v1/live-conversations/${saved.id}/delete`,{});
+      if (isCurrentView(generation)) newConversation();
+    } catch(e) { if (isCurrentView(generation)) setError(e instanceof Error ? e.message : 'Please retry.'); }
+    finally { if (isCurrentView(generation)) setDeleting(false); }
+  }
+
+  async function enablePlayback() {
+    const generation=viewGeneration.current;
+    try {
+      await call.current?.play();
+      if (isCurrentView(generation)) setPlaybackBlocked(false);
+    } catch { if (isCurrentView(generation)) setError(t('Your browser could not play audio. Check its sound permissions.','Браузер не воспроизводит звук. Проверьте разрешения.')); }
   }
 
   async function refreshScenario(another=false,scenarioId=selectedScenarioId,targetLevel=level) {
@@ -197,14 +246,20 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
   }
 
   function chooseScenario(id:string,targetLevel:PracticeLevel) {
+    focusNextView.current=true;
     window.scrollTo(0,0);
     setLevel(targetLevel); setSelectedScenarioId(id); setOptions(undefined); startKey.current=crypto.randomUUID();
     void refreshScenario(false,id,targetLevel);
   }
 
   function newConversation(event?: Event) {
+    viewGeneration.current++;
+    starting.current=false;
+    focusNextView.current=true;
+    window.scrollTo(0,0);
     event?.preventDefault(); call.current?.dispose(); call.current=undefined;
     setSaved(undefined); setCaptions([]); setState('idle'); setError(''); setSeconds(0); setMuted(false); setPlaybackBlocked(false);
+    setRequestingReview(false); setDeleting(false); setFollowing(true);
     scenarioRequest.current++; setChangingScenario(false); setSelectedScenarioId(undefined); setOptions(undefined);
     startKey.current=crypto.randomUUID(); history.replaceState(null,'','#speaking');
   }
@@ -219,11 +274,24 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
   const finished=saved && ['ended','review'].includes(state) && !saved.connected && !saved.needs_recovery;
   const compact=!!saved && ['ended','review'].includes(state);
   const naturalEnd=saved?.end_reason==='task_complete' || saved?.end_reason==='learner_finished';
+  useEffect(() => {
+    if (focusNextView.current && (showCatalogue || scenario)) {
+      heading.current?.focus({preventScroll:true});
+      focusNextView.current=false;
+    }
+  },[showCatalogue,scenario?.seed]);
+  const captionPanel = <div class="live-caption-section">
+      <div class="live-caption-heading"><label><input type="checkbox" checked={showCaptions} onChange={e => setShowCaptions(e.currentTarget.checked)} /> {t('Show conversation','Показать разговор')}</label>{!following && <button class="text-link" onClick={() => setFollowing(true)}>{t('Latest words ↓','Последние слова ↓')}</button>}</div>
+      {showCaptions && <div class="live-captions" ref={panel} tabIndex={0} aria-label={t('Conversation captions','Текст разговора')} onScroll={e => { const el=e.currentTarget; setFollowing(el.scrollHeight-el.scrollTop-el.clientHeight<50); }}>
+        {!rows.length && <p class="quiet">{t('Russian speech will appear here.','Здесь появится речь на русском.')}</p>}
+        {rows.map(row => <div key={row.id} class={`live-caption ${row.role}`}><span>{row.role==='you' ? t('You','Вы') : role}</span><p lang="ru">{row.text}</p></div>)}
+      </div>}
+    </div>;
   const content = <>
-    {showCatalogue ? <ActivityHeader title={t('Speaking','Разговорная практика')} description={t('Choose a scenario and practise speaking Russian.','Выберите ситуацию и практикуйте разговорный русский.')} /> : <>
-      <a class="text-link" href="#activities">← {t('Activities','Занятия')}</a>
-      <div class="live-heading"><div><p class="kicker">{t('Speaking & listening','Говорение и аудирование')}</p><h1>{t('Speaking','Разговорная практика')}</h1></div></div>
-    </>}
+    {showCatalogue ? <ActivityHeader title={t('Speaking','Разговорная практика')} description={t('Choose a scenario and practise speaking Russian.','Выберите ситуацию и практикуйте разговорный русский.')} headingRef={heading} headingTabIndex={-1} /> : <nav class="speaking-task-nav" aria-label={t('Speaking','Разговорная практика')}>
+      {state==='idle' ? <button class="text-link" onClick={()=>newConversation()}>{t('← All scenarios','← Все ситуации')}</button>
+        : <a class="text-link" href="#speaking" onClick={newConversation}>{t('← All scenarios','← Все ситуации')}</a>}
+    </nav>}
     {showCatalogue ? <section class="speaking-catalogue" aria-label={t('Choose a scenario','Выберите ситуацию')}>
       {catalogue ? practiceLevels.map(band=>{
         const choices=catalogue.scenarios.filter(item=>item.available!==false && item.variant_count>0 && (item.levels ?? ['A1']).includes(band));
@@ -242,13 +310,16 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
         </section>;
       }) : catalogueError ? <div class="speaking-catalogue-error"><p class="error-note" role="alert">{catalogueError}</p><button class="live-mute" onClick={()=>setCatalogueRefresh(value=>value+1)}>{t('Try loading scenarios again','Загрузить ситуации ещё раз')}</button></div> : <p role="status">{t('Loading scenarios…','Загружаем ситуации…')}</p>}
       <p class="quiet">{t('Speak in Russian, then get feedback on your grammar and fluency. The microphone stays off until you start.','Говорите по-русски и получайте обратную связь по грамматике и беглости речи. Микрофон включится, только когда вы начнёте разговор.')}</p>
-    </section> : sessionId && !saved && state==='review' ? <p role="status">{t('Loading your conversation…','Загружаем ваш разговор…')}</p> : <>
-    {state==='idle' && <button class="text-link speaking-back" onClick={()=>newConversation()}>{t('← All scenarios','← Все ситуации')}</button>}
-    <div class={`live-stage${compact ? ' live-stage-finished' : ''}`}>
+    </section> : sessionId && !saved && state==='review' ? <div class="live-scene">
+      <h1 ref={heading} tabIndex={-1}>{t('Your conversation','Ваш разговор')}</h1>
+      {!error && <p role="status">{t('Loading your conversation…','Загружаем ваш разговор…')}</p>}
+    </div> : <>
+    <div class={`live-stage${compact ? ' live-stage-finished' : ''}${active ? ' live-stage-active' : ''}`}>
       <div class="live-scene">
-        {!compact && <><div class="live-cafe-sign" aria-hidden="true"><span>{scenario?.sign ?? choice?.sign ?? 'КАФЕ'}</span><span>{scenario?.icon ?? choice?.icon ?? '☕'}</span></div>
-        <p class="kicker">{scenario?.target_level ? `${scenario.target_level} · ` : ''}{category}</p></>}
-        <h2>{scenario ? (language==='ru' ? scenario.title_ru ?? scenario.title : scenario.title) : state==='idle' ? category : t('Your conversation','Ваш разговор')}</h2>
+        <div class="live-brief-heading"><div>
+          {!compact && <p class="kicker">{scenario?.target_level ? `${scenario.target_level} · ` : ''}{category}</p>}
+          <h1 ref={heading} tabIndex={-1}>{scenario ? (language==='ru' ? scenario.title_ru ?? scenario.title : scenario.title) : state==='idle' ? category : t('Your conversation','Ваш разговор')}</h1>
+        </div>{!compact && !active && <div class="live-cafe-sign" aria-hidden="true"><span>{scenario?.sign ?? choice?.sign ?? 'КАФЕ'}</span><span>{scenario?.icon ?? choice?.icon ?? '☕'}</span></div>}</div>
         <p>{scenario ? (language==='ru' ? scenario.description_ru ?? scenario.description : scenario.description) : choice ? language==='ru' ? choice.description_ru : choice.description : t('Practise speaking Russian at your own pace.','Практикуйте разговорный русский в своём темпе.')}</p>
         {goals && !compact && <ul class="live-task-goals" aria-label={t('Your task','Ваша задача')}>{goals.map(goal=><li key={goal}>{goal}</li>)}</ul>}
         {state === 'idle' && <p class="quiet">{t('Your conversation partner is an AI. You can pause, change your mind or ask them to repeat.','Ваш собеседник — ИИ. Можно подумать, передумать или попросить повторить.')}</p>}
@@ -266,14 +337,15 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
           {['ended','review'].includes(state) && <div>
             <p class="live-status">{saved?.connected ? t('This conversation is still open in another tab.','Этот разговор открыт в другой вкладке.') : naturalEnd ? t('Conversation finished.','Разговор завершён.') : t('Your conversation is saved.','Разговор сохранён.')}</p>
             <div class="action-row">{!finished && <a class="cta" href="#speaking" onClick={newConversation}>{t('Try another conversation','Начать новый разговор')} ↗</a>}
-              {(saved?.connected || saved?.needs_recovery) && <button class="live-end" onClick={() => { void api<Saved>(`/api/v1/live-conversations/${saved.id}/finish`,{}).then(value=>{setSaved(value);setRefresh(v=>v+1);}).catch(e => setError(e.message)); }}>{saved.needs_recovery ? t('Recover saved audio','Восстановить запись') : t('End conversation','Завершить разговор')}</button>}</div>
+              {(saved?.connected || saved?.needs_recovery) && <button class="live-end" onClick={finishSaved}>{saved.needs_recovery ? t('Recover saved audio','Восстановить запись') : t('End conversation','Завершить разговор')}</button>}</div>
           </div>}
-          {playbackBlocked && active && <button class="cta" onClick={() => { void call.current?.play().then(() => setPlaybackBlocked(false)).catch(() => setError(t('Your browser could not play audio. Check its sound permissions.','Браузер не воспроизводит звук. Проверьте разрешения.'))); }}>{t('Turn on sound','Включить звук')}</button>}
+          {playbackBlocked && active && <button class="cta" onClick={enablePlayback}>{t('Turn on sound','Включить звук')}</button>}
           {options && !options.configured && <p role="alert">{t('Add the OpenAI key to the existing app .env file to use Speaking.','Для разговорной практики нужен ключ OpenAI в существующем файле .env приложения.')}</p>}
           {state==='idle' && <p class="quiet">{(options?.max_seconds ?? 300) <= 60
             ? t('Up to one minute in the demo. Your microphone audio is saved for speaking feedback.','В демоверсии — до одной минуты. Запись микрофона сохраняется для разбора речи.')
             : t('Up to five minutes. Your microphone audio is saved for speaking feedback.','До пяти минут. Запись микрофона сохраняется для разбора речи.')}</p>}
         </div>
+        {active && captionPanel}
         {compact && scenario && <details class="live-task-details"><summary>{t('Task & reference','Задание и подсказки')}</summary>
           <div class="live-task-reference">
             {goals && <ul class="live-task-goals" aria-label={t('Your task','Ваша задача')}>{goals.map(goal=><li key={goal}>{goal}</li>)}</ul>}
@@ -302,13 +374,7 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
         </>}
       <div class="live-review-actions"><a class="cta" href="#speaking" onClick={newConversation}>{t('Try another conversation','Начать новый разговор')} ↗</a></div>
     </section>}
-    {(active || rows.length>0) && <div class="live-caption-section">
-      <div class="live-caption-heading"><label><input type="checkbox" checked={showCaptions} onChange={e => setShowCaptions(e.currentTarget.checked)} /> {t('Show conversation','Показать разговор')}</label>{!following && <button class="text-link" onClick={() => setFollowing(true)}>{t('Latest words ↓','Последние слова ↓')}</button>}</div>
-      {showCaptions && <div class="live-captions" ref={panel} tabIndex={0} aria-label={t('Conversation captions','Текст разговора')} onScroll={e => { const el=e.currentTarget; setFollowing(el.scrollHeight-el.scrollTop-el.clientHeight<50); }}>
-        {!rows.length && <p class="quiet">{t('Russian speech will appear here.','Здесь появится речь на русском.')}</p>}
-        {rows.map(row => <div key={row.id} class={`live-caption ${row.role}`}><span>{row.role==='you' ? t('You','Вы') : role}</span><p lang="ru">{row.text}</p></div>)}
-      </div>}
-    </div>}
+    {!active && rows.length>0 && captionPanel}
     {saved && saved.recordings.some(r => r.state !== 'capturing') && <details class="live-notes" open={!active && !saved.review}>
       <summary>{saved.review ? t('Original recordings','Исходные записи') : t('Recordings & language notes','Записи и разбор речи')}</summary>
       <p class="quiet">{saved.review ? t('Listen back to the original recording if anything in the feedback seems wrong.','Если что-то в разборе кажется неверным, прослушайте исходную запись.') : t('These notes use a separate transcription of your microphone audio. Listen to the recording if a suggestion looks wrong.','Для разбора используется отдельное распознавание записи микрофона. Если замечание кажется неверным, прослушайте запись.')}</p>
@@ -322,7 +388,7 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
         {!saved.review && recording.retryable && <button class="text-link" onClick={() => retry(recording)}>{scenario?.seed && !recording.assessment ? t('Retry transcription','Повторить распознавание') : t('Try language notes again','Повторить разбор речи')}</button>}
       </section>)}
     </details>}
-    {saved && !active && !saved.connected && <details class="live-delete"><summary>{t('Delete this conversation','Удалить этот разговор')}</summary><p>{t('This removes its recordings, captions and language notes.','Записи, текст и разбор этого разговора будут удалены.')}</p><button class="live-end" disabled={deleting} onClick={async () => { setDeleting(true); try { await api(`/api/v1/live-conversations/${saved.id}/delete`,{}); newConversation(); } catch(e) { setError(e instanceof Error ? e.message : 'Please retry.'); } finally { setDeleting(false); } }}>{t('Delete conversation','Удалить разговор')}</button></details>}
+    {saved && !active && !saved.connected && <details class="live-delete"><summary>{t('Delete this conversation','Удалить этот разговор')}</summary><p>{t('This removes its recordings, captions and language notes.','Записи, текст и разбор этого разговора будут удалены.')}</p><button class="live-end" disabled={deleting} onClick={deleteSaved}>{t('Delete conversation','Удалить разговор')}</button></details>}
     {state==='idle' && <>
       <SpeakingHistory language={language} />
       <details class="speaking-tools"><summary>{t('Developer tools','Инструменты разработчика')}</summary>

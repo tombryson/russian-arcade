@@ -79,7 +79,7 @@ describe('Russian Arcade activity home', () => {
     render(<App />);
     expect(await screen.findByText('Здравствуйте!')).toBeTruthy();
     expect(window.location.hash).toBe('#speaking/live-one');
-    expect(screen.getByRole('heading',{name:'Speaking'})).toBeTruthy();
+    expect(screen.getByRole('heading',{level:1,name:'Your conversation'})).toBeTruthy();
   });
   it.each(['conversation/old-one','speaking/recorded/old-one'])('opens recorded history under Speaking: %s', async hash => {
     window.history.replaceState(null, '', `/post/#${hash}`);
