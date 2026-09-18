@@ -27,7 +27,7 @@ class ConversationAI:
     def __init__(self, config):
         self.config = config_snapshot(config)
 
-    def _call(self, name, instruction, data, schema):
+    def _call(self, name, instruction, data, schema, *, max_tokens=4096):
         if not self.config.get('OPENAI_API_KEY'):
             raise SpeechError('Conversation replies need OPENAI_API_KEY in your existing .env file.')
         import openai
@@ -37,7 +37,7 @@ class ConversationAI:
                 messages=[{'role': 'system', 'content': instruction},
                           {'role': 'user', 'content': json.dumps(data, ensure_ascii=False)}],
                 response_format={'type': 'json_schema', 'json_schema': {'name': name, 'strict': True, 'schema': schema}},
-                reasoning_effort='low', max_completion_tokens=4096)
+                reasoning_effort='low', max_completion_tokens=max_tokens)
             choice = response.choices[0]
             if choice.finish_reason != 'stop' or choice.message.refusal or not choice.message.content:
                 raise ValueError()
@@ -46,6 +46,16 @@ class ConversationAI:
             raise
         except Exception:
             raise SpeechError('The conversation model could not finish. Your recording and transcript are kept.') from None
+
+    def step_dialogue(self, scenario):
+        from services.step_conversation_ai import STEP_INSTRUCTIONS, STEP_SCHEMA, validate_dialogue
+        from services.conversation_policy import level_instructions
+        try:
+            result = self._call('step_conversation', STEP_INSTRUCTIONS + level_instructions(scenario),
+                                {'scenario': scenario}, STEP_SCHEMA, max_tokens=8192)
+        except SpeechError:
+            raise SpeechError('The step-through dialogue could not be prepared. Please retry.') from None
+        return validate_dialogue(result)
 
     def reply(self, scenario, history):
         started = time.monotonic()

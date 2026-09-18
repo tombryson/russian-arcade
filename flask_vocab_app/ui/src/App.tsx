@@ -22,11 +22,12 @@ import { AppearancePicker } from './AppearancePicker';
 import { ActivitiesMenu } from './ActivitiesMenu';
 import { ActivityHeader } from './ActivityHeader';
 import type { Language } from './review-types';
+import { StepThroughConversation } from './StepThroughConversation';
 import sleepingBarsik from './assets/barsik-sleeping-v1.webp';
 import './styles/lesson-player.css';
 
 type Page = 'home' | 'activities' | 'words' | 'practice' | 'first-delivery' | 'first-steps' | 'flashcards' | 'review' | 'generate' | 'conversation' | 'speech-lab' | 'speaking' | 'journey' | 'game' | 'games' | 'shop';
-type Route = { page: Page; gameId?:string; sessionId?: string; worldId?:string; wordId?: number; lessonId?: string; topic?:string; scenarioId?:string; canonicalHash?: string };
+type Route = { page: Page; gameId?:string; sessionId?: string; worldId?:string; wordId?: number; lessonId?: string; topic?:string; scenarioId?:string; speakingMode?:'fluent'|'step'; canonicalHash?: string };
 function route(): Route {
   const hash = window.location.hash.slice(1);
   const gameSession=/^games\/session\/([A-Za-z0-9_-]+)$/.exec(hash);
@@ -41,6 +42,8 @@ function route(): Route {
   const conversation = /^(?:conversation|speaking\/recorded)\/([A-Za-z0-9_.:-]+)$/.exec(hash);
   if (conversation) return {page:'conversation',sessionId:conversation[1],canonicalHash:`#speaking/recorded/${conversation[1]}`};
   if (hash === 'speech-lab' || hash === 'speaking/lab') return {page:'speech-lab',canonicalHash:'#speaking/lab'};
+  const step=/^speaking\/step(?:\/([A-Za-z0-9_-]+))?$/.exec(hash);
+  if(step)return {page:'speaking',speakingMode:'step',sessionId:step[1]};
   const scenario=/^speaking\/scenario\/([a-z-]+)$/.exec(hash);
   if(scenario)return {page:'speaking',scenarioId:scenario[1]};
   const live = /^(?:live-conversation|speaking)(?:\/([A-Za-z0-9_.:-]+))?$/.exec(hash);
@@ -267,7 +270,9 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
         : location.page === 'first-delivery' ? <><FirstDelivery key={state.home?.profile.id ?? state.mode} next={tutorialNext} onIntroduce={onboarding.introduce} profileHref={householdEnabled ? "/post/household" : "/post/profiles"} />{onboarding.error && <div class="page onboarding-save-note" role="status"><p>{language==='ru' ? 'Не удалось сохранить знакомство с приложением.' : 'Your introduction could not be saved.'} {onboarding.error}</p><button class="text-link" onClick={()=>void onboarding.retry()}>{language==='ru' ? 'Попробовать ещё раз' : 'Try saving again'}</button></div>}</>
         : location.page === 'journey' && !onboarding.state.coins_introduced ? <section class="page"><h1>Your first delivery</h1><p>Meet Barsik and see how your practice helps his journey.</p><a class="cta" href="#first-delivery">Let’s begin</a></section>
         : location.page === 'journey' ? <Journey key={`${state.home?.profile.id ?? state.mode}:${location.worldId ?? 'map'}`} worldId={location.worldId} language={language} progression={progression} />
-        : location.page === 'speaking' ? <LiveConversation key={`${state.home?.profile.id}:${location.sessionId ?? location.scenarioId ?? 'new'}`} sessionId={location.sessionId} initialScenarioId={location.scenarioId} language={language} />
+        : location.page === 'speaking' ? location.speakingMode==='step' && location.sessionId
+          ? <StepThroughConversation key={`${state.home?.profile.id}:${location.sessionId}`} sessionId={location.sessionId} language={language} />
+          : <LiveConversation key={`${state.home?.profile.id}:${location.speakingMode ?? 'fluent'}:${location.sessionId ?? location.scenarioId ?? 'new'}`} sessionId={location.sessionId} initialMode={location.speakingMode} initialScenarioId={location.scenarioId} language={language} />
         : ['conversation','speech-lab'].includes(location.page) ? <Conversation key={`${state.home?.profile.id}:${location.sessionId ?? location.page}`} sessionId={location.sessionId} lab={location.page==='speech-lab'} language={language} />
         : location.page === 'generate' && nativeEnabled ? state.mode === 'personal' || state.mode === 'adult' ? <GenerateCards key={location.sessionId ?? `new:${location.wordId ?? ''}`} batchId={location.sessionId} wordId={location.wordId} language={language} /> : <FlashcardsSetup adult={false} language={language} />
         : ['flashcards','review'].includes(location.page) && !nativeEnabled ? <section class="page"><h1>Flashcard practice is paused.</h1><p>Your saved cards and reviews are kept. Enable native flashcards in the app configuration to continue.</p><a class="text-link" href="#activities">Back to activities</a></section>

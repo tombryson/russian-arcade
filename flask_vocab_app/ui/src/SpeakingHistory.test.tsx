@@ -12,8 +12,8 @@ function openHistory() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Speaking history', () => {
-  it('loads both histories on demand, sorts by date and keeps speech tests in the lab', async () => {
-    const fetch = vi.fn((url: string) => response({sessions:url.includes('live-conversations')
+  it('loads all modes on demand, sorts by date and keeps speech tests in the lab', async () => {
+    const fetch = vi.fn((url: string) => response({sessions:url.includes('step-conversations') ? [{id:'guided',created_at:250,title:'At the station'}] : url.includes('live-conversations')
       ? [{id:'recent',created_at:300},{id:'older',created_at:100}]
       : [{id:'recorded',mode:'conversation',created_at:200},{id:'lab',mode:'lab',created_at:400}]}));
     vi.stubGlobal('fetch',fetch);
@@ -22,15 +22,17 @@ describe('Speaking history', () => {
     openHistory();
     await screen.findByText(/Recorded practice/);
     expect(screen.getAllByRole('link').map(link => link.getAttribute('href'))).toEqual([
-      '#speaking/recent', '#speaking/recorded/recorded', '#speaking/older',
+      '#speaking/recent', '#speaking/step/guided', '#speaking/recorded/recorded', '#speaking/older',
     ]);
-    expect(fetch).toHaveBeenCalledTimes(2);
-    expect(fetch.mock.calls.every(([url]) => url.endsWith('/options'))).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+      '/api/v1/live-conversations/options', '/api/v1/conversations/options', '/api/v1/step-conversations/history',
+    ]);
   });
   it('retains available history on a partial failure and can retry', async () => {
     let fail = true;
     vi.stubGlobal('fetch',vi.fn((url: string) => url.includes('/conversations/') && fail
-      ? Promise.reject(new Error('Unavailable')) : response({sessions:[{id:url.includes('live-')?'live':'old',mode:'conversation',created_at:100}]})));
+      ? Promise.reject(new Error('Unavailable')) : response({sessions:url.includes('step-conversations') ? [] : [{id:url.includes('live-')?'live':'old',mode:'conversation',created_at:100}]})));
     render(<SpeakingHistory language="en" />);
     openHistory();
     await screen.findByText('Some conversations could not load.');

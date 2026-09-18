@@ -257,6 +257,8 @@ class GameAccessTests(unittest.TestCase):
             before_ledger = [tuple(row) for row in conn.execute('SELECT rowid,* FROM progression_entries')]
             conn.execute('DROP TABLE journey_game_purchases')
             conn.execute('DROP TABLE journey_game_access')
+            conn.execute('DROP TABLE step_conversation_answers')
+            conn.execute('DROP TABLE step_conversation_sessions')
             conn.execute((MIGRATION_DIR / '038_practice_game_access.sql').read_text())
             conn.execute('INSERT INTO journey_game_access VALUES (?,?,?,?,?,?,?)',
                          ('personal-learning', 'pack-bag', 12, 12, 123, None, 'practice-coins-v1'))

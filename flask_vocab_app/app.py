@@ -59,6 +59,8 @@ from services.speaking_assessment import SpeakingAssessment
 from services.live_voice_provider import LiveVoiceProvider
 from blueprints.live_conversation import create_live_conversation_blueprint
 from services.speech_provider import SpeechProvider
+from services.step_conversation import StepConversationService
+from blueprints.step_conversation import create_step_conversation_blueprint
 from utils.household_access import access_policy, install_household_policy
 from utils.shell import render_page, is_shell_navigation
 from utils.i18n import SUPPORTED_UI_LANGUAGES, normalize_ui_language, translate_ui
@@ -126,6 +128,9 @@ def create_app(config_overrides=None, service_overrides=None):
     conversation = ConversationService(app.config['DB_PATH'], speech, conversation_ai, app.config)
     app.extensions['learning']['conversation'] = conversation
     app.register_blueprint(create_conversation_blueprint(conversation))
+    step_conversation = StepConversationService(app.config['DB_PATH'], speech, conversation_ai, app.config)
+    app.extensions['learning']['step_conversation'] = step_conversation
+    app.register_blueprint(create_step_conversation_blueprint(step_conversation))
     live = LiveConversationService(app.config['DB_PATH'],
         service('LiveVoiceProvider', lambda: LiveVoiceProvider(app.config)),
         speech, conversation_ai, app.config,

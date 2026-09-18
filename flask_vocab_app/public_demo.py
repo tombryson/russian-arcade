@@ -21,6 +21,7 @@ READ_ENDPOINTS = frozenset({
     'curriculum.index',
     'vocab.vocab_list', 'vocab.inventory', 'learning.state', 'learning.asset',
     'live_conversation.scenarios', 'live_conversation.options', 'user_sessions.read',
+    'step_conversation.options', 'step_conversation.history',
     'onboarding.read', 'onboarding.practice_read', 'first_steps.chapter', 'first_steps.lesson',
     'progression.read', 'progression.world', 'native_review.overview', 'native_review.read',
     'native_review.history', 'journey_games.catalogue', 'journey_games.read',

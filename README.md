@@ -28,7 +28,7 @@ Google Drive and SQLite have separate roles. Drive supports quick word capture, 
 | **Sentence practice** | Practise translation and review feedback on your attempt. |
 | **Phrasebook** | Read Russian sentences beside their English translations and play each recording for shadowing. Search either language or filter by topic and level. |
 | **Writing** | Respond to a prompt, save your writing and revisit assessed attempts. |
-| **Speaking** | Practise a scenario such as ordering at a café or asking directions. A separate audio review assesses grammar, fluency and task completion. |
+| **Speaking** | Talk freely in a scenario, or choose replies one exchange at a time in Step-through mode. Live conversations receive an audio review; Step-through offers optional hints and explanations. |
 | **Tutor lessons** | Upload a PDF or image, save revisions, and practise with exercises based on the document. Select words on its pages for flashcards. |
 | **My words** | Browse words, forms and grammatical details. See card counts and manage saved vocabulary. |
 | **Barsik’s journey** | Learn your first words through a five-lesson introduction, discover games, earn Lingocoins and follow progress through story stops. |
@@ -150,6 +150,8 @@ Cards use the source sentence where possible. New examples are labelled when a f
 ### Live conversation and assessment
 
 WebRTC carries live audio between the browser and the conversation provider. Scenarios have variations, goals and instructions for their practice level. Those details are saved with each attempt. The agent can end the conversation when the task is complete.
+
+[Step-through mode](docs/word-post/step-through-speaking.md) uses the same scenarios to teach what to say next. Each paused exchange offers three Russian replies and an optional hint. The server checks the answer and saves the learner's place. Completion earns participation coins; choosing a written reply does not change speaking fluency scores.
 
 A separate review assesses the learner’s recording for grammar, fluency and task completion. It does not use the live learner transcript as evidence: transcription can silently correct the endings being assessed. Audio review can still miss errors or mishear speech.
 

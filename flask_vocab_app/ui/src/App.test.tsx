@@ -81,6 +81,18 @@ describe('Russian Arcade activity home', () => {
     expect(window.location.hash).toBe('#speaking/live-one');
     expect(screen.getByRole('heading',{level:1,name:'Your conversation'})).toBeTruthy();
   });
+  it('resumes a step-through link without opening a live conversation or regenerating it',async()=>{
+    window.history.replaceState(null,'','/post/#speaking/step/guided-one');
+    const fetch=vi.fn((url:string)=>response(url.endsWith('/household')
+      ? {adult:false,profile:{id:'personal',display_name:'Learner'},csrf_token:'csrf'}
+      : {id:'guided-one',state:'completed',scenario:{seed:'shop-one',title:'At the shop'},target_level:'A1',language:'en',created_at:1,error:null,retryable:false,turn_count:4,completed_turns:4,current_turn:null,transcript:[],ending:{russian:'Спасибо! До свидания!',english:'Thank you! Goodbye!'}}));
+    vi.stubGlobal('fetch',fetch);render(<App />);
+    expect(await screen.findByRole('heading',{name:'Conversation complete',level:1})).toBeTruthy();
+    expect(window.location.hash).toBe('#speaking/step/guided-one');
+    expect(fetch.mock.calls.some(([url])=>url==='/api/v1/step-conversations/guided-one')).toBe(true);
+    expect(fetch.mock.calls.some(([url])=>url.includes('/live-conversations'))).toBe(false);
+    expect(screen.getByLabelText('Activities').getAttribute('data-active')).toBe('true');
+  });
   it.each(['conversation/old-one','speaking/recorded/old-one'])('opens recorded history under Speaking: %s', async hash => {
     window.history.replaceState(null, '', `/post/#${hash}`);
     const fetch = vi.fn((url: string) => response(url.endsWith('/household')

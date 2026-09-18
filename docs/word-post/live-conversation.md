@@ -1,16 +1,18 @@
 # Speaking activity
 
-Status: **Speaking**, with five selectable conversation games, varied situations,
-natural endings and an audio review after the call. Open `/post/#speaking`.
-Updated 15 September 2026.
+Speaking offers **Fluent conversation** and **Step-through** modes under the same
+scenario catalogue. Open `/post/#speaking`. Fluent conversation keeps the live
+microphone connection and audio review described below. Step-through pauses each
+exchange for a reply choice and optional hint; see
+[Step-through conversations](step-through-speaking.md).
+Updated 18 September 2026.
 
 The scoring rubric, evidence boundaries and calibration plan are documented in
 [Speaking assessment](speaking-assessment.md).
 The game catalogue and database hierarchy are documented in
 [Speaking scenarios](speaking-scenarios.md).
 
-Speaking is the single activity for new conversations, using the existing live
-connection. The former recording-and-send activity has been retired from the
+Speaking is the single activity for new conversations. The former recording-and-send activity has been retired from the
 learner interface. Its saved recordings, replies, translations and language notes
 remain accessible through **Previous conversations**, alongside saved live calls.
 Recorded sessions open for review; they no longer offer new microphone/file turns.

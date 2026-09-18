@@ -230,7 +230,7 @@ class JourneyGamesTests(unittest.TestCase):
         with transaction(self.db, write=True) as conn:
             before = [tuple(row) for row in conn.execute('SELECT * FROM first_steps_attempts ORDER BY id')]
             ledger = [tuple(row) for row in conn.execute('SELECT * FROM progression_events')]
-            for table in ('journey_game_purchases', 'journey_game_access', 'journey_route_audio_cache', 'journey_route_preparations', 'journey_route_actions', 'journey_route_state', 'journey_game_corrections', 'journey_game_preparations', 'journey_game_examples', 'journey_game_media', 'journey_game_sessions', 'journey_game_unlocks'):
+            for table in ('step_conversation_answers', 'step_conversation_sessions', 'journey_game_purchases', 'journey_game_access', 'journey_route_audio_cache', 'journey_route_preparations', 'journey_route_actions', 'journey_route_state', 'journey_game_corrections', 'journey_game_preparations', 'journey_game_examples', 'journey_game_media', 'journey_game_sessions', 'journey_game_unlocks'):
                 conn.execute('DROP TABLE ' + table)
             conn.execute('ALTER TABLE word_jumble_games DROP COLUMN task_json')
             conn.execute('DELETE FROM schema_migrations WHERE version>=30')
@@ -506,6 +506,8 @@ class JourneyGamesTests(unittest.TestCase):
             unlock_columns = [row[1] for row in conn.execute('PRAGMA table_info(journey_game_unlocks)')]
             unlocks = conn.execute("SELECT rowid," + ','.join(unlock_columns) + " FROM journey_game_unlocks WHERE game_id IN ('pack-bag','directions') ORDER BY rowid").fetchall()
             events = conn.execute('SELECT * FROM progression_events ORDER BY rowid').fetchall()
+            conn.execute('DROP TABLE step_conversation_answers')
+            conn.execute('DROP TABLE step_conversation_sessions')
             conn.executescript('DROP TABLE journey_game_purchases; DROP TABLE journey_game_access; DROP TABLE journey_route_audio_cache; DROP TABLE journey_route_preparations; DROP TABLE journey_route_actions; DROP TABLE journey_route_state; DROP TABLE journey_game_corrections; DROP TABLE journey_game_preparations; DROP TABLE journey_game_examples; DROP TABLE journey_game_sessions; DROP TABLE journey_game_unlocks;')
             conn.executescript((MIGRATION_DIR / '030_journey_games.sql').read_text())
             conn.execute('DELETE FROM journey_game_unlocks')

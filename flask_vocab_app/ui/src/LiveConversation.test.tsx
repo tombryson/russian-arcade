@@ -57,6 +57,23 @@ beforeEach(()=>{vi.stubGlobal('scrollTo',vi.fn());});
 afterEach(()=>{vi.useRealTimers();vi.restoreAllMocks();vi.unstubAllGlobals();});
 
 describe('Speaking activity',()=>{
+  it('previews step-through from the shared catalogue without starting live audio or generation',async()=>{
+    const fetch=setup();const {getUserMedia}=fakeMedia();render(<LiveConversation />);
+    fireEvent.click(screen.getByRole('button',{name:'Step-through',exact:true}));
+    expect(screen.getByRole('button',{name:'Step-through',exact:true}).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(await scenarioButton('At the café'));
+    await screen.findByRole('button',{name:'Start step-through'});
+    expect(fetch.mock.calls.some(([url])=>url==='/api/v1/step-conversations/options?scenario_id=cafe&level=A1')).toBe(true);
+    expect(fetch.mock.calls.some(([url])=>url.includes('/live-conversations/options'))).toBe(false);
+    expect(fetch.mock.calls.some(([url])=>url==='/api/v1/step-conversations')).toBe(false);
+    expect(getUserMedia).not.toHaveBeenCalled();
+  });
+  it('restores the chosen step-through mode when opening its catalogue link',async()=>{
+    setup();fakeMedia();render(<LiveConversation initialMode="step" />);
+    await scenarioButton('At the café');
+    expect(screen.getByRole('button',{name:'Step-through',exact:true}).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button',{name:'Fluent conversation'}).getAttribute('aria-pressed')).toBe('false');
+  });
   it('opens a suggested directions scenario without starting the microphone',async()=>{
     const fetch=setup();const {getUserMedia}=fakeMedia();
     render(<LiveConversation initialScenarioId="directions" />);

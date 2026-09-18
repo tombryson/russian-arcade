@@ -25,6 +25,7 @@ def backup_learning_store(db_path, store, destination, lesson_upload_folder=None
             assets = [dict(row) for row in snapshot.execute('SELECT id,storage_key,sha256,byte_size,media_type FROM learning_assets ORDER BY id')]
             recordings = []
             live_recordings = []
+            step_recordings = []
             lesson_files = []
             legacy_lessons = []
             if snapshot.execute("SELECT 1 FROM sqlite_master WHERE name='lesson_files'").fetchone():
@@ -46,6 +47,18 @@ def backup_learning_store(db_path, store, destination, lesson_upload_folder=None
                 for row in snapshot.execute('SELECT id FROM conversation_sessions'):
                     greeting = row['id'] + '-greeting.mp3'
                     if (audio_root / greeting).is_file(): recordings.append(greeting)
+            if snapshot.execute("SELECT 1 FROM sqlite_master WHERE name='step_conversation_sessions'").fetchone():
+                if snapshot.execute("SELECT 1 FROM step_conversation_sessions WHERE state='preparing' AND lease_until>?", (int(time.time()),)).fetchone():
+                    raise LearningError('backup_busy', 'Let step-through dialogue preparation finish before backing up.')
+                step_root = Path(db_path).resolve().parent / 'step-conversation-audio'
+                for row in snapshot.execute('SELECT id,dialogue_json FROM step_conversation_sessions WHERE dialogue_json IS NOT NULL'):
+                    for turn in json.loads(row['dialogue_json'])['turns']:
+                        for kind in ('npc', 'reply'):
+                            filename = f'{row["id"]}-{turn["id"]}-{kind}.mp3'
+                            if Path(filename).name != filename:
+                                raise LearningError('backup_invalid', 'Invalid step-through recording path in the database.')
+                            if (step_root / filename).is_file():
+                                step_recordings.append(filename)
     for asset in assets:
         source = store.path(asset['storage_key'])
         target = destination / 'assets' / asset['storage_key'][:2] / asset['storage_key']
@@ -78,6 +91,17 @@ def backup_learning_store(db_path, store, destination, lesson_upload_folder=None
             raise LearningError('backup_invalid', 'A live recording is missing; the backup is incomplete.') from None
         live_manifest.append({'file':'live-conversation-audio/'+name,'sha256':hashlib.sha256(target.read_bytes()).hexdigest(),'byte_size':target.stat().st_size})
     from services.lesson_files import LessonFiles, digest
+    step_manifest = []
+    for name in sorted(set(step_recordings)):
+        source = Path(db_path).resolve().parent / 'step-conversation-audio' / name
+        target = destination / 'step-conversation-audio' / name
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        try:
+            shutil.copyfile(source, target)
+        except OSError:
+            raise LearningError('backup_invalid', 'A step-through recording is missing; the backup is incomplete.') from None
+        step_manifest.append({'file': 'step-conversation-audio/' + name,
+                              'sha256': hashlib.sha256(target.read_bytes()).hexdigest(), 'byte_size': target.stat().st_size})
     lesson_store = LessonFiles(db_path, lesson_upload_folder)
     lesson_manifest = {}
 
@@ -111,6 +135,7 @@ def backup_learning_store(db_path, store, destination, lesson_upload_folder=None
             raise LearningError('backup_invalid','The lesson snapshot failed its integrity checks.')
     manifest = {'schema': 1, 'database': {'file': 'vocab.db', 'sha256': hashlib.sha256(database.read_bytes()).hexdigest()},
                 'assets': assets, 'conversation_audio': audio_manifest, 'live_conversation_audio': live_manifest,
+                'step_conversation_audio': step_manifest,
                 'lesson_files':list(lesson_manifest.values()),
                 'scope': 'Application SQLite database, Word Post assets, lesson originals/pages and private conversation recordings. Other legacy media, external Anki and Drive are separate backups.'}
     (destination / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2))

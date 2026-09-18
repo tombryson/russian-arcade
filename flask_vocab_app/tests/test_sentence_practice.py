@@ -356,8 +356,11 @@ class SentencePracticeTests(unittest.TestCase):
     def test_curriculum_migration_preserves_legacy_game_and_saved_draft(self):
         self.service.save_draft(self.id, 'Сохранить мой черновик.', 0)
         with sqlite3.connect(self.service.db_path) as conn:
+            conn.execute('DROP TABLE step_conversation_answers')
+            conn.execute('DROP TABLE step_conversation_sessions')
             conn.execute('ALTER TABLE word_jumble_games DROP COLUMN task_json')
-            conn.execute('DELETE FROM schema_migrations WHERE version=40')
+            conn.execute('DELETE FROM schema_migrations WHERE version>=40')
+            self.assertEqual(conn.execute('SELECT MAX(version) FROM schema_migrations').fetchone()[0], 39)
             before_game = conn.execute('SELECT * FROM word_jumble_games WHERE id=?', (self.id,)).fetchone()
             before_draft = conn.execute('SELECT * FROM word_jumble_drafts WHERE game_id=?', (self.id,)).fetchone()
         version, backup = upgrade_database(self.service.db_path)

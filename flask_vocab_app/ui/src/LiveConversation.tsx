@@ -8,6 +8,7 @@ import { russianTranscript } from './conversation-transcript';
 import { SpeakingHistory } from './SpeakingHistory';
 import { ActivityHeader } from './ActivityHeader';
 import type { PracticeLevel } from './Progression';
+import { StepThroughConversation } from './StepThroughConversation';
 
 type Recording = {id:string;ordinal:number;state:string;audio_url:string;sample_count:number;sample_rate:number;error:string|null;retryable:boolean;
   transcript:{text:string}|null; assessment:{communication:string;uncertainty:string;corrections:{original:string;replacement:string;explanation:string}[]}|null};
@@ -27,8 +28,9 @@ type Saved = {id:string;scenario_id?:string;state:string;connected:boolean;needs
 type Options = {configured:boolean;notes_configured:boolean;max_seconds:number;sessions:{id:string;state:string;created_at:number}[];scenario?:Scenario};
 const practiceLevels:readonly PracticeLevel[]=['A1','A2','B1','B2'];
 
-export function LiveConversation({sessionId,language='en',initialScenarioId}:{sessionId?:string;language?:Language;initialScenarioId?:string}) {
+export function LiveConversation({sessionId,language='en',initialScenarioId,initialMode='fluent'}:{sessionId?:string;language?:Language;initialScenarioId?:string;initialMode?:'fluent'|'step'}) {
   const t = (en:string,ru:string) => language === 'ru' ? ru : en;
+  const [practiceMode,setPracticeMode] = useState<'fluent'|'step'>(initialMode);
   const [options,setOptions] = useState<Options>();
   const [catalogue,setCatalogue] = useState<Catalogue>();
   const [catalogueError,setCatalogueError] = useState('');
@@ -249,7 +251,7 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
     focusNextView.current=true;
     window.scrollTo(0,0);
     setLevel(targetLevel); setSelectedScenarioId(id); setOptions(undefined); startKey.current=crypto.randomUUID();
-    void refreshScenario(false,id,targetLevel);
+    if (practiceMode==='fluent') void refreshScenario(false,id,targetLevel);
   }
 
   function newConversation(event?: Event) {
@@ -261,7 +263,7 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
     setSaved(undefined); setCaptions([]); setState('idle'); setError(''); setSeconds(0); setMuted(false); setPlaybackBlocked(false);
     setRequestingReview(false); setDeleting(false); setFollowing(true);
     scenarioRequest.current++; setChangingScenario(false); setSelectedScenarioId(undefined); setOptions(undefined);
-    startKey.current=crypto.randomUUID(); history.replaceState(null,'','#speaking');
+    startKey.current=crypto.randomUUID(); history.replaceState(null,'',practiceMode==='step' ? '#speaking/step' : '#speaking');
   }
 
   const rows=captionRows(captions);
@@ -287,8 +289,11 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
         {rows.map(row => <div key={row.id} class={`live-caption ${row.role}`}><span>{row.role==='you' ? t('You','Вы') : role}</span><p lang="ru">{row.text}</p></div>)}
       </div>}
     </div>;
+  const modePicker = <div class="speaking-mode-picker" role="group" aria-label={t('Conversation mode','Режим разговора')}>
+        {(['fluent','step'] as const).map(mode=><button type="button" class="live-mute" aria-pressed={practiceMode===mode} onClick={()=>{setPracticeMode(mode);history.replaceState(null,'',mode==='step' ? '#speaking/step' : '#speaking');}} key={mode}>{mode==='fluent' ? t('Fluent conversation','Свободный разговор') : t('Step-through','Пошаговый разговор')}</button>)}
+    </div>;
   const content = <>
-    {showCatalogue ? <ActivityHeader title={t('Speaking','Разговорная практика')} description={t('Choose a scenario and practise speaking Russian.','Выберите ситуацию и практикуйте разговорный русский.')} headingRef={heading} headingTabIndex={-1} /> : <nav class="speaking-task-nav" aria-label={t('Speaking','Разговорная практика')}>
+    {showCatalogue ? <ActivityHeader title={t('Speaking','Разговорная практика')} description={practiceMode==='fluent' ? t('Choose a scenario and talk naturally with your microphone.','Выберите ситуацию и говорите свободно в микрофон.') : t('Choose what to say next, with a hint when you need one.','Выбирайте следующую реплику. Если нужно, откройте подсказку.')} actions={modePicker} headingRef={heading} headingTabIndex={-1} /> : <nav class="speaking-task-nav" aria-label={t('Speaking','Разговорная практика')}>
       {state==='idle' ? <button class="text-link" onClick={()=>newConversation()}>{t('← All scenarios','← Все ситуации')}</button>
         : <a class="text-link" href="#speaking" onClick={newConversation}>{t('← All scenarios','← Все ситуации')}</a>}
     </nav>}
@@ -309,7 +314,7 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
           </li>)}</ul>
         </section>;
       }) : catalogueError ? <div class="speaking-catalogue-error"><p class="error-note" role="alert">{catalogueError}</p><button class="live-mute" onClick={()=>setCatalogueRefresh(value=>value+1)}>{t('Try loading scenarios again','Загрузить ситуации ещё раз')}</button></div> : <p role="status">{t('Loading scenarios…','Загружаем ситуации…')}</p>}
-      <p class="quiet">{t('Speak in Russian, then get feedback on your grammar and fluency. The microphone stays off until you start.','Говорите по-русски и получайте обратную связь по грамматике и беглости речи. Микрофон включится, только когда вы начнёте разговор.')}</p>
+      {practiceMode==='fluent' && <p class="quiet">{t('Speak in Russian, then get feedback on your grammar and fluency. The microphone stays off until you start.','Говорите по-русски и получайте обратную связь по грамматике и беглости речи. Микрофон включится, только когда вы начнёте разговор.')}</p>}
     </section> : sessionId && !saved && state==='review' ? <div class="live-scene">
       <h1 ref={heading} tabIndex={-1}>{t('Your conversation','Ваш разговор')}</h1>
       {!error && <p role="status">{t('Loading your conversation…','Загружаем ваш разговор…')}</p>}
@@ -396,6 +401,7 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
       </details>
     </>}
   </>;
+  if (state==='idle' && selectedScenarioId && practiceMode==='step') return <StepThroughConversation key={`${selectedScenarioId}:${level}`} scenarioId={selectedScenarioId} targetLevel={level} language={language} onBack={()=>newConversation()} />;
   return <section class={`page live-page${showCatalogue ? ' activity-entry' : ''}`}>
     {showCatalogue ? <div class="activity-entry-content">{content}</div> : content}
   </section>;

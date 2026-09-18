@@ -119,6 +119,8 @@
 @media(max-width:560px) { .live-stage.live-stage-finished { padding:22px 20px; } .live-task-reference { grid-template-columns:1fr; gap:20px; } .live-feedback { padding:24px 20px; } .live-score-grid { grid-template-columns:1fr; gap:12px; } .live-score { padding:20px; } .live-goal-review li { grid-template-columns:24px 1fr; } .live-goal-review small { grid-column:2; } }
 
 .speaking-level-group { margin:0 0 36px; }
+.speaking-mode-picker { display:flex; flex-wrap:wrap; gap:8px; }
+.speaking-mode-picker button[aria-pressed="true"] { background:var(--wp-text-primary); color:var(--wp-surface-paper); border-color:var(--wp-text-primary); }
 .speaking-level-group h2 { margin:0 0 12px; font:500 22px/1.25 var(--wp-font-display); }
 .speaking-level-group + .speaking-level-group { padding-top:24px; border-top:1px solid var(--wp-border-subtle); }
 .speaking-level-group-muted { filter:grayscale(1); }

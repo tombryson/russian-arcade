@@ -7,17 +7,20 @@ chooses a fresh situation.
 
 ## Learner flow
 
-1. Open **Speaking** and choose a scenario: café, shops, directions, station or
+1. Open **Speaking**, choose **Fluent conversation** or **Step-through**, then choose a scenario: café, shops, directions, station or
    meeting people.
 2. Read the short situation, its three goals and any useful reference information.
    **Another situation** offers a different version within the selected scenario.
-3. Start talking. The character, opening, facts and goals come from that exact
+3. Start talking, or choose replies one exchange at a time in Step-through.
+   The character, opening, facts and goals come from that exact
    preview; changing a preview never opens the microphone or starts a paid call.
 4. Finish naturally or use the end control. The saved conversation keeps its
    original situation, audio and separate grammar/fluency review.
 
-The scenarios share the live connection, Russian-only role-play, audio review,
-natural endings and conversation history. Each has its own character and purpose:
+Fluent conversations share the live connection, Russian-only role-play and audio
+review. Step-through uses the same scenarios with paused exchanges and optional
+hints; its answer choices do not produce fluency scores. Both modes save history
+and end naturally. Each scenario has its own character and purpose:
 asking directions must not turn into a café order, and meeting a neighbour must
 not become a purchase. Short or imperfect Russian can communicate a goal
 successfully. Task completion and grammatical accuracy remain separate.
