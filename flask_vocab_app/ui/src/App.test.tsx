@@ -22,7 +22,7 @@ describe('Russian Arcade activity home', () => {
     expect(await screen.findByRole('heading',{name:'Games',level:1})).toBeTruthy();
     expect(screen.getByLabelText('Activities').getAttribute('data-active')).toBe('true');
     expect(screen.getByRole('link',{name:'Games',hidden:true}).getAttribute('aria-current')).toBe('page');
-    expect(screen.getByRole('link',{name:/Barsik’s shop/}).getAttribute('href')).toBe('#shop');
+    expect(screen.getByRole('link',{name:/Shop/}).getAttribute('href')).toBe('#shop');
     expect(fetch.mock.calls.every(([url])=>['/api/v1/games','/api/v1/first-steps'].includes(url))).toBe(true);
   });
   it.each(['pairs','mailbox-sort','missing-stamp','radio','detective','letter-back'])('opens the new %s game as a standalone activity',async id=>{

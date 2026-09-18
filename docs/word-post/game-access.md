@@ -2,7 +2,7 @@
 
 Approved policy: 17 September 2026.
 
-Learners buy optional games from Barsik’s shop with Lingocoins. They choose which game to unlock, and it remains available in Activities. Completing introductory lessons does not unlock games automatically.
+Learners buy optional games from the shop with Lingocoins. They choose which game to unlock, and it remains available in Activities. Completing introductory lessons does not unlock games automatically.
 
 Reading, Writing, Sentence practice, Word Jumble, Lessons, Speaking and Flashcards remain available from the start. They are the main ways to practise and earn coins.
 

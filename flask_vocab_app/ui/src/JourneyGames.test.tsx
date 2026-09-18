@@ -62,7 +62,7 @@ describe('Discovering games',()=>{
     expect(await screen.findByRole('heading',{name:'Pack the bag',level:2})).toBeTruthy();
     expect(screen.getByRole('link',{name:'Pack the bag'}).getAttribute('href')).toBe('#games/pack-bag');
     expect(screen.getByRole('heading',{name:'Follow the directions',level:2})).toBeTruthy();
-    expect(screen.getByRole('link',{name:'Follow the directions — In Barsik’s shop'}).getAttribute('href')).toBe('#shop');
+    expect(screen.getByRole('link',{name:'Follow the directions — In the shop'}).getAttribute('href')).toBe('#shop');
     expect(screen.queryByRole('heading',{name:'Games to discover'})).toBeNull();
     expect(api.posts()).toHaveLength(0);
   });
@@ -75,7 +75,7 @@ describe('Discovering games',()=>{
     const api=server();render(<GameCatalogue/>);
     expect(await screen.findByRole('heading',{name:'Pack the bag'})).toBeTruthy();
     expect(screen.getByRole('link',{name:'Pack the bag'}).getAttribute('href')).toBe('#games/pack-bag');
-    expect(screen.getByRole('link',{name:/Visit Barsik’s shop/}).getAttribute('href')).toBe('#shop');
+    expect(screen.getByRole('link',{name:/Visit the shop/}).getAttribute('href')).toBe('#shop');
     expect(screen.queryByText(/Lingocoins earned/)).toBeNull();
     expect(screen.queryByText(/brought-forward coins/)).toBeNull();
     expect(screen.queryByRole('heading',{name:'Follow the directions'})).toBeNull();
@@ -83,8 +83,8 @@ describe('Discovering games',()=>{
   });
   it('explains the shop in Russian without directing the learner back to the introduction',async()=>{
     server();render(<GameLanguage.Provider value="ru"><GameCatalogue/></GameLanguage.Provider>);
-    expect(await screen.findByRole('link',{name:/В магазин Барсика/})).toBeTruthy();
-    expect(screen.getByText('Открывайте новые игры за лингокоины в магазине Барсика.')).toBeTruthy();
+    expect(await screen.findByRole('link',{name:/В магазин/})).toBeTruthy();
+    expect(screen.getByText('Открывайте новые игры за лингокоины в магазине.')).toBeTruthy();
     expect(screen.queryByRole('link',{name:'Which way?'})).toBeNull();
     expect(screen.queryByText(/Заработано лингокоинов/)).toBeNull();
   });
@@ -130,8 +130,8 @@ describe('A game with Barsik',()=>{
   });
   it('sends a locked game to the shop without setup controls or a start button',async()=>{
     const api=server();render(<JourneyGame gameId="directions"/>);
-    expect(await screen.findByText('Unlock this game in Barsik’s shop with Lingocoins.')).toBeTruthy();
-    expect(screen.getByRole('link',{name:/Visit Barsik’s shop/}).getAttribute('href')).toBe('#shop');
+    expect(await screen.findByText('Unlock this game in the shop with Lingocoins.')).toBeTruthy();
+    expect(screen.getByRole('link',{name:/Visit the shop/}).getAttribute('href')).toBe('#shop');
     expect(screen.queryByRole('button',{name:'Let’s play'})).toBeNull();expect(api.posts()).toHaveLength(0);
     expect(screen.queryByRole('combobox')).toBeNull();
     expect(screen.queryByRole('link',{name:'Which way?'})).toBeNull();

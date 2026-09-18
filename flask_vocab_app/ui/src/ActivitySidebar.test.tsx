@@ -57,7 +57,7 @@ describe('Saved navigation layout', () => {
     expect(container.querySelector('[href="/appearance"]')).toBeNull();
     expect(within(footer).getByRole('link', {name:language === 'ru' ? 'Лингокоины: 0' : 'Lingo coins: 0'})).toBeTruthy();
     expect(within(footer).getByRole('link', {name:language === 'ru' ? 'Лингокоины: 0' : 'Lingo coins: 0'}).getAttribute('href')).toBe('#shop');
-    expect(within(menuScroll).getByRole('link', {name:language === 'ru' ? 'Магазин Барсика' : 'Barsik’s shop'}).getAttribute('href')).toBe('#shop');
+    expect(within(menuScroll).getByRole('link', {name:language === 'ru' ? 'Магазин' : 'Shop'}).getAttribute('href')).toBe('#shop');
     expect(footer.querySelector('.skill-rail')).toBeTruthy();
     expect(account.querySelector('form')?.getAttribute('action')).toBe('/ui-language');
     expect(account.querySelector<HTMLInputElement>('input[name="csrf_token"]')?.value).toBe('test-token');

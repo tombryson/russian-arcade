@@ -55,7 +55,7 @@ def require_access(conn, profile_id, game_id, *, now=None):
     if not profile_id or not conn.execute(
             'SELECT 1 FROM journey_game_access WHERE profile_id=? AND game_id=?',
             (profile_id, game_id)).fetchone():
-        raise LearningError('game_locked', 'Unlock this game in Barsik’s shop to play.', 409)
+        raise LearningError('game_locked', 'Unlock this game in the shop to play.', 409)
 
 
 def purchase(conn, profile_id, game_id, request_id, expected_price, *, now=None):

@@ -9,7 +9,7 @@ Implementation update: [Stage 1](stage-1.md) now implements the activity partici
 
 The first-delivery tutorial now explains the current learner participation rules and demonstrates answer/hint controls. It awards no coins and displays no invented balance. Its copy must stay consistent with the versioned backend policy if those amounts or eligibility rules change. A replayable interface tutorial is not a qualifying learning session.
 
-**17 September 2026 update:** optional games are chosen in Barsik’s shop and bought from the visible Lingocoin balance. Introductory lessons and automatic coin milestones do not grant games. Existing ownership is preserved. Spending does not reduce journey earnings or provisional skill ratings. See [game access](game-access.md) for the current policy.
+**17 September 2026 update:** optional games are chosen in the shop and bought from the visible Lingocoin balance. Introductory lessons and automatic coin milestones do not grant games. Existing ownership is preserved. Spending does not reduce journey earnings or provisional skill ratings. See [game access](game-access.md) for the current policy.
 
 ## Current evidence and what changes
 

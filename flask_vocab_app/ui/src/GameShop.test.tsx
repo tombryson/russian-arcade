@@ -38,11 +38,11 @@ async function unlock(name='Pack the bag',price=25) {
 beforeEach(()=>{window.location.hash='shop';});
 afterEach(()=>vi.unstubAllGlobals());
 
-describe('Barsik’s shop',()=>{
+describe('Shop',()=>{
   it('makes ownership permanent only after a confirmed purchase and refreshes every remaining price',async()=>{
     const api=server();const changed=vi.fn();window.addEventListener('lingo:progression',changed);
     render(<GameShop/>);
-    expect(await screen.findByRole('heading',{name:'Barsik’s shop'})).toBeTruthy();
+    expect(await screen.findByRole('heading',{name:'Shop'})).toBeTruthy();
     await screen.findByRole('button',{name:'Unlock Pack the bag for 25 Lingocoins'});
     expect(api.posts()).toHaveLength(0);
     await unlock();
@@ -128,7 +128,7 @@ describe('Barsik’s shop',()=>{
   });
   it('has Russian shop and purchase copy',async()=>{
     server();render(<GameLanguage.Provider value="ru"><GameShop/></GameLanguage.Provider>);
-    expect(await screen.findByRole('heading',{name:'Магазин Барсика'})).toBeTruthy();
+    expect(await screen.findByRole('heading',{name:'Магазин'})).toBeTruthy();
     expect(await screen.findByRole('button',{name:'Открыть «Собери сумку» за 25 лингокоинов'})).toBeTruthy();
   });
 });

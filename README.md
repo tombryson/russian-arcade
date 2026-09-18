@@ -38,7 +38,7 @@ The appearance icon switches between top navigation and a left sidebar, saving t
 
 ### Practice games
 
-Barsik’s shop lets learners choose permanent game unlocks using Lingocoins: 25 for the first purchase and 50 for each later game. Core practice stays available from the start. First steps teaches the opening words without automatically unlocking games. Games use a wider vocabulary and remain open for standalone practice once owned. See [game access](docs/word-post/game-access.md) for pricing and migration rules.
+The shop lets learners choose permanent game unlocks using Lingocoins: 25 for the first purchase and 50 for each later game. Core practice stays available from the start. First steps teaches the opening words without automatically unlocking games. Games use a wider vocabulary and remain open for standalone practice once owned. See [game access](docs/word-post/game-access.md) for pricing and migration rules.
 
 | Game | What you practise |
 | --- | --- |
@@ -164,7 +164,7 @@ Audio jobs choose a voice from the configured list and keep it for retries. This
 ### Rewards and progress tracking
 
 - **Lingocoins** reward completed practice, subject to earning limits. Hints and mistakes do not automatically prevent rewards.
-- **Game ownership** records permanent purchases from Barsik’s shop.
+- **Game ownership** records permanent purchases from the shop.
 - **Journey progress** records opened destinations and completed story stops.
 - **Skill estimates** use assessed practice. Barsik’s progress bar displays this progress.
 - **Flashcard schedules** determine when each card returns.

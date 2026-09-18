@@ -66,7 +66,7 @@ export function ProgressionBadge({progression,language='en',introductory=false}:
     setGaining(increased);
     if (increased) {const timer=setTimeout(()=>setGaining(false),900);return()=>clearTimeout(timer);}
   },[introductory,progression.data?.profile_id,balance]);
-  return <a class={`progression-badge${gaining ? ' is-gaining' : ''}`} href="#shop" aria-label={`${label}: ${balance ?? (progression.error ? language==='ru' ? 'недоступно' : 'unavailable' : language==='ru' ? 'загружаем' : 'loading')}`} title={language==='ru' ? 'Магазин Барсика' : 'Barsik’s shop'}>
+  return <a class={`progression-badge${gaining ? ' is-gaining' : ''}`} href="#shop" aria-label={`${label}: ${balance ?? (progression.error ? language==='ru' ? 'недоступно' : 'unavailable' : language==='ru' ? 'загружаем' : 'loading')}`} title={language==='ru' ? 'Магазин' : 'Shop'}>
     <span class="progression-coin" aria-hidden="true">Л</span><strong>{balance ?? '—'}</strong>
   </a>;
 }

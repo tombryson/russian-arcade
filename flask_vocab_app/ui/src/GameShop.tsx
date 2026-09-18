@@ -109,7 +109,7 @@ export function GameShop({profileHref='/post/profiles'}: {profileHref?:string}) 
     <a class="text-link game-shop-back" href="#activities">← {t('All activities')}</a>
     <div class="game-shop-hero">
       <div class="game-shop-welcome">
-        <h1 id="game-shop-title" ref={heading} tabIndex={-1}>{t('Barsik’s shop')}</h1>
+        <h1 id="game-shop-title" ref={heading} tabIndex={-1}>{t('Shop')}</h1>
         <p class="game-shop-intro">{t('Unlock a game with Lingocoins. It’s yours to play whenever you like.')}</p>
         {!catalogue?.public_demo && <><div class="game-shop-wallet"><span>{t('Your balance')}</span><strong aria-label={balance===null ? t('Balance unavailable') : t('{0} Lingocoins', {0:balance})}><Coin amount={balance ?? '—'}/></strong></div>
         <p class="game-shop-prices">{t('Your first game costs 25 Lingocoins. Each game after that costs 50.')}</p>
@@ -121,7 +121,7 @@ export function GameShop({profileHref='/post/profiles'}: {profileHref?:string}) 
     {error && <div class="game-shop-error" role="alert"><p>{error.message}</p>{error.kind==='profile' ? <a class="text-link" href={profileHref}>{t('Choose your profile')}</a> : error.kind==='load' ? <button class="text-link" disabled={!!busy} onClick={() => void reload()}>{t('Refresh shop')}</button> : attempt.current && <button class="text-link" disabled={!!busy} onClick={() => {const game=games.find(item=>item.id===error.gameId);if(game)void buy(game);}}>{t('Try again')}</button>}</div>}
     {signedOut && <p class="game-shop-profile"><a class="text-link" href={profileHref}>{t('Choose your profile')}</a> {t('to save your games and use your Lingocoins.')}</p>}
     {catalogue?.public_demo && <p class="game-shop-demo">{t('Try the sample games here. The shop is available in your own installation.')}</p>}
-    {!catalogue && busy==='load' && <p role="status">{t('Opening Barsik’s shop…')}</p>}
+    {!catalogue && busy==='load' && <p role="status">{t('Opening the shop…')}</p>}
     {catalogue && <div class="game-shop-grid">{games.map(game => {
       const owned = game.purchase?.owned ?? game.unlocked;
       const sample = game.availability==='sample';

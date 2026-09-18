@@ -37,7 +37,7 @@ export function ActivitySidebar({ navigation, activePage, language = 'en', profi
         <a class="activity-sidebar-title" href="#activities" onClick={close}>{navigation.title}</a>
         <div class="activity-sidebar-links">
           {navigation.activities.filter(item => item.page !== 'curriculum').map(item => <a key={item.page} href={item.href} aria-current={item.page === activePage ? 'page' : undefined} onClick={close}>{item.label}</a>)}
-          <a href="#shop" aria-current={activePage === 'shop' ? 'page' : undefined} onClick={close}>{language === 'ru' ? 'Магазин Барсика' : 'Barsik’s shop'}</a>
+          <a href="#shop" aria-current={activePage === 'shop' ? 'page' : undefined} onClick={close}>{language === 'ru' ? 'Магазин' : 'Shop'}</a>
           {navigation.activities.filter(item => item.page === 'curriculum').map(item => <a key={item.page} href={item.href} aria-current={item.page === activePage ? 'page' : undefined} onClick={close}>{item.label}</a>)}
         </div>
         {!!tools.length && <details class="activity-sidebar-more">

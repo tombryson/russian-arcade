@@ -72,7 +72,7 @@ function useCatalogue() {
 }
 function GameShopLink() {
   const t = useGameText();
-  return <div class="journey-game-lock"><p>{t("Unlock this game in Barsik’s shop with Lingocoins.")}</p><a class="text-link" href="#shop">{t("Visit Barsik’s shop")} <span aria-hidden="true">→</span></a></div>;
+  return <div class="journey-game-lock"><p>{t("Unlock this game in the shop with Lingocoins.")}</p><a class="text-link" href="#shop">{t("Visit the shop")} <span aria-hidden="true">→</span></a></div>;
 }
 function GameCard({
   game, browseLocked = false
@@ -87,14 +87,14 @@ function GameCard({
   const cardClass = `journey-game-card game-${game.id}${game.unlocked || game.active_session_id ? '' : ' is-locked'}`;
   const content = <>
     <div class="journey-game-card-art" aria-hidden="true"><GameArtwork gameId={game.id} /></div>
-    <div class="journey-game-card-copy"><p class="kicker">{game.availability === 'local-only' ? t("Local installation") : game.active_session_id ? t("Continue playing") : game.availability === 'sample' ? t("Sample game") : !game.unlocked ? t("In Barsik’s shop") : game.new ? t("New game unlocked") : t("Play again")}</p><Title>{t(game.title)}</Title><p>{t(game.description)}</p>
+    <div class="journey-game-card-copy"><p class="kicker">{game.availability === 'local-only' ? t("Local installation") : game.active_session_id ? t("Continue playing") : game.availability === 'sample' ? t("Sample game") : !game.unlocked ? t("In the shop") : game.new ? t("New game unlocked") : t("Play again")}</p><Title>{t(game.title)}</Title><p>{t(game.description)}</p>
       {game.availability === 'local-only' ? <p class="quiet">{t("Available in your own installation.")}</p> : !browseLocked && !game.unlocked && !game.active_session_id && <GameShopLink/>}
     </div>
     {(playable || shopLink) && <span class="journey-game-card-arrow" aria-hidden="true">→</span>}
   </>;
   return playable
     ? <a class={cardClass} aria-label={t(game.title)} href={game.active_session_id ? `#games/session/${game.active_session_id}` : `#games/${game.id}`}>{content}</a>
-    : shopLink ? <a class={cardClass} aria-label={`${t(game.title)} — ${t("In Barsik’s shop")}`} href="#shop">{content}</a>
+    : shopLink ? <a class={cardClass} aria-label={`${t(game.title)} — ${t("In the shop")}`} href="#shop">{content}</a>
     : <article class={cardClass}>{content}</article>;
 }
 export function GameCatalogue({
@@ -111,11 +111,11 @@ export function GameCatalogue({
   const unlocked = state?.games.filter(game => game.unlocked || game.active_session_id) ?? [],
     upcoming = state?.games.filter(game => !game.unlocked && !game.active_session_id) ?? [];
   return <section class="journey-games-catalogue" aria-label={t("Games to discover")}>
-    {context !== 'games' && <div class="journey-games-section-head"><p class="kicker">{t("Explore and practise")}</p><h2>{context === 'journey' ? t("Games along the way") : t("Games to discover")}</h2><p>{t(state?.public_demo ? "Build on words you know, meet new ones and try a different way to practise." : "Use your Lingocoins to choose new games from Barsik’s shop.")}</p></div>}
+    {context !== 'games' && <div class="journey-games-section-head"><p class="kicker">{t("Explore and practise")}</p><h2>{context === 'journey' ? t("Games along the way") : t("Games to discover")}</h2><p>{t(state?.public_demo ? "Build on words you know, meet new ones and try a different way to practise." : "Use your Lingocoins to choose new games from the shop.")}</p></div>}
     {state ? <>
       {context === 'games' ? <div class="journey-game-grid">{[...unlocked, ...upcoming].map(game => <GameCard key={game.id} game={game} browseLocked />)}</div> : <>
         {unlocked.length > 0 && <div class="journey-game-grid">{unlocked.map(game => <GameCard key={game.id} game={game} />)}</div>}
-        {upcoming.length > 0 && !state.public_demo && <a class="journey-games-shop-link" href="#shop"><span><strong>{t("Visit Barsik’s shop")}</strong><span>{t("Choose your next game. Unlock it once and keep playing.")}</span></span><span aria-hidden="true">→</span></a>}
+        {upcoming.length > 0 && !state.public_demo && <a class="journey-games-shop-link" href="#shop"><span><strong>{t("Visit the shop")}</strong><span>{t("Choose your next game. Unlock it once and keep playing.")}</span></span><span aria-hidden="true">→</span></a>}
         {state.public_demo && upcoming.length > 0 && <details class="journey-games-upcoming"><summary>{t("More games")}</summary><ul>{upcoming.map(game => <li key={game.id}><GameArtwork gameId={game.id}/><div><strong>{t(game.title)}</strong><p>{t("Available in your own installation.")}</p></div></li>)}</ul></details>}
       </>}
     </> : !error && <p role="status">{t("Opening your games…")}</p>}

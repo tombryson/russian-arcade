@@ -119,7 +119,7 @@ class NavigationPreferenceTests(unittest.TestCase):
                 self.assertIn('data-skill-rail', footer)
                 self.assertIn('data-progression-badge', footer)
                 self.assertIn('href="/post/#shop"', footer)
-                self.assertIn('Магазин Барсика' if language == 'ru' else 'Barsik’s shop', sidebar)
+                self.assertIn('Магазин' if language == 'ru' else 'Shop', sidebar)
                 self.assertNotIn('class="sidebar-utilities"', footer)
                 self.assertIn('class="user-session-link"', account)
                 self.assertIn('class="language-picker"', account)
