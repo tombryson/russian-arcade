@@ -46,6 +46,10 @@ class PublicDemoTests(unittest.TestCase):
         self.assertIn('not enabled', page.text.lower())
         self.assertNotIn('href="/trial/sign-in"', page.text)
         self.assertIn('href="/post/#home"', page.text)
+        account = self.a.get('/trial/account', base_url=self.base)
+        self.assertEqual(account.status_code, 200)
+        self.assertIn('<h1>Demo profile</h1>', account.text)
+        self.assertNotIn('href="/trial/sign-in"', account.text)
 
     def test_sample_pages_work_and_provider_upload_edit_routes_are_blocked(self):
         for path in ('/post/', '/vocab', '/curriculum', '/api/v1/flashcards', '/api/v1/first-steps', '/api/v1/games'):

@@ -27,7 +27,8 @@ if (root) {
     });
   } else {
     const profile=JSON.parse(root.dataset.profile ?? 'null');
-    bindUserSession(root.dataset.household === 'true' ? undefined : profile?.id ?? '',root.dataset.csrf ?? '');
-    mount(<App navigationLayout={root.dataset.navigationLayout === 'sidebar' ? 'sidebar' : 'top'} initialOnboarding={JSON.parse(root.dataset.onboarding ?? 'null') ?? undefined} initialProfile={JSON.parse(root.dataset.profile ?? 'null')} householdEnabled={root.dataset.household === 'true'} nativeEnabled={root.dataset.native !== 'false'} language={root.dataset.language === 'ru' ? 'ru' : 'en'} csrfToken={root.dataset.csrf ?? ''} navigation={JSON.parse(root.dataset.navigation ?? 'null')} />);
+    const accountMode=root.dataset.accountMode === 'hosted' ? 'hosted' : root.dataset.accountMode === 'preview' ? 'preview' : 'local';
+    bindUserSession(root.dataset.household === 'true' ? undefined : profile?.id ?? '',root.dataset.csrf ?? '',root.dataset.sessionScope);
+    mount(<App navigationLayout={root.dataset.navigationLayout === 'sidebar' ? 'sidebar' : 'top'} initialOnboarding={JSON.parse(root.dataset.onboarding ?? 'null') ?? undefined} initialProfile={profile} householdEnabled={root.dataset.household === 'true'} accountMode={accountMode} signInAvailable={root.dataset.signInAvailable === 'true'} sessionScope={root.dataset.sessionScope} nativeEnabled={root.dataset.native !== 'false'} language={root.dataset.language === 'ru' ? 'ru' : 'en'} csrfToken={root.dataset.csrf ?? ''} navigation={JSON.parse(root.dataset.navigation ?? 'null')} />);
   }
 }

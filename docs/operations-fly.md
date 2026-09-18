@@ -76,11 +76,12 @@ CSRF, private deployment authentication, sample page rendering and native cloze
 reveal. Also verify the live homepage, stylesheet/script assets and HTTPS checks
 after each deployment.
 
-## Funded AI trial
+## Hosted accounts and AI funding
 
-This is an optional public mode alongside anonymous samples. Enabling it requires
-GitHub OAuth, dedicated provider credentials and persistent storage. A source
-release does not imply that those deployment settings are active.
+Visitors can try anonymous samples or sign in to a persistent account. Account
+access and paid AI have separate switches. Accounts need GitHub OAuth and
+persistent storage. AI also needs dedicated provider credentials and an existing
+spending ledger. A source release does not activate either switch.
 
 `hosted_trial.py` verifies a GitHub authorization code with state and PKCE. It
 requests no repository scopes and discards the provider access token after
@@ -88,10 +89,21 @@ identifying the account. The callback must be registered as
 `https://russian-arcade.fly.dev/trial/callback`. Identity uses GitHub's stable user
 ID, not a browser-supplied name. Signing out returns to anonymous samples.
 
+When accounts are available, **Sign in** appears in the header and sidebar. The
+account control opens `/trial/account`, where signed-in users can sign out.
+When sign-in is unavailable, that page explains the deployment's current state.
+`GET /trial/status` reports `enabled` (accounts), `configured` (OAuth) and
+`ai_enabled` (paid AI). It never returns credential values.
+
 Each verified identity receives its own database, media, uploaded lessons and
 Flask sessions. The hosted profile is selected by the server. The local profile
 picker cannot switch into another visitor's workspace. New workspaces start
 with authored sample material, never a copy of the owner's learning database.
+
+Each open page also carries an account marker. An account change in another tab
+reloads the old page; stale activity requests are rejected even when both
+workspaces use the same internal profile ID. The marker is not an authentication
+credential. The verified session cookie still decides which workspace is used.
 
 Persist the identity registry, all trial workspaces and the shared AI budget on
 the mounted volume. Keep one Machine and one application process. The spending
@@ -104,6 +116,7 @@ The hosted configuration uses the `arcade_data` volume mounted at `/data`:
 |---|---|
 | `HOSTED_TRIAL_ROOT=/data/trial` | Identity registry and per-account workspaces |
 | `/data/trial/ai-budget.sqlite3` | Shared persistent spending ledger |
+| `HOSTED_ACCOUNTS_ENABLED=false` | Enable account sign-in only after OAuth is configured |
 | `AI_TRIAL_ENABLED=false` | Keep paid work off until configuration and checks pass |
 | `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET` | Dedicated GitHub OAuth application |
 | `DEMO_OPENAI_API_KEY` | Dedicated OpenAI trial credential |
@@ -113,21 +126,42 @@ The hosted configuration uses the `arcade_data` volume mounted at `/data`:
 The trial uses these dedicated provider keys rather than inheriting personal
 development credentials. Keep OAuth and provider secrets in Fly secrets.
 Prepare a dedicated file outside the repository with `NAME=value` entries for
-the trial credentials above and the existing application session secret. Protect
-it with mode `600`, then import its contents without printing them:
+the credentials being added. Protect it with mode `600`, then import its
+contents without printing them:
 
 ```sh
 fly secrets import -a russian-arcade < /absolute/private/path/russian-arcade-trial.env
 ```
 
-Use a file containing only the intended hosted secrets. Do not import the local
-development `.env`. Check secret names with `fly secrets list -a russian-arcade`;
-keep `AI_TRIAL_ENABLED=false` until the remaining activation checks pass.
+Use a file containing only the intended hosted secrets. Omit blank entries;
+do not replace the existing application session secret or import the local
+development `.env`. Check secret names with `fly secrets list -a russian-arcade`.
+
+Activate accounts first with the OAuth client ID and secret, then set
+`HOSTED_ACCOUNTS_ENABLED=true` through Fly secrets. Leave `AI_TRIAL_ENABLED=false`
+until provider setup is complete. Accounts can sign in and save ordinary
+practice without provider credentials or a spending ledger. AI requests remain
+blocked, including when development credentials exist elsewhere in the environment.
+
+For older configurations that omit `HOSTED_ACCOUNTS_ENABLED`, its value follows
+`AI_TRIAL_ENABLED`. An explicitly disabled account switch prevents new sign-ins;
+it does not end existing sessions. Use
+`AI_TRIAL_ENABLED=false` or the ledger's `pause` command to stop paid work.
 
 Initialize the budget explicitly with `python trial_cli.py init --root /data/trial`
 inside the deployed application. `status` reports the ledger and `pause` blocks
 new paid work. Normal startup must not recreate a missing ledger. Existing
 model and voice choices remain unchanged unless deliberately reconfigured.
+
+After the dedicated provider keys and ledger have been checked, set
+`AI_TRIAL_ENABLED=true`. Existing accounts gain access without signing in again.
+This registers their verified identity in the ledger; it does not reset spending
+or re-enable an account whose AI access was revoked. Turning AI off later keeps
+account sign-in and saved work available.
+
+Before announcing activation, verify a real GitHub sign-in and sign-out, saved
+progress after returning, isolation between two accounts, and a bounded provider
+test. Report authentication and AI status separately if only one is activated.
 
 ### Budget and provider limits
 

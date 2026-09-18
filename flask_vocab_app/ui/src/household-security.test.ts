@@ -10,7 +10,7 @@ let originalFetch: typeof window.fetch;
 const metadata: HTMLMetaElement[] = [];
 
 beforeAll(() => {
-  for (const [name, content] of [['csrf-token', 'fixture-token'], ['learning-profile', 'fixture-profile']]) {
+  for (const [name, content] of [['csrf-token', 'fixture-token'], ['learning-profile', 'fixture-profile'], ['learning-account', 'hosted:fixture-account']]) {
     const meta = document.createElement('meta');
     meta.name = name;
     meta.content = content;
@@ -56,6 +56,7 @@ it('preserves bodies and existing headers while adding CSRF and profile headers 
   const init = transport.mock.calls[0][1] as RequestInit;
   expect(new Headers(init.headers).get('X-CSRF-Token')).toBe('fixture-token');
   expect(new Headers(init.headers).get('X-Profile-ID')).toBe('fixture-profile');
+  expect(new Headers(init.headers).get('X-Account-Scope')).toBe('hosted:fixture-account');
   expect(init.body).toBe('fixture');
 
   const request = new Request(`${window.location.origin}/writing/save`, {
@@ -74,6 +75,13 @@ it('does not add household headers to external fetches', async () => {
   const headers = new Headers((transport.mock.calls[0][1] as RequestInit).headers);
   expect(headers.has('X-CSRF-Token')).toBe(false);
   expect(headers.has('X-Profile-ID')).toBe(false);
+  expect(headers.has('X-Account-Scope')).toBe(false);
+});
+
+it('leaves the current-session probe unbound so the watcher can detect an account change', async () => {
+  await window.fetch('/api/v1/user-session');
+  const headers = new Headers((transport.mock.calls[0][1] as RequestInit).headers);
+  expect(headers.has('X-Account-Scope')).toBe(false);
 });
 
 it('keeps CSRF and profile headers on local HTMX requests only', () => {
@@ -81,6 +89,7 @@ it('keeps CSRF and profile headers on local HTMX requests only', () => {
   document.dispatchEvent(new CustomEvent('htmx:configRequest', { detail: local }));
   expect(local.headers).toEqual({
     'X-Existing': 'kept', 'X-CSRF-Token': 'fixture-token', 'X-Profile-ID': 'fixture-profile',
+    'X-Account-Scope': 'hosted:fixture-account',
   });
   const external = { path: 'https://external.invalid/upload', headers: {} };
   document.dispatchEvent(new CustomEvent('htmx:configRequest', { detail: external }));

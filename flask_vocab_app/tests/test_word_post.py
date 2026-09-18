@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 import tempfile
 import unittest
+from flask import render_template
 from flask.testing import FlaskClient
 
 from blueprints.word_post import build_assets, BuildUnavailable
@@ -137,6 +138,65 @@ class WordPostTests(unittest.TestCase):
         html = self.client.get('/post/').get_data(as_text=True)
         self.assertIn('data-household="true"', html)
         self.assertNotIn('csrf_token', html)
+
+    def test_account_bootstrap_distinguishes_local_preview_and_hosted_modes(self):
+        for public_demo, hosted, available, mode in (
+            (False, False, False, 'local'),
+            (True, False, False, 'preview'),
+            (True, False, True, 'preview'),
+            (False, True, True, 'hosted'),
+        ):
+            with self.subTest(mode=mode, sign_in_available=available):
+                self.app.config.update(PUBLIC_DEMO=public_demo, HOSTED_AI_TRIAL=hosted,
+                                       HOSTED_ACCOUNTS_ENABLED=available, AI_TRIAL_IDENTITY='github:test-account')
+                with self.app.test_request_context('/post/'):
+                    page = render_template('word_post.html', view='app',
+                                           assets={'styles': [], 'script': 'main-test.js'},
+                                           user_session_scope='hosted:opaque-account')
+                self.assertIn(f'data-account-mode="{mode}"', page)
+                self.assertIn(f'data-sign-in-available="{str(available).lower()}"', page)
+                self.assertIn('data-session-scope="hosted:opaque-account"', page)
+
+    def test_both_server_shells_offer_localized_account_routes_and_session_markers(self):
+        self.manifest['src/legacy.ts'] = {'file': 'assets/shared-test.js', 'css': ['assets/shared-test.css']}
+        self.write_manifest()
+        for layout in ('top', 'sidebar'):
+            for language in ('en', 'ru'):
+                for mode, available, household in (
+                    ('preview', True, False), ('preview', False, False),
+                    ('hosted', True, False), ('local', False, False), ('local', False, True),
+                ):
+                    with self.subTest(layout=layout, language=language, mode=mode, available=available, household=household):
+                        self.app.config.update(PUBLIC_DEMO=mode == 'preview', HOSTED_AI_TRIAL=mode == 'hosted',
+                                               HOSTED_ACCOUNTS_ENABLED=available, AI_TRIAL_IDENTITY='github:test-account')
+                        with self.app.test_request_context('/writing'):
+                            page = render_template('base.html', ui_lang=language, navigation_layout=layout,
+                                                   household_enabled=household, user_session_scope='opaque-scope',
+                                                   user_session_profile={'id': 'profile-id', 'display_name': 'Tom'})
+                        shell = page.split('class="sidebar-account"', 1)[1] if layout == 'sidebar' else page.split('<header class="arcade-header"', 1)[1].split('</header>', 1)[0]
+                        links = re.findall(r'<a\b[^>]*class="user-session-link[^>]*>.*?</a>', shell, re.S)
+                        self.assertEqual(len(links), 1)
+                        link = links[0]
+                        if mode == 'preview':
+                            label = ('Войти' if language == 'ru' else 'Sign in') if available else ('Аккаунт' if language == 'ru' else 'Account')
+                            self.assertRegex(link, rf'>\s*{label}\s*</a>')
+                            self.assertNotIn('user-session-initial', link)
+                        elif mode == 'hosted':
+                            label = 'Аккаунт: Tom' if language == 'ru' else 'Account: Tom'
+                        elif household:
+                            label = 'Профили семьи' if language == 'ru' else 'Household profiles'
+                        else:
+                            label = 'Профиль: Tom' if language == 'ru' else 'Profile: Tom'
+                        destination = '/trial/account' if mode != 'local' else '/post/household' if household else '/post/profiles'
+                        self.assertIn(f'aria-label="{label}"', link)
+                        self.assertIn(f'href="{destination}"', link)
+                        self.assertIn('hx-boost="false"', link)
+                        if not household:
+                            self.assertIn('data-user-session', link)
+                            self.assertIn('data-profile-id="profile-id"', link)
+                            self.assertIn('data-session-scope="opaque-scope"', link)
+                        else:
+                            self.assertNotIn('data-user-session', link)
 
     def test_legacy_styles_use_their_own_entry_and_fall_back_without_breaking_routes(self):
         with self.app.test_request_context('/'):

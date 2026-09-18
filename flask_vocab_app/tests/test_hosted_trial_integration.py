@@ -5,10 +5,11 @@ import shutil
 import sqlite3
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from urllib.parse import parse_qs, urlsplit
 
 from hosted import create_hosted_app
+from hosted_trial import COOKIE
 from public_demo import prepare_demo
 from services.ai_trial_budget import AITrialBudget, TrialDenied
 from tests.test_hosted_trial import IdentityProvider
@@ -128,6 +129,105 @@ class HostedTrialIntegrationTests(unittest.TestCase):
             self.assertNotIn('href="/trial/sign-in"', page.text)
             self.assertNotIn('action="/trial/sign-out"', page.text)
 
+    def test_accounts_only_signin_persists_without_provider_credentials_or_spend_ledger(self):
+        from services.trial_provider import provider_call
+        self.ledger_path.unlink()
+        with patch.dict(os.environ, {'HOSTED_ACCOUNTS_ENABLED': 'true', 'AI_TRIAL_ENABLED': 'false',
+                'DEMO_OPENAI_API_KEY': '', 'DEMO_ELEVENLABS_API_KEY': '', 'DEMO_OPENROUTER_API_KEY': '',
+                'OPENAI_API_KEY': 'regular-key-must-not-leak'}):
+            app = self.app()
+            self.assertTrue(app.config['HOSTED_ACCOUNTS_ENABLED'])
+            self.assertFalse(app.config['HOSTED_TRIAL_AVAILABLE'])
+            client = app.test_client()
+            preview = client.get('/post/', base_url=self.base).text
+            self.assertIn('/trial/sign-in', preview)
+            self.assertIn('AI generation is currently turned off.', preview)
+            denied = client.post('/api/v1/card-generation/batches', base_url=self.base, json={})
+            self.assertEqual(denied.status_code, 403)
+            self.assertEqual(denied.json['error']['sign_in_url'], '/trial/sign-in')
+            self.assertIn('AI generation is currently turned off.', denied.json['error']['message'])
+            self.login(client)
+            trial = app.extensions['hosted_trial'].cache['github:11']
+            self.assertTrue(trial.config['HOSTED_AI_TRIAL'])
+            self.assertFalse(trial.config['AI_TRIAL_ENABLED'])
+            for key in ('OPENAI_API_KEY', 'ELEVENLABS_API_KEY', 'OPENROUTER_API_KEY', 'YANDEX_API_KEY'):
+                self.assertEqual(trial.config[key], '')
+            status = client.get('/trial/status', base_url=self.base).json
+            self.assertEqual(status, {'authenticated': True, 'enabled': True, 'configured': True,
+                'ai_enabled': False, 'display_name': 'sample-user',
+                'sign_in_url': '/trial/sign-in', 'account_url': '/trial/account'})
+            account = client.get('/trial/account', base_url=self.base).text
+            self.assertIn('Your practice and uploads stay in this account.', account)
+            self.assertIn('AI generation is currently turned off.', account)
+            self.assertNotIn('US$1', account)
+            self.assertEqual(client.get('/api/v1/user-session', base_url=self.base).json['profile']['id'], 'personal-learning')
+            invoke = Mock()
+            with self.assertRaises(TrialDenied):
+                provider_call(trial.config, 'accounts-only-guard', {}, 1, invoke)
+            invoke.assert_not_called()
+            self.assertFalse(self.ledger_path.exists())
+            with sqlite3.connect(trial.config['DB_PATH']) as conn:
+                conn.execute("UPDATE words SET mnemonic='Saved personal hint' WHERE lemma='письмо'")
+            cookie = client.get_cookie(COOKIE, domain='arcade.example').value
+            restarted = self.app()
+            returning = restarted.test_client()
+            returning.set_cookie(COOKIE, cookie, domain='arcade.example')
+            self.assertEqual(returning.get('/vocab', base_url=self.base).status_code, 200)
+            with sqlite3.connect(restarted.extensions['hosted_trial'].cache['github:11'].config['DB_PATH']) as conn:
+                self.assertEqual(conn.execute("SELECT mnemonic FROM words WHERE lemma='письмо'").fetchone()[0], 'Saved personal hint')
+            self.assertFalse(self.ledger_path.exists())
+
+    def test_existing_sessions_gain_ai_after_activation_without_resetting_spend_or_denials(self):
+        from services.trial_provider import provider_call
+        with patch.dict(os.environ, {'HOSTED_ACCOUNTS_ENABLED': 'true', 'AI_TRIAL_ENABLED': 'false'}):
+            accounts = self.app()
+            cookies = {}
+            for identity in ('github:11', 'github:22'):
+                client = accounts.test_client()
+                self.login(client, identity)
+                cookies[identity] = client.get_cookie(COOKIE, domain='arcade.example').value
+        self.ledger.authorize_identity('github:22')
+        self.ledger.reserve('github:22', 'previous-spend', 'a' * 64, 100)
+        self.ledger.settle('github:22', 'previous-spend', 100)
+        with sqlite3.connect(self.ledger_path) as conn:
+            conn.execute("UPDATE trial_accounts SET enabled=0 WHERE identity='github:22'")
+            before = conn.execute('SELECT * FROM trial_requests').fetchall()
+        activated = self.app()
+        for identity, cookie in cookies.items():
+            returning = activated.test_client()
+            returning.set_cookie(COOKIE, cookie, domain='arcade.example')
+            self.assertEqual(returning.get('/vocab', base_url=self.base).status_code, 200)
+            self.assertTrue(returning.get('/trial/status', base_url=self.base).json['authenticated'])
+            self.assertTrue(returning.get('/trial/status', base_url=self.base).json['ai_enabled'])
+        with sqlite3.connect(self.ledger_path) as conn:
+            self.assertEqual(dict(conn.execute('SELECT identity,enabled FROM trial_accounts')), {'github:11': 1, 'github:22': 0})
+            self.assertEqual(conn.execute('SELECT * FROM trial_requests').fetchall(), before)
+        invoke = Mock(return_value='metered result')
+        active_config = activated.extensions['hosted_trial'].cache['github:11'].config
+        self.assertEqual(provider_call(active_config, 'activated-account', {}, 10, invoke, lambda _: 10), 'metered result')
+        invoke.assert_called_once()
+        blocked = Mock()
+        with self.assertRaises(TrialDenied):
+            provider_call(activated.extensions['hosted_trial'].cache['github:22'].config,
+                          'blocked-account', {}, 10, blocked)
+        blocked.assert_not_called()
+
+    def test_accounts_flag_is_independent_and_oauth_is_required_without_ai(self):
+        with patch.dict(os.environ, {'HOSTED_ACCOUNTS_ENABLED': 'false'}):
+            app = create_hosted_app()
+            self.assertFalse(app.config['HOSTED_ACCOUNTS_ENABLED'])
+            self.assertFalse(app.config['HOSTED_TRIAL_AVAILABLE'])
+            status = app.test_client().get('/trial/status', base_url=self.base).json
+            self.assertFalse(status['enabled'])
+            self.assertTrue(status['ai_enabled'])
+        for name in ('GITHUB_OAUTH_CLIENT_ID', 'GITHUB_OAUTH_CLIENT_SECRET'):
+            with patch.dict(os.environ, {'HOSTED_ACCOUNTS_ENABLED': 'true', 'AI_TRIAL_ENABLED': 'false', name: ''}):
+                with self.assertRaisesRegex(RuntimeError, 'Hosted accounts require GitHub OAuth'):
+                    create_hosted_app()
+        with patch.dict(os.environ, {'HOSTED_ACCOUNTS_ENABLED': 'true', 'AI_TRIAL_ENABLED': 'false', 'HOSTED_TRIAL_ROOT': ''}):
+            with self.assertRaisesRegex(RuntimeError, 'HOSTED_TRIAL_ROOT'):
+                create_hosted_app()
+
     def test_dedicated_credentials_required_to_enable_and_no_fallback_to_regular_keys(self):
         required = ('GITHUB_OAUTH_CLIENT_ID', 'GITHUB_OAUTH_CLIENT_SECRET', 'DEMO_OPENAI_API_KEY',
                     'DEMO_ELEVENLABS_API_KEY', 'DEMO_OPENROUTER_API_KEY')
@@ -163,6 +263,75 @@ class HostedTrialIntegrationTests(unittest.TestCase):
                 self.assertEqual(conn.execute('SELECT COUNT(*) FROM saved_stories').fetchone()[0], 0)
         with sqlite3.connect(self.ledger_path) as conn:
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM trial_accounts').fetchone()[0], 2)
+
+    def test_account_switch_rejects_stale_scope_even_with_current_csrf_and_same_profile_id(self):
+        app = self.app()
+        browser = app.test_client()
+        self.login(browser, 'github:11')
+        previous = browser.get('/api/v1/user-session', base_url=self.base).json
+        previous_cookie = browser.get_cookie(COOKIE, domain='arcade.example').value
+
+        # Another tab replaces the shared account cookie. Both workspaces use
+        # the same profile ID, and a background response can refresh CSRF.
+        self.login(browser, 'github:22')
+        current = browser.get('/api/v1/user-session', base_url=self.base).json
+        self.assertEqual(previous['profile']['id'], 'personal-learning')
+        self.assertEqual(current['profile']['id'], previous['profile']['id'])
+        self.assertNotEqual(current['session_scope'], previous['session_scope'])
+        self.assertNotEqual(current['csrf_token'], previous['csrf_token'])
+        headers = {'X-CSRF-Token': current['csrf_token'], 'X-Profile-ID': previous['profile']['id'],
+                   'X-Account-Scope': previous['session_scope']}
+
+        for method, path, payload in (
+                ('GET', '/api/v1/progression', None),
+                ('POST', '/api/v1/progression/preferences', {'level': 'B2'}),
+                ('PATCH', '/api/v1/user-session/profile', {'display_name': 'Stale tab rename'})):
+            with self.subTest(method=method, path=path):
+                response = browser.open(path, method=method, base_url=self.base, headers=headers, json=payload)
+                self.assertEqual(response.status_code, 409, response.text)
+                self.assertEqual(response.json['error']['code'], 'account_changed')
+                self.assertEqual(set(response.json), {'error'})
+
+        current_headers = headers | {'X-Account-Scope': current['session_scope']}
+        unchanged = browser.get('/api/v1/progression', base_url=self.base, headers=current_headers)
+        self.assertEqual(unchanged.status_code, 200)
+        self.assertEqual(unchanged.json['preferred_level'], 'A1')
+        profile = browser.get('/api/v1/user-session', base_url=self.base, headers=current_headers).json['profile']
+        self.assertEqual(profile['display_name'], 'sample-user')
+        updated = browser.post('/api/v1/progression/preferences', base_url=self.base,
+                               headers=current_headers, json={'level': 'A2'})
+        self.assertEqual(updated.status_code, 200, updated.text)
+        self.assertEqual(updated.json['preferred_level'], 'A2')
+        renamed = browser.patch('/api/v1/user-session/profile', base_url=self.base,
+                                headers=current_headers, json={'display_name': 'Current account'})
+        self.assertEqual(renamed.status_code, 200, renamed.text)
+        self.assertEqual(renamed.json['profile']['display_name'], 'Current account')
+
+        browser.set_cookie(COOKIE, previous_cookie, domain='arcade.example')
+        restored = browser.get('/api/v1/user-session', base_url=self.base).json
+        self.assertEqual(restored['session_scope'], previous['session_scope'])
+        self.assertEqual(restored['profile']['display_name'], 'sample-user')
+        self.assertEqual(browser.get('/api/v1/progression', base_url=self.base,
+            headers={'X-Account-Scope': previous['session_scope']}).json['preferred_level'], 'A1')
+
+    def test_preview_local_and_hosted_session_scopes_are_distinct(self):
+        from tests.support import isolated_app
+        local = isolated_app(self, signed_in=False).test_client()
+        local_scope = local.get('/api/v1/user-session').json['session_scope']
+        self.assertEqual(local_scope, 'local')
+        app = self.app()
+        browser = app.test_client()
+        preview_scope = browser.get('/api/v1/user-session', base_url=self.base).json['session_scope']
+        self.assertEqual(preview_scope, 'preview')
+        self.login(browser)
+        hosted_scope = browser.get('/api/v1/user-session', base_url=self.base).json['session_scope']
+        self.assertTrue(hosted_scope.startswith('hosted:'))
+        self.assertEqual(len({local_scope, preview_scope, hosted_scope}), 3)
+        for stale_scope in (local_scope, preview_scope):
+            response = browser.get('/api/v1/flashcards', base_url=self.base,
+                                   headers={'X-Account-Scope': stale_scope})
+            self.assertEqual(response.status_code, 409)
+            self.assertEqual(response.json['error']['code'], 'account_changed')
 
 
 if __name__ == '__main__':

@@ -1,7 +1,8 @@
 """Fly-only entry point. Local development continues to use app.create_app.
 
 Supports a private installation or a public sample site with optional,
-authenticated AI workspaces. Local files and credentials are never published.
+persistent personal accounts and separately enabled AI workspaces.
+Local files and credentials are never published.
 """
 import hashlib
 import hmac
@@ -86,6 +87,8 @@ def create_hosted_app():
         'SESSION_COOKIE_SECURE': True,
         'WORD_POST_ALLOWED_HOSTS': (values['HOSTED_HOSTNAME'],),
         'WORD_POST_HOUSEHOLD_ENABLED': False,
+        'HOSTED_ACCOUNTS_ENABLED': False,
+        'HOSTED_TRIAL_AVAILABLE': False,
     }
     if public:
         overrides.update(OPENAI_API_KEY='', OPENROUTER_API_KEY='', ELEVENLABS_API_KEY='',
@@ -96,14 +99,19 @@ def create_hosted_app():
         from public_demo import install_demo
         install_demo(app)
     application = app.wsgi_app
+    ai_enabled = os.environ.get('AI_TRIAL_ENABLED') == 'true'
+    accounts_enabled = os.environ.get('HOSTED_ACCOUNTS_ENABLED', os.environ.get('AI_TRIAL_ENABLED')) == 'true'
+    if public and (accounts_enabled or ai_enabled) and not os.environ.get('HOSTED_TRIAL_ROOT'):
+        raise RuntimeError('Hosted accounts require HOSTED_TRIAL_ROOT on persistent storage.')
     if public and os.environ.get('HOSTED_TRIAL_ROOT'):
         from hosted_trial import HostedTrialDispatcher
         from services.ai_trial_budget import AITrialBudget
         root = Path(os.environ['HOSTED_TRIAL_ROOT']).resolve()
         ledger_path = root / 'ai-budget.sqlite3'
-        enabled = os.environ.get('AI_TRIAL_ENABLED') == 'true'
-        app.config['HOSTED_TRIAL_AVAILABLE'] = enabled
-        if enabled:
+        oauth_configured = bool(os.environ.get('GITHUB_OAUTH_CLIENT_ID') and os.environ.get('GITHUB_OAUTH_CLIENT_SECRET'))
+        app.config['HOSTED_ACCOUNTS_ENABLED'] = accounts_enabled and oauth_configured
+        app.config['HOSTED_TRIAL_AVAILABLE'] = ai_enabled and app.config['HOSTED_ACCOUNTS_ENABLED']
+        if ai_enabled:
             required = ('GITHUB_OAUTH_CLIENT_ID', 'GITHUB_OAUTH_CLIENT_SECRET',
                         'DEMO_OPENAI_API_KEY', 'DEMO_ELEVENLABS_API_KEY', 'DEMO_OPENROUTER_API_KEY')
             if any(not os.environ.get(key) for key in required):
@@ -112,16 +120,18 @@ def create_hosted_app():
             # must never reset the spending allowance during a restart.
             with AITrialBudget(ledger_path, enabled=True)._transaction() as conn:
                 conn.execute('SELECT halted FROM trial_control WHERE id=1').fetchone()
+        elif accounts_enabled and not oauth_configured:
+            raise RuntimeError('Hosted accounts require GitHub OAuth client ID and client secret.')
         trial_config = {
-            'AI_TRIAL_ENABLED': enabled,
-            'OPENAI_API_KEY': os.environ.get('DEMO_OPENAI_API_KEY', ''),
-            'ELEVENLABS_API_KEY': os.environ.get('DEMO_ELEVENLABS_API_KEY', ''),
-            'OPENROUTER_API_KEY': os.environ.get('DEMO_OPENROUTER_API_KEY', ''),
+            'AI_TRIAL_ENABLED': ai_enabled,
+            'OPENAI_API_KEY': os.environ.get('DEMO_OPENAI_API_KEY', '') if ai_enabled else '',
+            'ELEVENLABS_API_KEY': os.environ.get('DEMO_ELEVENLABS_API_KEY', '') if ai_enabled else '',
+            'OPENROUTER_API_KEY': os.environ.get('DEMO_OPENROUTER_API_KEY', '') if ai_enabled else '',
             'YANDEX_API_KEY': '',
         }
         application = HostedTrialDispatcher(application, create_app, root=root,
             ledger_path=ledger_path, secret=values['FLASK_SECRET_KEY'],
-            hostname=values['HOSTED_HOSTNAME'], enabled=enabled, app_config=trial_config,
+            hostname=values['HOSTED_HOSTNAME'], enabled=accounts_enabled, ai_enabled=ai_enabled, app_config=trial_config,
             client_id=os.environ.get('GITHUB_OAUTH_CLIENT_ID', ''),
             client_secret=os.environ.get('GITHUB_OAUTH_CLIENT_SECRET', ''))
         app.extensions['hosted_trial'] = application

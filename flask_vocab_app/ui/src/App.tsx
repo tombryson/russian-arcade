@@ -15,7 +15,7 @@ import { Conversation } from './Conversation';
 import { LiveConversation } from './LiveConversation';
 import { Journey, ProgressionBadge, useProgression } from './Progression';
 import { SkillProgress } from './SkillProgress';
-import { UserSessionLink, type UserProfile } from './UserSessionLink';
+import { UserSessionLink, type UserProfile, type AccountMode } from './UserSessionLink';
 import {useOnboarding, type OnboardingState} from './Onboarding';
 import { ActivitySidebar, type ActivityNavigation } from './ActivitySidebar';
 import { AppearancePicker } from './AppearancePicker';
@@ -75,7 +75,7 @@ const activities = [
 ];
 type State = { mode: 'loading' | 'legacy' | 'adult' | 'locked' | 'child' | 'personal' | 'error'; household?: Household; home?: LearningHome; progress?: Progress; error?: string };
 
-export function App({ householdEnabled = false, nativeEnabled = true, language = 'en', csrfToken = '', navigation, navigationLayout = 'top', initialProfile, initialOnboarding }: { householdEnabled?: boolean; nativeEnabled?: boolean; language?: Language; csrfToken?: string; navigation?: ActivityNavigation | null; navigationLayout?: 'top' | 'sidebar'; initialProfile?: UserProfile | null; initialOnboarding?: OnboardingState }) {
+export function App({ householdEnabled = false, nativeEnabled = true, language = 'en', csrfToken = '', navigation, navigationLayout = 'top', initialProfile, initialOnboarding, accountMode = 'local', signInAvailable = false, sessionScope }: { householdEnabled?: boolean; nativeEnabled?: boolean; language?: Language; csrfToken?: string; navigation?: ActivityNavigation | null; navigationLayout?: 'top' | 'sidebar'; initialProfile?: UserProfile | null; initialOnboarding?: OnboardingState; accountMode?: AccountMode; signInAvailable?: boolean; sessionScope?: string }) {
   const [location, setLocation] = useState<Route>(route);
   const onboarding=useOnboarding(initialOnboarding);
   const [state, setState] = useState<State>({ mode: householdEnabled ? 'loading' : 'legacy' });
@@ -209,7 +209,7 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
     {page:'word_jumble', href:'/word_jumble', label:language === 'ru' ? 'Слова вперемешку' : 'Word Jumble', boost:false},
     {page:'sentences', href:'/sentences', label:language === 'ru' ? 'Перевести предложение' : 'Translate a sentence', boost:false},
   ]).filter(item => nativeEnabled || item.page !== 'native_flashcards');
-  const profileControl = <UserSessionLink profile={profile} language={language} household={householdEnabled} />;
+  const profileControl = <UserSessionLink profile={profile} language={language} household={householdEnabled} accountMode={accountMode} signInAvailable={signInAvailable} sessionScope={sessionScope} />;
   const appearanceControl = <AppearancePicker language={language} navigationLayout={navigationLayout} csrfToken={csrfToken} />;
   const coinBalance = onboarding.state.coins_introduced && <ProgressionBadge progression={progression} language={language} introductory={signedOut || householdEnabled && !profile} />;
   const languageControl = <details class="post-language"><summary aria-label={language === 'ru' ? 'Язык интерфейса' : 'Interface language'}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h12M9 3v2M12 5c-1 5-4 8-8 10M5 8c1 3 4 6 7 7M13 21l4.5-11L22 21M15 17h5"/></svg></summary><form method="post" action="/ui-language"><input type="hidden" name="csrf_token" value={csrfToken} /><input type="hidden" name="next" value={`/post/${window.location.hash}`} /><button name="lang" value="en" lang="en" aria-current={language === 'en' ? 'true' : undefined}>English</button><button name="lang" value="ru" lang="ru" aria-current={language === 'ru' ? 'true' : undefined}>Русский</button></form></details>;

@@ -7,7 +7,7 @@ from repositories.learning_repository import LearningError, require_access, time
 from services.onboarding import onboarding_state
 from services.personal_learning import PersonalSessions
 from services.skill_progress import snapshot as skill_snapshot
-from utils.household_access import access_id, access_policy, csrf_token
+from utils.household_access import access_id, access_policy, csrf_token, user_session_scope
 from utils.navigation import browser_navigation_layout
 
 
@@ -41,7 +41,7 @@ def create_user_sessions_blueprint():
             abort(404)
 
     def state():
-        return personal_sessions().state(access_id()) | {'csrf_token': csrf_token()}
+        return personal_sessions().state(access_id()) | {'csrf_token': csrf_token(), 'session_scope': user_session_scope()}
 
     def body(required, optional=()):
         if not request.is_json:

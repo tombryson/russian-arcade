@@ -2,6 +2,7 @@
 (() => {
     const token = document.querySelector('meta[name="csrf-token"]')?.content;
     const profile = document.querySelector('meta[name="learning-profile"]')?.content;
+    const scope = document.querySelector('meta[name="learning-account"]')?.content;
     if (!token) return;
     const local = value => new URL(value, window.location.href).origin === window.location.origin;
     const originalFetch = window.fetch.bind(window);
@@ -11,12 +12,18 @@
         const headers = new Headers(init.headers ?? (input instanceof Request ? input.headers : undefined));
         headers.set('X-CSRF-Token', token);
         if (profile) headers.set('X-Profile-ID', profile);
+        const method = (init.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+        const sessionProbe = method === 'GET' && new URL(url, window.location.href).pathname === '/api/v1/user-session';
+        // The account watcher needs the current identity to reload stale tabs.
+        // Activity requests stay bound to the account that opened this document.
+        if (scope && !sessionProbe) headers.set('X-Account-Scope', scope);
         return originalFetch(input, { ...init, headers });
     };
     document.addEventListener('htmx:configRequest', event => {
         if (local(event.detail.path)) {
             event.detail.headers['X-CSRF-Token'] = token;
             if (profile) event.detail.headers['X-Profile-ID'] = profile;
+            if (scope) event.detail.headers['X-Account-Scope'] = scope;
         }
     });
     const submissions = new WeakMap();

@@ -17,12 +17,15 @@ export class ApiError extends Error {
 }
 let csrf = '';
 let pageProfile: string | undefined;
-export function bindUserSession(profileId: string | undefined, csrfToken: string) {
+let pageScope: string | undefined;
+export function bindUserSession(profileId: string | undefined, csrfToken: string, sessionScope?: string) {
   pageProfile = profileId;
+  pageScope = sessionScope;
   csrf = csrfToken;
 }
 function identityHeaders(): Record<string,string> {
-  return pageProfile === undefined ? {} : {'X-Profile-ID':pageProfile};
+  return {...(pageProfile === undefined ? {} : {'X-Profile-ID':pageProfile}),
+    ...(pageScope ? {'X-Account-Scope':pageScope} : {})};
 }
 export function endOnLeave(url: string) {
   void fetch(url,{method:'POST',credentials:'same-origin',keepalive:true,

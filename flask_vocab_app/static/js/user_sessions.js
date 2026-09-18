@@ -3,6 +3,7 @@
   'use strict';
   function watch(marker) {
   const current=marker.dataset.profileId || '';
+  const scope=marker.dataset.sessionScope;
   let checking=false,leaving=false;
   async function check() {
     if (checking || leaving || document.visibilityState!=='visible') return;
@@ -11,7 +12,8 @@
       const response=await fetch('/api/v1/user-session',{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});
       if (!response.ok) return;
       const state=await response.json();
-      if (state.mode==='personal' && (state.profile?.id || '')!==current) {
+      if ((scope && state.session_scope && state.session_scope!==scope) ||
+          (state.mode==='personal' && (state.profile?.id || '')!==current)) {
         leaving=true;
         // A hash-only navigation would leave the old app/profile mounted.
         if (window.location.pathname==='/post/') {
@@ -22,7 +24,7 @@
     } catch (_) { /* Keep a draft during connection problems; the server rejects stale writes. */ }
     finally {checking=false;}
   }
-  try {localStorage.setItem('russian-arcade-session',JSON.stringify({profile:current,at:Date.now()}));} catch (_) { /* Storage is optional. */ }
+  try {localStorage.setItem('russian-arcade-session',JSON.stringify({profile:current,scope,at:Date.now()}));} catch (_) { /* Storage is optional. */ }
   window.addEventListener('storage',event=>{if (event.key==='russian-arcade-session') void check();});
   document.addEventListener('visibilitychange',()=>{if (document.visibilityState==='visible') void check();});
   window.addEventListener('pageshow',event=>{if (event.persisted) void check();});

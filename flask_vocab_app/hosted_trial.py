@@ -1,4 +1,4 @@
-"""Verified GitHub sign-in and isolated workspaces for the hosted AI trial.
+"""Verified GitHub sign-in and isolated, persistent hosted workspaces.
 
 The public sample application remains usable without signing in. A verified
 GitHub account gets a separate database, media directory and Flask session.
@@ -174,9 +174,11 @@ def install_trial_session(app):
         if response.mimetype == 'text/html' and not response.direct_passthrough:
             body = response.get_data(as_text=True)
             if '</head>' in body and '</body>' in body:
-                notice = ('<details class="demo-notice"><summary>AI demo</summary>'
-                          '<p>The shared AI allowance is US$1 a day and US$20 a month. '
-                          'Your practice is saved in your account. '
+                ai_message = ('The shared AI allowance is US$1 a day and US$20 a month. '
+                              if app.config.get('AI_TRIAL_ENABLED') else
+                              'AI generation is currently turned off. ')
+                notice = ('<details class="demo-notice"><summary>Your account</summary>'
+                          '<p>Your practice is saved in your account. ' + ai_message +
                           '<a href="/trial/account">Account and sign out</a></p></details>')
                 body = body.replace('</head>', '<link rel="stylesheet" href="/static/css/public_demo.css?v=2"></head>', 1)
                 response.set_data(body.replace('</body>', notice + '</body>', 1))
@@ -186,13 +188,17 @@ def install_trial_session(app):
 class HostedTrialDispatcher:
     """Route a verified browser to its persistent workspace on the same URL."""
     def __init__(self, public_application, app_factory, *, root, ledger_path, secret, hostname,
-                 client_id='', client_secret='', app_config=None, enabled=False,
+                 client_id='', client_secret='', app_config=None, enabled=False, ai_enabled=None,
                  max_tenants=100, max_cached_apps=8, identity_provider=None,
                  budget=None, seed=seed_trial_workspace, clock=time.time):
         self.public_application, self.app_factory = public_application, app_factory
         self.root, self.ledger_path = Path(root).resolve(), Path(ledger_path).resolve()
         self.secret, self.hostname, self.enabled = secret, hostname, enabled
         self.config = dict(app_config or {})
+        # Existing callers enabled authentication and paid AI together. New
+        # callers can enable persistent accounts while keeping providers off.
+        self.ai_enabled = bool(self.config.get('AI_TRIAL_ENABLED', enabled)) if ai_enabled is None else bool(ai_enabled)
+        self.config['AI_TRIAL_ENABLED'] = self.ai_enabled
         self.max_tenants, self.max_cached_apps = max_tenants, max_cached_apps
         self.clock, self.seed = clock, seed
         self.provider = identity_provider or GitHubIdentity(client_id, client_secret, 'https://' + hostname + '/trial/callback')
@@ -204,7 +210,7 @@ class HostedTrialDispatcher:
         self.inflight, self.storage_reserved = {}, {}
         if budget is None:
             from services.ai_trial_budget import AITrialBudget
-            budget = AITrialBudget(self.ledger_path, enabled=enabled)
+            budget = AITrialBudget(self.ledger_path, enabled=self.ai_enabled)
         self.budget = budget
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.registry = self.root / 'identities.sqlite3'
@@ -270,7 +276,7 @@ class HostedTrialDispatcher:
 
     def _begin(self, request):
         if not self.enabled or not self.provider.configured:
-            return self._page('AI demo', 'AI sign-in is not configured yet. You can still explore the sample activities.', 503)
+            return self._page('Personal sign-in', 'Personal sign-in is not configured yet. You can still explore the sample activities.', 503)
         state, browser, verifier = secrets.token_urlsafe(32), secrets.token_urlsafe(32), secrets.token_urlsafe(48)
         now = int(self.clock())
         with self._db() as conn:
@@ -307,11 +313,10 @@ class HostedTrialDispatcher:
                     return self._page('Demo capacity reached', 'The demo is full for now. Sample activities are still available.', 503)
                 conn.execute('INSERT INTO identities VALUES (?,?,?) ON CONFLICT(identity) DO UPDATE SET display_name=excluded.display_name',
                              (identity, name[:60], int(self.clock())))
-            self.budget.authorize_identity(identity)
             self._application(identity, name)
         except (TrialIdentityError, ValueError) as error:
             # Never expose provider bodies, tokens, file paths or secret values.
-            return self._page('Sign-in not completed', 'The AI demo could not be opened. Please try again later.', 503)
+            return self._page('Sign-in not completed', 'Your personal workspace could not be opened. Please try again later.', 503)
         token = secrets.token_urlsafe(40)
         with self._db() as conn:
             conn.execute('DELETE FROM sessions WHERE expires_at<=?', (int(self.clock()),))
@@ -390,6 +395,15 @@ class HostedTrialDispatcher:
             if identity in self.cache:
                 self.cache.move_to_end(identity)
                 return self.cache[identity]
+            if self.ai_enabled:
+                # This identity came from the verified callback or a valid
+                # persisted server-side session. Provision it on first access
+                # after AI activation too, without another sign-in. INSERT OR
+                # IGNORE preserves existing denials and spending history.
+                try:
+                    self.budget.authorize_identity(identity)
+                except ValueError as error:
+                    raise TrialIdentityError('AI activation is temporarily unavailable.') from error
             if len(self.cache) >= self.max_cached_apps:
                 idle = next(((key, value) for key, value in self.cache.items() if not self._busy(key, value)), None)
                 if idle is None:
@@ -417,16 +431,23 @@ class HostedTrialDispatcher:
             account = self._session(request)
             if request.path == '/trial/status' and request.method == 'GET':
                 response = self._json({'authenticated': bool(account), 'enabled': self.enabled,
-                    'configured': self.provider.configured, 'display_name': account['display_name'] if account else None,
+                    'configured': self.provider.configured, 'ai_enabled': self.ai_enabled,
+                    'display_name': account['display_name'] if account else None,
                     'sign_in_url': '/trial/sign-in', 'account_url': '/trial/account'})
             elif request.path == '/trial/account' and request.method == 'GET':
                 if account:
+                    ai_message = ('The shared AI allowance is US$1 per day and US$20 per month across all visitors.'
+                                  if self.ai_enabled else
+                                  'AI generation is currently turned off. Your saved practice remains available.')
                     response = self._page('Your account',
-                        f"Signed in as {account['display_name']}. Your practice and uploads stay in this account. The shared AI allowance is US$1 per day and US$20 per month across all visitors.",
+                        f"Signed in as {account['display_name']}. Your practice and uploads stay in this account. {ai_message}",
                         account=account)
                 elif self.enabled and self.provider.configured:
+                    ai_message = ('The shared AI activities are also available.' if self.ai_enabled else
+                                  'AI generation is currently turned off.')
                     response = self._page('Sign in',
-                        'Use your GitHub account to save your progress and use the AI activities. No repository access is requested.')
+                        'Use your GitHub account to save your progress in a persistent personal workspace. '
+                        f'No repository access is requested. {ai_message}')
                 else:
                     response = self._page('Public preview',
                         'You are using a temporary demo profile. Personal sign-in is not enabled on this site yet. You can try the sample activities here, or use the full app in a local installation.')

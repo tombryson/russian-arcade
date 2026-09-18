@@ -11,10 +11,10 @@
     <link rel="stylesheet" href="{{ url_for('word_post.assets', filename=filename) }}">
     {% endfor %}
     <script type="module" src="{{ url_for('word_post.assets', filename=assets.script) }}"></script>
-    <script src="/static/js/user_sessions.js?v=1" defer></script>
+    <script src="/static/js/user_sessions.js?v=2" defer></script>
   </head>
   <body>
-    <div id="word-post" data-view="{{ view }}" data-onboarding="{{ onboarding_state | tojson | forceescape }}" data-profile="{{ user_session_profile | default(none) | tojson | forceescape }}" data-household="{{ 'true' if household_enabled else 'false' }}" data-native="{{ 'true' if config.NATIVE_FLASHCARDS_ENABLED else 'false' }}" data-language="{{ ui_lang }}" data-csrf="{{ csrf_token() }}" data-navigation-layout="{{ navigation_layout }}" data-navigation="{{ activity_navigation | tojson | forceescape }}">
+    <div id="word-post" data-view="{{ view }}" data-onboarding="{{ onboarding_state | tojson | forceescape }}" data-profile="{{ user_session_profile | default(none) | tojson | forceescape }}" data-household="{{ 'true' if household_enabled else 'false' }}" data-session-scope="{{ user_session_scope | default('') }}" data-account-mode="{{ 'hosted' if config.get('HOSTED_AI_TRIAL') else 'preview' if config.get('PUBLIC_DEMO') else 'local' }}" data-sign-in-available="{{ 'true' if config.get('HOSTED_ACCOUNTS_ENABLED') else 'false' }}" data-native="{{ 'true' if config.NATIVE_FLASHCARDS_ENABLED else 'false' }}" data-language="{{ ui_lang }}" data-csrf="{{ csrf_token() }}" data-navigation-layout="{{ navigation_layout }}" data-navigation="{{ activity_navigation | tojson | forceescape }}">
       <section class="page"><p class="kicker">Russian Arcade</p><h1>Opening your activities…</h1>
         <p>If this page does not open, <a href="{{ url_for('word_post.home') }}">try again</a> or <a href="/comprehension">open reading practice</a>.</p>
         <noscript><p>The activity home needs JavaScript. You can still <a href="/">open the existing learning tools</a>.</p></noscript>

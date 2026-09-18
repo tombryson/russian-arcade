@@ -185,6 +185,30 @@ describe('Russian Arcade activity home', () => {
 });
 
 describe('Personal user sessions', () => {
+  it.each(['top','sidebar'] as const)('shows the correct account entry throughout the %s layout', navigationLayout => {
+    window.history.replaceState(null, '', '/post/#activities');
+    vi.stubGlobal('fetch',vi.fn(()=>response({profile_id:'demo-preview',balance:0,skill:{status:'not_calibrated',skills:[]}})));
+    const navigation={title:'Activities & tools',more:'More tools',activities:[],tools:[]};
+    const profile={id:'demo-preview',display_name:'Demo'};
+    const {container,rerender}=render(<App navigation={navigation} navigationLayout={navigationLayout} initialProfile={profile} accountMode="preview" signInAvailable />);
+    const control=()=>container.querySelector(`${navigationLayout==='sidebar' ? '.sidebar-account' : 'header.top'} .user-session-link`)!;
+    expect(control()).toBe(screen.getByRole('link',{name:'Sign in'}));
+    expect(control().textContent).toBe('Sign in');
+    expect(control().getAttribute('href')).toBe('/trial/account');
+    expect(container.querySelectorAll('[data-user-session]')).toHaveLength(1);
+    rerender(<App navigation={navigation} navigationLayout={navigationLayout} initialProfile={profile} accountMode="preview" language="ru" />);
+    expect(control()).toBe(screen.getByRole('link',{name:'Аккаунт'}));
+    expect(control().textContent).toBe('Аккаунт');
+    expect(control().getAttribute('href')).toBe('/trial/account');
+    rerender(<App navigation={navigation} navigationLayout={navigationLayout} initialProfile={{id:'hosted-personal',display_name:'Tom'}} accountMode="hosted" />);
+    expect(control()).toBe(screen.getByRole('link',{name:'Account: Tom'}));
+    expect(control().getAttribute('href')).toBe('/trial/account');
+    expect(control().getAttribute('data-profile-id')).toBe('hosted-personal');
+    expect(control().textContent).toBe('T');
+    rerender(<App navigation={navigation} navigationLayout={navigationLayout} initialProfile={{id:'tom',display_name:'Tom'}} />);
+    expect(control()).toBe(screen.getByRole('link',{name:'Profile: Tom'}));
+    expect(control().getAttribute('href')).toBe('/post/profiles');
+  });
   it('keeps the introduction public and offers a profile without fetching private progress', async () => {
     window.history.replaceState(null, '', '/post/#home');
     const fetch=vi.fn(); vi.stubGlobal('fetch',fetch);

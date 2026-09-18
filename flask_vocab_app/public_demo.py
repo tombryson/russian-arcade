@@ -9,12 +9,13 @@ from flask import jsonify, redirect, request, session
 from repositories.learning_repository import transaction, LearningError
 from services.personal_learning import PersonalSessions, personal_access
 from services.demo_limits import DemoLimits
-from utils.household_access import csrf_token
+from utils.household_access import access_policy, csrf_token
 
 MESSAGE = 'This public preview includes First steps, sample games, vocabulary and flashcard practice. AI generation, uploads and editing are available in your own installation.'
 
 # New endpoints stay private even when added to an existing public blueprint.
 READ_ENDPOINTS = frozenset({
+    'public_demo_account',
     'word_post.home', 'word_post.assets', 'word_post.licenses', 'static',
     'ui_preferences.appearance',
     'curriculum.index',
@@ -65,12 +66,30 @@ def install_demo(app):
     sessions = PersonalSessions(database)
     limits = DemoLimits(database)
 
+    @app.get('/trial/account', endpoint='public_demo_account')
+    @access_policy('public')
+    def profile_information():
+        # The hosted dispatcher owns this URL when configured. Standalone
+        # previews still need a working account link without that dispatcher.
+        return ('<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width">'
+                '<title>Demo profile · Russian Arcade</title>'
+                '<link rel="stylesheet" href="/static/css/public_demo.css?v=2"></head>'
+                '<body class="demo-unavailable"><main class="demo-unavailable-content">'
+                '<h1>Demo profile</h1><p>This temporary profile is for trying the sample activities. '
+                'Personal sign-in is not enabled on this site yet.</p>'
+                '<p><a href="/post/#home">Back to Russian Arcade</a></p></main></body></html>')
+
     def rate_limited(seconds):
         return jsonify(error={'code': 'rate_limited', 'message': 'The demo is busy. Please try again later.'}), 429, {'Retry-After': str(seconds)}
 
     def limited():
-        available = app.config.get('HOSTED_TRIAL_AVAILABLE')
-        message = 'Sign in with GitHub to use the AI activities and save your progress.' if available else MESSAGE
+        available = app.config.get('HOSTED_ACCOUNTS_ENABLED')
+        if available:
+            message = ('Sign in with GitHub to save your progress in your personal account. '
+                       + ('AI activities are also available.' if app.config.get('HOSTED_TRIAL_AVAILABLE') else
+                          'AI generation is currently turned off.'))
+        else:
+            message = MESSAGE
         if request.path.startswith('/api/'):
             return jsonify(error={'code': 'demo_limit', 'message': message,
                                   'sign_in_url': '/trial/sign-in' if available else None}), 403
@@ -92,13 +111,7 @@ def install_demo(app):
         if request.path == '/post/profiles' and request.method == 'GET':
             if app.extensions.get('hosted_trial') is not None:
                 return redirect('/trial/account')
-            return ('<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width">'
-                    '<title>Demo profile · Russian Arcade</title>'
-                    '<link rel="stylesheet" href="/static/css/public_demo.css?v=2"></head>'
-                    '<body class="demo-unavailable"><main class="demo-unavailable-content">'
-                    '<h1>Demo profile</h1><p>This temporary profile is for trying the sample activities. '
-                    'Personal sign-in is not enabled on this site yet.</p>'
-                    '<p><a href="/post/#home">Back to Russian Arcade</a></p></main></body></html>')
+            return profile_information()
         read = request.method in ('GET', 'HEAD')
         allowed = ((read and request.endpoint in READ_ENDPOINTS)
                    or (request.method == 'POST' and request.endpoint in WRITE_ENDPOINTS))
@@ -137,7 +150,7 @@ def install_demo(app):
         state = sessions.state(session.get('personal_access_id'))
         state['profiles'] = [state['profile']] if state['profile'] else []
         return jsonify(state | {'csrf_token': csrf_token(), 'public_demo': True,
-                               'configured': True, 'adult': False})
+                               'configured': True, 'adult': False, 'session_scope': 'preview'})
 
     app.view_functions['user_sessions.read'] = visitor_state
     app.view_functions['learning.state'] = visitor_state
@@ -147,12 +160,17 @@ def install_demo(app):
     def banner(response):
         if response.mimetype == 'text/html' and not response.direct_passthrough:
             body = response.get_data(as_text=True)
+            if app.config.get('HOSTED_ACCOUNTS_ENABLED'):
+                account_notice = ('<p><a href="/trial/sign-in">Sign in with GitHub</a> '
+                                  'to save your progress in your personal account. '
+                                  + ('The demo shares a US$1 daily and US$20 monthly AI allowance.'
+                                     if app.config.get('HOSTED_TRIAL_AVAILABLE') else
+                                     'AI generation is currently turned off.') + '</p>')
+            else:
+                account_notice = '<p>AI activities are not enabled in this public demo yet. You can use them in a local installation.</p>'
             notice = ('<details class="demo-notice"><summary>Public demo</summary>'
                       '<p>Try First steps, sample games and flashcards. Sample progress is temporary.</p>'
-                      + ('<p><a href="/trial/sign-in">Sign in with GitHub</a> to use AI activities '
-                         'and save your progress. The demo shares a US$1 daily and US$20 monthly AI allowance.</p>'
-                         if app.config.get('HOSTED_TRIAL_AVAILABLE') else
-                         '<p>AI activities are not enabled in this public demo yet. You can use them in a local installation.</p>')
+                      + account_notice
                       + '</details>')
             if '<body>' in body:
                 body = body.replace('</head>', '<link rel="stylesheet" href="/static/css/public_demo.css?v=2"></head>', 1)

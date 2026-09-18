@@ -95,6 +95,37 @@ class HostedTrialTests(unittest.TestCase):
         self.assertEqual(self.get(self.a, '/who').text, 'public samples')
         self.assertEqual(self.apps, [])
 
+    def test_ai_flag_supports_legacy_callers_and_explicit_accounts_only(self):
+        for config, explicit, expected in (({}, None, True),
+                                           ({'AI_TRIAL_ENABLED': False}, None, False),
+                                           ({'AI_TRIAL_ENABLED': True}, False, False),
+                                           ({'AI_TRIAL_ENABLED': False}, True, True)):
+            with self.subTest(config=config, explicit=explicit):
+                dispatcher = HostedTrialDispatcher(self.dispatch.public_application, self.factory,
+                    root=self.root, ledger_path=self.root / 'budget.sqlite3', secret='test-secret-' * 4,
+                    hostname='arcade.example', enabled=True, app_config=config, ai_enabled=explicit,
+                    identity_provider=self.provider)
+                self.assertEqual(dispatcher.ai_enabled, expected)
+                self.assertEqual(dispatcher.config['AI_TRIAL_ENABLED'], expected)
+                self.assertEqual(dispatcher.budget.enabled, expected)
+                self.assertTrue(dispatcher.enabled)
+
+    def test_accounts_only_never_authorizes_spending(self):
+        self.dispatch.ai_enabled = False
+        self.dispatch.config['AI_TRIAL_ENABLED'] = False
+        self.login(self.a)
+        self.budget.authorize_identity.assert_not_called()
+        self.assertFalse((self.root / 'budget.sqlite3').exists())
+        status = self.get(self.a, '/trial/status').json
+        self.assertTrue(status['authenticated'])
+        self.assertTrue(status['enabled'])
+        self.assertFalse(status['ai_enabled'])
+        self.assertTrue(self.apps[0].config['HOSTED_AI_TRIAL'])
+        page = self.get(self.a, '/trial/account')
+        self.assertIn('Your practice and uploads stay in this account.', page.text)
+        self.assertIn('AI generation is currently turned off.', page.text)
+        self.assertNotIn('US$1', page.text)
+
     def test_callback_requires_same_browser_state_and_single_use(self):
         self.get(self.a, '/trial/sign-in')
         state = self.provider.calls[-1][0]

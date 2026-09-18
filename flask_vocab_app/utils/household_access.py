@@ -1,5 +1,6 @@
 """Local profile sessions and opt-in household access across every study route."""
 import secrets
+from hashlib import sha256
 import re
 import sqlite3
 from urllib.parse import urlsplit
@@ -44,6 +45,14 @@ def user_session_profile():
         return None
 
 
+def user_session_scope():
+    """Distinguish hosted accounts whose local profile IDs can be identical."""
+    if current_app.config.get('HOSTED_AI_TRIAL'):
+        identity = current_app.config['AI_TRIAL_IDENTITY']
+        return 'hosted:' + sha256(identity.encode()).hexdigest()
+    return 'preview' if current_app.config.get('PUBLIC_DEMO') else 'local'
+
+
 def csrf_token():
     if 'household_csrf' not in session:
         session['household_csrf'] = secrets.token_urlsafe(32)
@@ -54,7 +63,7 @@ def install_household_policy(app):
     @app.context_processor
     def security_context():
         return {'household_enabled': app.config['WORD_POST_HOUSEHOLD_ENABLED'], 'csrf_token': csrf_token,
-                'user_session_profile': user_session_profile()}
+                'user_session_profile': user_session_profile(), 'user_session_scope': user_session_scope()}
 
     @app.errorhandler(LearningError)
     def learning_error(error):
@@ -80,6 +89,9 @@ def install_household_policy(app):
             raise LearningError('configuration_required', 'Set a private FLASK_SECRET_KEY of at least 32 characters before enabling household mode.', 503)
         if urlsplit(request.host_url).hostname not in app.config['WORD_POST_ALLOWED_HOSTS']:
             raise LearningError('invalid_host', 'This local app currently runs on this computer only.', 400)
+        expected_scope = request.headers.get('X-Account-Scope')
+        if expected_scope is not None and expected_scope != user_session_scope():
+            raise LearningError('account_changed', 'Your account changed in another tab. Reload this page to continue.', 409)
         view = app.view_functions.get(request.endpoint)
         role = getattr(view, 'household_policy', 'adult')
         if request.endpoint in {'word_post.home','word_post.assets','word_post.licenses'}:

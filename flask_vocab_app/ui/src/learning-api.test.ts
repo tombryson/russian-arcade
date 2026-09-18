@@ -8,9 +8,9 @@ afterEach(()=>{
 
 describe('Page identity binding',()=>{
   it('keeps every request bound to its original profile after a late response refreshes CSRF',async()=>{
-    bindUserSession('profile-a','old-token');
+    bindUserSession('profile-a','old-token','hosted:original-account');
     const fetch=vi.fn((_url:string,_options?:RequestInit)=>Promise.resolve({ok:true,json:async()=>({
-      profile_id:'profile-b',profile:{id:'profile-b',display_name:'Other'},csrf_token:'new-token',
+      profile_id:'profile-b',profile:{id:'profile-b',display_name:'Other'},csrf_token:'new-token',session_scope:'hosted:other-account',
     })}));
     vi.stubGlobal('fetch',fetch);
 
@@ -21,7 +21,7 @@ describe('Page identity binding',()=>{
 
     expect(fetch).toHaveBeenCalledTimes(4);
     for (const [, options] of fetch.mock.calls) {
-      expect(options?.headers).toMatchObject({'X-Profile-ID':'profile-a'});
+      expect(options?.headers).toMatchObject({'X-Profile-ID':'profile-a','X-Account-Scope':'hosted:original-account'});
     }
     for (const [, options] of fetch.mock.calls.slice(1)) {
       expect(options?.headers).toMatchObject({'X-CSRF-Token':'new-token'});
