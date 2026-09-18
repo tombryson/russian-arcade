@@ -28,13 +28,13 @@
     {% endif %}
     {% include '_translation_library.html' %}
     {% if not practice %}
-    <details class="sentence-library translation-create" {% if not sentences or error %}open{% endif %}>
+    <details class="sentence-library translation-create" {% if not sentences or error or curriculum_selected %}open{% endif %}>
       <summary><span>{{ ui_t('translation.create_title') }}</span><span class="sentence-disclosure-icon" aria-hidden="true">+</span></summary>
-      <form action="/sentence/generate" method="post" data-translation-prepare data-ready="{{ ui_t('translation.prepared_link') }}" data-pending="{{ ui_t('translation.preparing') }}" data-error="{{ ui_t('translation.prepare_failed') }}">
+      <form action="/sentence/generate" method="post" data-curriculum-setup {% if level_explicit %}data-level-explicit="true"{% endif %} data-translation-prepare data-ready="{{ ui_t('translation.prepared_link') }}" data-pending="{{ ui_t('translation.preparing') }}" data-error="{{ ui_t('translation.prepare_failed') }}">
         <p class="sentence-muted">{{ ui_t('translation.create_help') }}</p>
         <div class="translation-settings">
-          <div><label for="translation-topic">{{ ui_t('sentences.topic') }}</label><select name="topic" id="translation-topic" class="form-select"><option value="any">{{ ui_t('word_jumble.any') }}</option>{% for topic in topics %}<option value="{{ topic.value }}" {% if selected_topic == topic.value %}selected{% endif %}>{{ topic.label }}</option>{% endfor %}</select></div>
-          <div><label for="translation-level">{{ ui_t('translation.level') }}</label><select name="difficulty" id="translation-level" class="form-select">{% for level in range(1,6) %}<option value="{{ level }}" {% if selected_level|default('1') == level|string %}selected{% endif %}>{{ ui_t('translation.level_' + level|string) }}</option>{% endfor %}</select></div>
+          <div><label for="translation-topic">{{ ui_t('sentences.topic') }}</label><select name="topic" id="translation-topic" class="form-select" data-curriculum-topic><option value="any">{{ ui_t('word_jumble.any') }}</option>{% for band in curriculum_topics|selectattr('band')|groupby('band') %}<optgroup label="{{ band.grouper }}">{% for topic in band.list %}<option value="{{ topic.value }}" {% if selected_topic == topic.value %}selected{% endif %} data-level="{{ topic.level }}">{{ topic.label }}</option>{% endfor %}</optgroup>{% endfor %}{% for topic in curriculum_topics if not topic.band %}<option value="{{ topic.value }}" {% if selected_topic == topic.value %}selected{% endif %}>{{ topic.label }}</option>{% endfor %}</select></div>
+          <div><label for="translation-level">{{ ui_t('translation.level') }}</label><select name="difficulty" id="translation-level" class="form-select" data-curriculum-level>{% for level in curriculum_levels %}<option value="{{ level.value }}" {% if selected_level|default('A1') == level.value %}selected{% endif %}>{{ level.label }}</option>{% endfor %}</select></div>
         </div>
         <button class="btn btn-primary" type="submit">{{ ui_t('translation.generate') }}</button><p data-prepare-status role="status" aria-live="polite"></p>
       </form>

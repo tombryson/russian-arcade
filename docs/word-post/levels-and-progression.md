@@ -2,9 +2,13 @@
 
 Progression decision: 15 September 2026. Game-shop update: 17 September 2026. This document records the approved direction and the scope of the first integrated release. It supersedes earlier proposals to turn the legacy Elo total into distance, or to charge coins for access to ordinary practice.
 
+## Curriculum update
+
+The [full curriculum](../curriculum.md) now formalises fifty topics across A1, A2, B1, B2 and C1–C2. Reading, Writing, Translation and Word Jumble use shared topic and task-level guidance. The numeric difficulty estimates for words and forms are unchanged. The Speaking table below describes the existing live scenario catalogue, not the limit of the wider course.
+
 ## Product rules
 
-Use A1, A2, B1 and B2 as recognisable **practice targets**, accompanied by friendly labels. Avoid “expert”: advanced language ability spans several distinct skills. The application does not award a TORFL qualification or infer a learner’s overall level from one AI conversation score.
+Use A1–C2 as recognisable **practice targets**, accompanied by plain labels. The current live Speaking catalogue uses the A1–B2 subset described below. Avoid “expert”: advanced language ability spans several distinct skills. The application does not award a TORFL qualification or infer a learner’s overall level from one AI conversation score.
 
 | Target | Friendly Speaking label | Intended task demand |
 |---|---|---|
@@ -97,7 +101,7 @@ Writes use the existing session/CSRF protections. The server selects the active 
 
 Regression coverage includes independent profiles, simultaneous duplicate writes, shared daily caps, transaction rollback, local study dates, frozen legacy balances, migration replay, flashcard undo/re-rating with real FSRS, locked-route requests, wrong-answer retries, permanent unlocks and level-aware scenario selection. UI tests cover shared badges, authored level availability and no microphone activation during catalogue browsing.
 
-The application-wide integration in this release is the shared participation/progression system. Authored A1/A2 contracts currently apply to **Speaking**. Existing Reading/Writing/Word Jumble/Translation difficulty controls retain their previous semantics; their old records are not mechanically relabelled as certified CEFR tasks. Their next curriculum pass should introduce explicit task contracts and genuine options at each band before unifying those controls.
+The original release integrated the participation/progression system and A1/A2 Speaking contracts. The later [curriculum pass](../curriculum.md) gives Reading, Writing, Word Jumble and Translation explicit A1–C2 task levels, fifty topic briefs and shared grammar objectives. Their historical records keep their saved values; legacy inputs remain accepted through compatibility mappings. New curriculum labels are not a certification of proficiency.
 
 Still to build: authored B1/B2 content, independent curriculum review of band assignments, further story destinations and the final-letter assessment, learner ownership for old shared activities in household mode, and evaluated skill recommendations. Coins do not solve those curriculum or measurement problems. The later game-shop update adds spending with permanent ownership; it does not introduce a calibrated Elo model. The visible practice rating is explicitly provisional and does not yet choose tasks for the learner.
 

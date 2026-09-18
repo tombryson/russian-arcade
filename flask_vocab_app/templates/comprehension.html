@@ -25,7 +25,7 @@
                        {% if story and story.id == saved.id %}aria-current="page"{% endif %}>
                         <span class="reading-story-title" lang="{{ saved.display_title_lang if saved.display_title else ui_lang }}">{{ saved.display_title or ui_t('comprehension.untitled') }}</span>
                         <span class="reading-meta">
-                            {% if saved.level_key %}<span>{{ ui_t(saved.level_key) }}</span>{% endif %}
+                            {% if saved.level_label %}<span>{{ saved.level_label }}</span>{% elif saved.level_key %}<span>{{ ui_t(saved.level_key) }}</span>{% endif %}
                             {% if saved.display_topic %}<span>{{ saved.display_topic }}</span>{% endif %}
                             {% if saved.question_count is not none %}<span>{{ ui_t('comprehension.question_count') }}: {{ saved.question_count }}</span>{% endif %}
                         </span>
@@ -38,11 +38,11 @@
             <p class="reading-empty">{{ ui_t('comprehension.none_saved') }}</p>
             {% endif %}
         </details>
-        <details id="new-story" class="reading-disclosure comprehension-panel" {% if not story and not saved_stories %}open{% endif %}>
+        <details id="new-story" class="reading-disclosure comprehension-panel" {% if not story and (not saved_stories or selected_topic != 'any') %}open{% endif %}>
             <summary>{{ ui_t('comprehension.create') }}</summary>
             <p>{{ ui_t('comprehension.create_help') }}</p>
                 <form
-                    id="comprehension-form"
+                    id="comprehension-form" data-curriculum-setup data-level-explicit="{{ 'true' if level_explicit else 'false' }}"
                     action="/comprehension" method="post"
                     hx-post="/comprehension"
                     hx-target="#comprehension-content"
@@ -50,23 +50,21 @@
                 >
                     <div class="mb-3">
                         <label for="topic" class="form-label">{{ ui_t('comprehension.topic') }}</label>
-                        <select id="topic" name="topic" class="form-select">
+                        <select id="topic" name="topic" class="form-select" data-curriculum-topic>
                             <option value="any">{{ ui_t('comprehension.any_topic') }}</option>
                             {% for topic in topics %}
-                            <option value="{{ topic }}">{{ topic }}</option>
+                            <option value="{{ topic.value }}" data-level="{{ topic.level }}" {% if selected_topic == topic.value %}selected{% endif %}>{% if topic.band %}{{ topic.band }} · {% endif %}{{ topic.label }}</option>
                             {% endfor %}
                         </select>
                     </div>
                     <div class="mb-3">
                         <label for="difficulty" class="form-label">{{ ui_t('comprehension.level') }}</label>
                         <select
-                            id="difficulty"
+                            id="difficulty" data-curriculum-level
                             name="difficulty"
                             class="form-select"
                         >
-                            <option value="beginner">{{ ui_t('comprehension.beginner') }}</option>
-                            <option value="intermediate">{{ ui_t('comprehension.intermediate') }}</option>
-                            <option value="advanced">{{ ui_t('comprehension.advanced') }}</option>
+                            {% for level in levels %}<option value="{{ level.value }}" {% if selected_level == level.value %}selected{% endif %}>{{ level.label }}</option>{% endfor %}
                         </select>
                     </div>
                     <div class="mb-3">

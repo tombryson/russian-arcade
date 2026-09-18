@@ -22,19 +22,17 @@
         <div>
           <h2 id="sentence-start-title">{{ ui_t('word_jumble.create_new') }}</h2>
           <p class="sentence-muted">{{ ui_t('word_jumble.setup_help') }}</p>
-          <form action="/word_jumble/create" method="post" data-jumble-setup data-preparing="{{ ui_t('word_jumble.preparing') }}">
+          <form action="/word_jumble/create" method="post" data-curriculum-setup {% if level_explicit %}data-level-explicit="true"{% endif %} data-jumble-setup data-preparing="{{ ui_t('word_jumble.preparing') }}">
             <label for="topic">{{ ui_t('word_jumble.topic') }}</label>
-            <select class="form-select" id="topic" name="topic">
+            <select class="form-select" id="topic" name="topic" data-curriculum-topic>
               <option value="any">{{ ui_t('word_jumble.any') }}</option>
-              {% for topic in topics %}<option value="{{ topic.value }}" {% if selected_topic == topic.value %}selected{% endif %}>{{ topic.label }}</option>{% endfor %}
+              {% for band in topics|selectattr('band')|groupby('band') %}<optgroup label="{{ band.grouper }}">{% for topic in band.list %}<option value="{{ topic.value }}" {% if selected_topic == topic.value %}selected{% endif %} data-level="{{ topic.level }}">{{ topic.label }}</option>{% endfor %}</optgroup>{% endfor %}
+              {% for topic in topics if not topic.band %}<option value="{{ topic.value }}" {% if selected_topic == topic.value %}selected{% endif %}>{{ topic.label }}</option>{% endfor %}
             </select>
-            <fieldset class="sentence-levels">
-              <legend>{{ ui_t('word_jumble.difficulty') }}</legend>
-              {% for level, number in [('easy',3), ('intermediate',4), ('expert',5)] %}
-              <label class="sentence-level"><input type="radio" name="difficulty" value="{{ level }}" {% if selected_level|default('easy') == level %}checked{% endif %}>
-                <span><strong>{{ ui_t('word_jumble.' + level) }}</strong><small>{{ ui_t('word_jumble.words_' + number|string) }}</small></span></label>
-              {% endfor %}
-            </fieldset>
+            <label for="jumble-level">{{ ui_t('word_jumble.difficulty') }}</label>
+            <select class="form-select" id="jumble-level" name="difficulty" data-curriculum-level>
+              {% for level in curriculum_levels %}<option value="{{ level.value }}" {% if selected_level|default('A1') == level.value %}selected{% endif %}>{{ level.label }}</option>{% endfor %}
+            </select>
             <button class="btn btn-primary" type="submit">{{ ui_t('word_jumble.create') }} <span aria-hidden="true">→</span></button>
             <p class="sentence-muted" role="status" data-preparation-status></p>
           </form>

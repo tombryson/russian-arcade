@@ -3,6 +3,7 @@ import json
 import logging
 
 from services.onboarding import onboarding_state
+from services.curriculum import level_options, normalize_level, topic_options
 
 from asgiref.sync import async_to_sync
 from flask import Blueprint, jsonify, render_template, render_template_string, request, session
@@ -25,7 +26,23 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
         return present_story(story, session.get("ui_lang", "en"))
 
     def topics_and_stories():
-        return comprehension_service.get_topics(), [story_for_display(story) for story in story_repository.list_saved()]
+        return topic_options(session.get("ui_lang", "en")), [story_for_display(story) for story in story_repository.list_saved()]
+
+    @blueprint.context_processor
+    def curriculum_form_context():
+        options = topic_options(session.get('ui_lang', 'en'))
+        topic = request.values.get('topic', 'any')
+        selected = next((item for item in options if item['value'] == topic), None)
+        raw_level = request.form.get('difficulty') if request.method == 'POST' else request.args.get('level')
+        level_explicit = bool(raw_level)
+        try:
+            level = normalize_level(raw_level, legacy='reading') if raw_level else ((selected or {}).get('level') or 'A1')
+        except ValueError:
+            level_explicit = False
+            level = ((selected or {}).get('level') or 'A1')
+        return dict(levels=level_options(session.get('ui_lang', 'en')),
+                    selected_topic=topic if selected else 'any', selected_level=level,
+                    level_explicit=level_explicit)
 
     def story_words(story_text):
         return process_story_words(
@@ -70,6 +87,14 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
                 saved_stories=saved_stories,
                 active_page="comprehension",
             )
+
+        try:
+            normalize_level(request.form.get("difficulty", "beginner"), legacy='reading')
+            if request.form.get('topic', 'any') not in {'any', *(item['value'] for item in topics)}:
+                raise ValueError('Invalid topic')
+        except ValueError:
+            return render_page('comprehension.html', topics=topics, saved_stories=saved_stories,
+                               error=('Выберите тему и уровень из списка.' if session.get('ui_lang') == 'ru' else 'Choose a topic and level from the list.'), active_page='comprehension'), 400
 
         try:
             topic = str(request.form.get("topic", "any"))

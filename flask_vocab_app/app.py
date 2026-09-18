@@ -64,6 +64,7 @@ from utils.shell import render_page, is_shell_navigation
 from utils.i18n import SUPPORTED_UI_LANGUAGES, normalize_ui_language, translate_ui
 from utils.navigation import activity_navigation
 from blueprints.ui_preferences import create_ui_preferences_blueprint
+from blueprints.curriculum import create_curriculum_blueprint
 from filters import register_filters
 import logging
 import os
@@ -104,6 +105,7 @@ def create_app(config_overrides=None, service_overrides=None):
     app.register_blueprint(create_onboarding_blueprint())
     app.register_blueprint(create_first_steps_blueprint())
     app.register_blueprint(create_journey_games_blueprint())
+    app.register_blueprint(create_curriculum_blueprint())
     household = HouseholdService(app.config['DB_PATH'])
     asset_store = LocalAssetStore(app.config['WORD_POST_ASSET_DIR'])
     content = ContentService(app.config['DB_PATH'], asset_store)

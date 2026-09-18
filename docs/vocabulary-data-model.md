@@ -86,7 +86,13 @@ The importer estimates lemma difficulty on a 1–5 scale using rarity and spelli
 
 An intended +2 adjustment for adverbial participles (`GRND`, also called gerunds) looks for a tag the relevant branch does not save. That adjustment is therefore unreliable.
 
-These scores help filter vocabulary. They are separate from proficiency levels, learner skill estimates and the FSRS scheduler’s difficulty values.
+These scores help filter vocabulary. They are separate from curriculum task levels, learner skill estimates and the FSRS scheduler’s difficulty values.
+
+### Curriculum topics
+
+The [curriculum](curriculum.md) assigns the fifty canonical vocabulary topics to A1, A2, B1, B2 or a shared C1–C2 band. The topic band describes where the subject enters the course. Activity generators use a separately selected A1–C2 task level. Neither field replaces `lemma_difficulty` or `form_difficulty`.
+
+The versioned catalogue holds target lemmas, phrases, grammar and activity objectives. It does not create vocabulary rows or rewrite their annotations. A learner's saved word still passes through `process_word` and `enrich_words`, including form generation, topics and a mnemonic. The existing `grammar` category remains cross-topic.
 
 ## Form selection and card generation
 

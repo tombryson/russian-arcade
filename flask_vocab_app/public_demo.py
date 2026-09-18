@@ -17,6 +17,7 @@ MESSAGE = 'This public preview includes First steps, sample games, vocabulary an
 READ_ENDPOINTS = frozenset({
     'word_post.home', 'word_post.assets', 'word_post.licenses', 'static',
     'ui_preferences.appearance',
+    'curriculum.index',
     'vocab.vocab_list', 'vocab.inventory', 'learning.state', 'learning.asset',
     'live_conversation.scenarios', 'live_conversation.options', 'user_sessions.read',
     'onboarding.read', 'onboarding.practice_read', 'first_steps.chapter', 'first_steps.lesson',

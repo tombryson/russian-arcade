@@ -6,6 +6,7 @@ import sqlite3
 from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
 
 from services.word_jumble_service import AssessmentUnavailable, DraftConflict, PreparationUnavailable
+from services.curriculum import level_options, normalize_level, topic_options
 from utils.i18n import translate_ui
 from utils.shell import is_shell_navigation, render_page
 
@@ -39,7 +40,10 @@ def create_word_jumble_blueprint(service):
                              source='legacy')]
         game['attempts'] = attempts
         game['topic_label'] = topic_label(game.get('topic', 'any'))
-        game['level_label'] = t(game.get('difficulty', 'easy'))
+        level = normalize_level(game.get('difficulty', 'easy'), legacy='word_jumble')
+        game['level_label'] = next(option['label'] for option in level_options(session.get('ui_lang', 'en')) if option['value'] == level)
+        contract = game.get('task_contract')
+        game['task_instruction'] = contract['instruction']['ru' if session.get('ui_lang') == 'ru' else 'en'] if contract else ''
         date = game.get('draft_saved_at') or game.get('created_at')
         try:
             date = datetime.fromisoformat(date)
@@ -58,28 +62,45 @@ def create_word_jumble_blueprint(service):
         if request.headers.get('HX-Request') and not is_shell_navigation():
             return render_template('_word_jumble_content.html', game=game, **context)
         return render_page('word_jumble.html', game=game,
-                           topics=[{'value': topic, 'label': topic_label(topic)} for topic in service.get_topics() if topic != 'any'],
+                           topics=topic_options(session.get('ui_lang', 'en')),
+                           curriculum_levels=level_options(session.get('ui_lang', 'en')),
                            saved_games=[present(item) for item in service.get_saved_games()],
                            active_page='word_jumble', **context)
 
     @blueprint.get('/word_jumble')
     def home():
-        return page()
+        options = {item['value']: item for item in topic_options()}
+        topic = request.args.get('topic', 'any')
+        if topic != 'any' and topic not in options:
+            topic = 'any'
+        explicit = bool(request.args.get('level'))
+        try:
+            level = normalize_level(request.args.get('level') or options.get(topic, {}).get('level', 'A1'), legacy='word_jumble')
+        except ValueError:
+            explicit = False
+            level = options.get(topic, {}).get('level') or 'A1'
+        return page(selected_topic=topic, selected_level=level, level_explicit=explicit)
 
     @blueprint.post('/word_jumble/create')
     def create():
         topic = request.form.get('topic', 'any')
         difficulty = request.form.get('difficulty', 'easy')
+        explicit = bool(request.form.get('difficulty'))
+        try:
+            selected_level = normalize_level(difficulty, legacy='word_jumble')
+        except ValueError:
+            selected_level = 'A1'
+            explicit = False
         try:
             game = service.create_game(topic, difficulty)
         except ValueError:
-            return page(error=t('invalid_setup'), selected_topic=topic, selected_level=difficulty), 400
+            return page(error=t('invalid_setup'), selected_topic=topic, selected_level=selected_level, level_explicit=explicit), 400
         except (PreparationUnavailable, sqlite3.Error) as error:
             cause = error.__cause__ or error
             logger.warning('Word Jumble preparation unavailable (%s, HTTP %s, SQLite %s)',
                            type(cause).__name__, getattr(cause, 'status_code', None),
                            getattr(cause, 'sqlite_errorname', None))
-            return page(error=t('prepare_failed'), selected_topic=topic, selected_level=difficulty), 503
+            return page(error=t('prepare_failed'), selected_topic=topic, selected_level=selected_level, level_explicit=explicit), 503
         return redirect(url_for('word_jumble.load', game_id=game['id']), code=303)
 
     @blueprint.get('/word_jumble/load/<game_id>')

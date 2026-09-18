@@ -128,8 +128,11 @@ class TrialActivityContractTests(unittest.TestCase):
         service.client = self.client(payload)
         with patch('services.word_jumble_service.model_for', return_value='gpt-5.6-luna'):
             result = service._request_feedback({'words': ['кот', 'дом'], 'topic': 'any',
-                'difficulty': 'beginner'}, 'Кот дома.', 'en')
+                'difficulty': 'easy'}, 'Кот дома.', 'en')
         self.assertEqual(result, payload)
+        submitted = json.loads(self.sent[0]['input'][1]['content'])
+        self.assertEqual(submitted['target_level'], 'A1')
+        self.assertIsNone(submitted['curriculum'])  # Legacy games have no saved curriculum task.
         self.assert_settled()
 
 

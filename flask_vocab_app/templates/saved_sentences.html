@@ -19,7 +19,7 @@
               {% for topic in topics if topic.value != 'general' %}<option value="{{ topic.value }}" {% if added_topic == topic.value %}selected{% endif %}>{{ topic.label }}</option>{% endfor %}
             </select></div>
             <div><label for="add-level">{{ ui_t('translation.level') }}</label><select id="add-level" name="difficulty" class="form-select">
-              {% for level in range(1,6) %}<option value="{{ level }}" {% if added_level|default(1) == level %}selected{% endif %}>{{ ui_t('translation.level_' + level|string) }}</option>{% endfor %}
+              {% for level in curriculum_levels %}<option value="{{ loop.index }}" {% if added_level|default(1) == loop.index %}selected{% endif %}>{{ level.label }}</option>{% endfor %}
             </select></div>
           </div>
           <div class="sentence-store-form-actions"><button class="btn btn-primary" type="submit">{{ ui_t('sentences.save') }}</button><button class="sentence-store-cancel" type="button" data-library-close>{{ ui_t('common.cancel') }}</button></div>
@@ -43,7 +43,7 @@
           <label for="library-topic">{{ ui_t('sentences.topic') }}</label>
           <select class="form-select" id="library-topic" name="topic"><option value="">{{ ui_t('translation.all_topics') }}</option>{% for topic in topics %}<option value="{{ topic.value }}" {% if selected_topic == topic.value %}selected{% endif %}>{{ topic.label }}</option>{% endfor %}</select>
           <label for="library-level">{{ ui_t('translation.level') }}</label>
-          <select class="form-select" id="library-level" name="level"><option value="">{{ ui_t('sentence_store.all_levels') }}</option>{% for level in range(1,6) %}<option value="{{ level }}" {% if selected_level == level %}selected{% endif %}>{{ ui_t('translation.level_' + level|string) }}</option>{% endfor %}</select>
+          <select class="form-select" id="library-level" name="level"><option value="">{{ ui_t('sentence_store.all_levels') }}</option>{% for level in curriculum_levels %}<option value="{{ loop.index }}" {% if selected_level == loop.index %}selected{% endif %}>{{ level.label }}</option>{% endfor %}</select>
           <div class="sentence-store-form-actions"><button class="btn btn-primary" type="submit">{{ ui_t('sentence_store.apply') }}</button></div>
         </div>
       </details>

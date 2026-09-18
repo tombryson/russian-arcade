@@ -7,8 +7,9 @@ Speaking grammar and fluency remain separate because either may lack evidence.
 
 Pilot model: R starts at 1000; expected performance = 1/(1+10**((D-R)/400));
 R += 24*(observed-expected). Task priors are 1000/1200/1400 for the existing
-three difficulty choices, and 1000..1800 for Translation choices 1..5. Speaking
-authored A1..B2 tasks use 1000..1600. These are explicit uncalibrated task priors,
+three difficulty choices. Explicit curriculum tasks A1..C2 (including Translation
+choices 1..6) use 1000..2000. Speaking authored A1..B2 tasks use 1000..1600.
+These are explicit uncalibrated task priors,
 not claims that a rating represents CEFR proficiency. Scores use the saved task
 rubric (0..4 or 0..10; Speaking 1..5 becomes 0..1).
 
@@ -54,6 +55,7 @@ ATTEMPTS = {
 THREE_LEVELS = {'beginner': 1000, 'intermediate': 1200, 'advanced': 1400,
                 'easy': 1000, 'expert': 1400}
 SPEAKING_LEVELS = {'A1': 1000, 'A2': 1200, 'B1': 1400, 'B2': 1600}
+CURRICULUM_LEVELS = {level: 1000 + 200 * index for index, level in enumerate(('A1', 'A2', 'B1', 'B2', 'C1', 'C2'))}
 
 
 def _number(value, lower, upper):
@@ -190,9 +192,9 @@ def freeze_evidence(conn, activity, content_key, source_key, target_level, evide
             legacy_score = conn.execute('SELECT score FROM sentences WHERE id=?', (task_id,)).fetchone()[0]
             if legacy_score != 0:
                 return result
-            difficulty = 800 + 200 * raw_difficulty if type(raw_difficulty) is int and 1 <= raw_difficulty <= 5 else None
+            difficulty = 800 + 200 * raw_difficulty if type(raw_difficulty) is int and 1 <= raw_difficulty <= 6 else None
         else:
-            difficulty = THREE_LEVELS.get(raw_difficulty)
+            difficulty = CURRICULUM_LEVELS.get(raw_difficulty, THREE_LEVELS.get(raw_difficulty))
         scores[activity] = score / maximum
     else:
         return result
@@ -224,7 +226,7 @@ def snapshot(conn, profile_id):
         if not isinstance(receipt, dict) or receipt.get('policy_version') not in (POLICY, GAME_POLICY):
             continue
         difficulty, scores = receipt.get('task_rating'), receipt.get('scores')
-        if difficulty not in (1000, 1200, 1400, 1600, 1800) or not isinstance(scores, dict):
+        if difficulty not in CURRICULUM_LEVELS.values() or not isinstance(scores, dict):
             continue
         allowed = ('reading', 'listening') if activity == 'journey_game' else ('reading',) if activity in ('first_delivery', 'first_steps') else ('speaking_grammar', 'speaking_fluency') if activity == 'speaking' else (activity,) if activity in TASKS else ()
         for key in allowed:

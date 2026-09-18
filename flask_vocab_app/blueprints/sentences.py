@@ -7,6 +7,7 @@ from flask import Blueprint, jsonify, redirect, render_template, request, sessio
 from repositories import WordRepository
 from repositories.translation_repository import TranslationRepository, TranslationConflict
 from services.sentence_service import TranslationUnavailable
+from services.curriculum import LEVELS, level_options, normalize_level, topic_options
 from utils.activity_display import topic_label, readable_date
 from utils.i18n import translate_ui
 from utils.shell import render_page
@@ -30,7 +31,8 @@ def create_sentences_blueprint(db_path, sentence_service, user_service):
             return None
         item = dict(item)
         item['topic_label'] = topic_label(item.get('topic'), language())
-        item['level_label'] = t('level_' + str(item['difficulty'])) if item.get('difficulty') in range(1, 6) else ''
+        labels = {index: option['label'] for index, option in enumerate(level_options(language()), 1)}
+        item['level_label'] = labels.get(item.get('difficulty'), '')
         item['display_date'] = readable_date(item.get('draft_saved_at') or item.get('created_at'), language())
         item.setdefault('draft', '')
         item.setdefault('saved_draft', item['draft'])
@@ -43,7 +45,14 @@ def create_sentences_blueprint(db_path, sentence_service, user_service):
         topics = set(words.list_topics()) | {item['topic'] for item in library if item.get('topic')}
         return {'sentences': library, 'total_sentences': len(library), 'topics': sorted(
             [{'value': topic, 'label': topic_label(topic, language())} for topic in topics if topic != 'any'],
-            key=lambda item: item['label'].casefold()), 'active_page': active_page}
+            key=lambda item: item['label'].casefold()),
+            'curriculum_topics': topic_options(language()),
+            'curriculum_levels': level_options(language()),
+            'active_page': active_page}
+
+    def stored_level(value):
+        """The sentence's task level keeps its historical integer storage."""
+        return LEVELS.index(normalize_level(value, legacy='translation')) + 1
 
     def page(practice=None, **extra):
         return render_page('sentences.html', practice=present(practice), **context(), **extra)
@@ -66,12 +75,27 @@ def create_sentences_blueprint(db_path, sentence_service, user_service):
             logger.warning('Translation request unavailable (%s)', type(error).__name__)
         if enhanced():
             return jsonify(error=t(key)), status
+        try:
+            selected_level = normalize_level(request.form.get('difficulty', 'A1'), legacy='translation')
+        except ValueError:
+            selected_level = 'A1'
         return page(practice, error=t(key), selected_topic=request.form.get('topic', 'any'),
-                    selected_level=request.form.get('difficulty', '1')), status
+                    selected_level=selected_level, level_explicit=True), status
 
     @blueprint.get('/sentences')
     def sentences_page():
-        return page()
+        topic = request.args.get('topic', 'any')
+        options = {item['value']: item for item in topic_options()}
+        if topic != 'any' and topic not in options:
+            topic = 'any'
+        explicit = bool(request.args.get('level'))
+        try:
+            level = normalize_level(request.args.get('level') or options.get(topic, {}).get('level', 'A1'), legacy='translation')
+        except ValueError:
+            explicit = False
+            level = options.get(topic, {}).get('level') or 'A1'
+        return page(selected_topic=topic, selected_level=level,
+                    level_explicit=explicit, curriculum_selected=topic != 'any')
 
     @blueprint.get('/sentences/practice/<int:sentence_id>')
     def practice(sentence_id):
@@ -82,13 +106,16 @@ def create_sentences_blueprint(db_path, sentence_service, user_service):
     def generate_sentence():
         # Keep old bookmarks/client URLs, but generate only on an explicit POST.
         if request.method == 'GET':
-            if 'difficulty' in request.args and request.args.get('difficulty', type=int) not in range(1, 6):
-                return jsonify(error=t('invalid')), 400
+            if 'difficulty' in request.args:
+                try:
+                    stored_level(request.args['difficulty'])
+                except ValueError:
+                    return jsonify(error=t('invalid')), 400
             return redirect('/sentences', code=303)
         try:
-            difficulty = request.form.get('difficulty', type=int)
+            difficulty = stored_level(request.form.get('difficulty'))
             topic = request.form.get('topic', 'any')
-            if difficulty not in range(1, 6) or not topic or len(topic) > 100:
+            if not topic or len(topic) > 100:
                 raise ValueError('Invalid setup')
             pair = sentence_service.get_sentence(topic, difficulty)
             sentence_id, _ = repository.save_content(pair['sentence'], pair['english'], topic, difficulty)
@@ -151,14 +178,12 @@ def create_sentences_blueprint(db_path, sentence_service, user_service):
 
     @blueprint.post('/sentence/add')
     def add_sentence():
+        topic, difficulty = request.form.get('topic') or 'general', 1
         try:
             russian = request.form.get('sentence', '')
             english = request.form.get('english', '')
-            topic = request.form.get('topic') or 'general'
-            difficulty = request.form.get('difficulty', type=int)
+            difficulty = stored_level(request.form.get('difficulty'))
             repository.validate_answer(russian, checking=True)
-            if difficulty not in range(1, 6):
-                raise ValueError('Invalid level')
             if not english.strip():
                 english = sentence_service.translate_for_library(russian)
             sentence_id, created = repository.save_content(russian, english, topic, difficulty)
@@ -167,7 +192,7 @@ def create_sentences_blueprint(db_path, sentence_service, user_service):
                 return failure(error, preparing=True)
             return render_page('saved_sentences.html', **context('sentences_saved'), error=t('add_failed'),
                                added_russian=request.form.get('sentence', ''), added_english=request.form.get('english', ''),
-                               added_topic=topic, added_level=difficulty if difficulty in range(1, 6) else 1,
+                               added_topic=topic, added_level=difficulty,
                                add_open=True), 400
         target = url_for('sentences.sentences_saved', _anchor=f'sentence-{sentence_id}')
         return jsonify(url=target) if enhanced() else redirect(target, code=303)
@@ -186,7 +211,7 @@ def create_sentences_blueprint(db_path, sentence_service, user_service):
             return jsonify(sentences=library['sentences'], topics=[topic['value'] for topic in library['topics']], error=None)
         selected = request.args.get('topic', '')
         selected_level = request.args.get('level', type=int)
-        if selected_level not in range(1, 6):
+        if selected_level not in range(1, 7):
             selected_level = ''
         search = request.args.get('q', '').strip()[:200]
         if selected:

@@ -70,6 +70,22 @@ class SkillProgressTests(unittest.TestCase):
             self.assertIsNone(skill['rating'])
             self.assertEqual((skill['stage'], skill['progress'], skill['observations']), (1, 0, 0))
 
+    def test_c2_translation_records_the_selected_task_difficulty(self):
+        self.check('c2-translation', difficulty=6)
+        evidence = json.loads(self.conn.execute("SELECT evidence_json FROM progression_events WHERE activity='translation'").fetchone()[0])
+        self.assertEqual(evidence['_skill']['task_difficulty'], 6)
+        self.assertEqual(evidence['_skill']['task_rating'], 2000)
+        self.assertEqual(self.skill()['observations'], 1)
+
+    def test_explicit_curriculum_reading_preserves_legacy_priors(self):
+        for index, (level, prior) in enumerate((('advanced', 1400), ('B2', 1600), ('C1', 1800), ('C2', 2000))):
+            self.conn.execute("INSERT INTO saved_stories(id,title,text,topic,difficulty) VALUES (?,'Test','Русский текст.','literature',?)", (index + 100, level))
+            award(self.conn, self.pid, activity='reading', content_key='story:' + str(index + 100),
+                  source_key='curriculum-check:' + level, title='Read a story', now=self.now,
+                  evidence={'score': 8, 'score_max': 10, 'answered_questions': 5, 'first_fresh_assessment': True})
+            evidence = json.loads(self.conn.execute('SELECT evidence_json FROM progression_events WHERE source_key=?', ('curriculum-check:' + level,)).fetchone()[0])
+            self.assertEqual(evidence['_skill']['task_rating'], prior)
+
     def game_check(self, source, *, hints=(), answers=(['letter'], ['map']), complete=True,
                    game_id='pack-bag', transcripts=(), listened=True, custom_rounds=None):
         rounds = [{'id': 'one', 'expected_answer': ['letter']}, {'id': 'two', 'expected_answer': ['map']}]

@@ -45,8 +45,8 @@ class TranslationRepository:
             return result
 
     def save_content(self, sentence, english, topic, difficulty):
-        """Save an exact pair once. Never truncate content or overwrite an old score."""
-        if type(difficulty) is not int or difficulty not in range(1, 6):
+        """Save an exact pair once per task level, preserving earlier practice."""
+        if type(difficulty) is not int or difficulty not in range(1, 7):
             raise ValueError('Invalid level')
         if any(not isinstance(text, str) or not text.strip() or len(text) > limit
                for text, limit in [(sentence, 1000), (english, 1000), (topic, 100)]):
@@ -54,8 +54,8 @@ class TranslationRepository:
         with connect_db(self.db_path) as conn:
             conn.execute('BEGIN IMMEDIATE')
             owner = activity_profile_id(conn)
-            row = conn.execute("SELECT id FROM sentences WHERE sentence=? AND english=? AND topic=? AND COALESCE(owner_profile_id,'personal-learning')=? ORDER BY id LIMIT 1",
-                               (sentence, english, topic, owner)).fetchone()
+            row = conn.execute("SELECT id FROM sentences WHERE sentence=? AND english=? AND topic=? AND difficulty=? AND COALESCE(owner_profile_id,'personal-learning')=? ORDER BY id LIMIT 1",
+                               (sentence, english, topic, difficulty, owner)).fetchone()
             if row:
                 return row[0], False
             cursor = conn.execute('INSERT INTO sentences(sentence,english,topic,difficulty,score,audio_url,owner_profile_id) VALUES (?,?,?,?,0,?,?)',

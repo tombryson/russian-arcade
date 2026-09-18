@@ -3,9 +3,9 @@ import logging
 import sqlite3
 
 from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
-from repositories.word_repository import WordRepository
 from repositories.writing_repository import WritingRepository, WritingConflict, word_count
 from services.writing_service import WritingUnavailable
+from services.curriculum import level_options, normalize_level, topic_options
 from utils.activity_display import topic_label, readable_date
 from utils.i18n import translate_ui
 from utils.shell import render_page
@@ -31,7 +31,11 @@ def create_writing_blueprint(db_path, service):
         item['display_title'] = item.get('title' if language() == 'ru' else 'title_en') or item['topic_label']+' · '+t('title')
         item['display_task'] = item.get('task_en') if language() == 'en' and item.get('task_en') else item['task']
         item['task_language'] = 'en' if language() == 'en' and item.get('task_en') else 'ru'
-        item['level_label'] = t('level_'+item['difficulty'])
+        try:
+            level = normalize_level(item['difficulty'], legacy='writing')
+            item['level_label'] = next(option['label'] for option in level_options(language()) if option['value'] == level)
+        except ValueError:
+            item['level_label'] = item['difficulty']
         item['display_date'] = readable_date(item.get('draft_saved_at') or item.get('created_at'),language())
         item['saved_draft'] = item.get('saved_draft',item['draft'])
         item['word_count'] = word_count(item['draft'])
@@ -40,9 +44,22 @@ def create_writing_blueprint(db_path, service):
 
     def page(exercise=None,**extra):
         saved = [present(item) for item in repository.list_saved()]
-        topics = set(WordRepository(db_path).list_topics()) | {item['topic'] for item in saved}
-        topics = sorted([{'value':topic,'label':topic_label(topic,language())} for topic in topics if topic != 'any'],key=lambda item:item['label'])
-        context = dict(exercise=present(exercise),saved_exercises=saved,topics=topics,active_page='writing',**extra)
+        topics = topic_options(language())
+        selected_topic = extra.pop('selected_topic', request.args.get('topic', 'any'))
+        selected_option = next((item for item in topics if item['value'] == selected_topic), None)
+        if selected_topic != 'any' and selected_option is None:
+            selected_topic = 'any'
+        requested_level = extra.pop('selected_level', request.args.get('level'))
+        level_explicit = bool(requested_level)
+        try:
+            selected_level = normalize_level(requested_level, legacy='writing') if requested_level else ((selected_option or {}).get('level') or 'A1')
+        except ValueError:
+            level_explicit = False
+            selected_level = ((selected_option or {}).get('level') or 'A1')
+        context = dict(exercise=present(exercise),saved_exercises=saved,topics=topics,
+                       levels=level_options(language()),selected_topic=selected_topic,selected_level=selected_level,
+                       level_explicit=level_explicit,
+                       active_page='writing',**extra)
         if request.headers.get('HX-Target') == 'writing-content':
             return render_template('_writing_content.html',**context)
         return render_page('writing.html',**context)
@@ -83,7 +100,8 @@ def create_writing_blueprint(db_path, service):
             topic = request.form.get('topic','any')
             difficulty = request.form.get('difficulty','beginner')
             target = request.form.get('target_words',type=int) if 'target_words' in request.form else 30
-            if not topic.strip() or len(topic)>100 or difficulty not in ('beginner','intermediate','advanced') or target not in (30,100):
+            normalize_level(difficulty, legacy='writing')
+            if topic not in {'any', *(item['value'] for item in topic_options())} or target not in (30,100,300):
                 raise ValueError('Invalid setup')
             task = service.generate_writing_task(topic,difficulty,target)
             exercise_id = repository.create(task,topic,difficulty,target)
@@ -103,7 +121,7 @@ def create_writing_blueprint(db_path, service):
             repository.validate_answer(response,checking=checking)
             repository.check_revision(exercise_id,revision)
             assessment = service.assess_writing(task=exercise['task'],required_words=exercise['required_words'],
-                min_words=exercise['min_words'],response=response,difficulty=exercise['difficulty'],language=language()) if checking else None
+                min_words=exercise['min_words'],response=response,difficulty=exercise['difficulty'],language=language(),topic=exercise['topic']) if checking else None
             revision = repository.save(exercise_id,response,revision,assessment,language())
         except (ValueError,LookupError,WritingUnavailable,sqlite3.Error) as error:
             if exercise:

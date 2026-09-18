@@ -9,7 +9,7 @@ from app import create_app
 from migrations import upgrade_database, seed_demo, schema_version
 from models.database import connect_db
 from services.user_service import UserService
-from tests.support import isolated_app, strip_progression_and_levels
+from tests.support import isolated_app, latest_schema_version, strip_progression_and_levels
 from tests.test_stabilization import FakeSentenceService
 
 
@@ -92,11 +92,11 @@ class FoundationTests(unittest.TestCase):
             conn.execute('DROP TABLE sync_runs')
             conn.execute('DROP TABLE reward_events')
         version, backup = upgrade_database(db)
-        self.assertEqual(version, 39)
+        self.assertEqual(version, latest_schema_version())
         self.assertTrue(Path(backup).exists())
         with connect_db(db) as conn:
             self.assertEqual(list(conn.execute('SELECT * FROM words')), before)
-        self.assertEqual(upgrade_database(db), (39, None))
+        self.assertEqual(upgrade_database(db), (latest_schema_version(), None))
 
     def test_migration_rejects_incompatible_schema_without_partial_changes(self):
         with tempfile.TemporaryDirectory() as temporary:

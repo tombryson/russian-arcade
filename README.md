@@ -53,6 +53,14 @@ Barsik’s shop lets learners choose permanent game unlocks using Lingocoins: 25
 
 Each game prepares the media it needs. Text activities do not require pictures. Radio generates a programme and recording. See [game design and integration](docs/word-post/journey-games.md).
 
+## Curriculum
+
+The [curriculum](docs/curriculum.md) defines **50 topics from A1 to C2**, with target vocabulary, grammar and practical learning objectives. Its 856 distinct target lemmas are organised into five course bands. C1 and C2 share topics but use different task demands.
+
+Reading, Writing, Translation and Word Jumble draw from this shared material. A topic has a default course level; learners can choose another level when revisiting it. Word and form difficulty remain separate vocabulary filters.
+
+The [course catalogue](https://russian-arcade.fly.dev/curriculum) lists the topics and opens practice for each one. It does not add words automatically. Saving vocabulary still uses the existing lemma, form, topic and mnemonic pipeline.
+
 ## Vocabulary database
 
 The database was designed for practising Russian forms in sentences. It links each dictionary entry to its forms, cards and review records.
@@ -161,7 +169,7 @@ Audio jobs choose a voice from the configured list and keep it for retries. This
 - **Skill estimates** use assessed practice. Barsik’s progress bar displays this progress.
 - **Flashcard schedules** determine when each card returns.
 
-A1–B2 describe target practice levels. They are not qualifications awarded by the app. Speaking has authored A1/A2 variations. The old Elo total remains in historical records; it does not determine current skill estimates. Coins buy optional games, while eligible earned coins open journey destinations. Spending does not reduce journey or skill progress. Ordinary practice remains available. See [levels and progression](docs/word-post/levels-and-progression.md).
+A1–C2 describe curriculum task levels. They are not qualifications awarded by the app. The live Speaking catalogue currently has authored A1/A2 variations. The old Elo total remains in historical records; it does not determine current skill estimates. Coins buy optional games, while eligible earned coins open journey destinations. Spending does not reduce journey or skill progress. Ordinary practice remains available. See [levels and progression](docs/word-post/levels-and-progression.md).
 
 ## Architecture and technology stack
 
@@ -199,7 +207,7 @@ The application is under active development, with local individual and household
 - Background work uses threads within the application. Running multiple instances requires changes to storage and worker coordination.
 - OCR, generated content and automated assessment can contain errors.
 - Lesson selections feed cards and games. Broader lesson-based writing and speaking integration remains planned.
-- The final-letter assessment and a complete journey curriculum remain planned.
+- The 50-topic curriculum is defined. Additional journey stories, live Speaking scenarios and the final-letter assessment remain planned.
 
 The [product backlog](docs/word-post/product-backlog.md) and [migration strategy](docs/word-post/migration-strategy.md) record plans and earlier decisions. They are not inventories of completed features.
 
@@ -306,6 +314,7 @@ docs/                    Architecture, product decisions and feature guides
 ## Documentation
 
 - [Architecture](docs/architecture.md), [development](docs/development.md) and [operations](docs/operations.md)
+- [Curriculum: topics, vocabulary and grammar](docs/curriculum.md)
 - [Vocabulary database and form-generation rules](docs/vocabulary-data-model.md)
 - [Drive/SQLite synchronisation contract](docs/synchronization.md)
 - [Native flashcards](docs/word-post/native-flashcards.md) and [vocabulary library](docs/word-post/vocabulary-library.md)

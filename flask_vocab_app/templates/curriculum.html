@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% from '_activity_header.html' import activity_header %}
+{% set russian = language == 'ru' %}
+{% set page_title = 'Учебная программа' if russian else 'Curriculum' %}
+{% block main_content %}
+<main class="main-content activity-entry curriculum" id="mainContent" data-page="curriculum">
+  <div class="activity-entry-content">
+    {{ activity_header(page_title, '50 тем: лексика, грамматика и задания от A1 до C2.' if russian else '50 topics, with vocabulary, grammar and practice from A1 to C2.') }}
+    <nav class="curriculum-bands" aria-label="{{ 'Уровни' if russian else 'Course levels' }}">
+      {% for band in bands %}<a href="#level-{{ band.id }}" hx-boost="false">{{ band.id|replace('-', '–') }}</a>{% endfor %}
+    </nav>
+    {% for band in bands %}
+    <section class="curriculum-band" id="level-{{ band.id }}" aria-labelledby="heading-{{ band.id }}">
+      <header class="curriculum-band-heading">
+        <h2 id="heading-{{ band.id }}">{{ band.id|replace('-', '–') }} <span>{{ band.label }}</span></h2>
+        <p>{{ band.summary }}</p>
+      </header>
+      <div class="curriculum-topic-list">
+        {% for topic in band.topics %}
+        <details class="curriculum-topic" id="topic-{{ topic.id }}">
+          <summary><span class="curriculum-order">{{ '%02d'|format(topic.order) }}</span><h3>{{ topic.title_ru if russian else topic.title_en }}</h3><span class="curriculum-expand" aria-hidden="true">+</span></summary>
+          <div class="curriculum-topic-content">
+            <div class="curriculum-objectives" lang="en">
+              <h4>{{ 'Learning objectives' }}</h4>
+              <ul>{% for objective in topic.objectives %}<li>{{ objective }}</li>{% endfor %}</ul>
+              <h4>Grammar</h4>
+              <ul>{% for item in topic.grammar_focus %}<li>{{ item }}</li>{% endfor %}</ul>
+            </div>
+            <div class="curriculum-vocabulary">
+              <h4>{{ 'Лексика' if russian else 'Vocabulary' }}</h4>
+              <p lang="ru">{{ topic.lemmas|join(' · ') }}</p>
+              {% if topic.phrases %}<h4>{{ 'Выражения' if russian else 'Useful expressions' }}</h4><p lang="ru">{{ topic.phrases|join(' · ') }}</p>{% endif %}
+              <details class="curriculum-speaking-brief"><summary>{{ 'Задание для разговора (на английском)' if russian else 'Speaking task' }}</summary><p lang="en">{{ topic.practice.speaking }}</p></details>
+            </div>
+            <div class="curriculum-practice">
+              <h4>{{ 'Практика' if russian else 'Practise this topic' }}</h4>
+              {% set levels = ['C1', 'C2'] if band.id == 'C1-C2' else [band.id] %}
+              {% for level in levels %}
+              <div class="curriculum-practice-links">
+                {% if levels|length > 1 %}<strong>{{ level }}</strong>{% endif %}
+                <a href="/comprehension?topic={{ topic.id }}&amp;level={{ level }}" hx-boost="false">{{ 'Чтение' if russian else 'Reading' }}</a>
+                <a href="/writing?topic={{ topic.id }}&amp;level={{ level }}" hx-boost="false">{{ 'Письмо' if russian else 'Writing' }}</a>
+                <a href="/sentences?topic={{ topic.id }}&amp;level={{ level }}" hx-boost="false">{{ 'Перевод' if russian else 'Translation' }}</a>
+                <a href="/word_jumble?topic={{ topic.id }}&amp;level={{ level }}" hx-boost="false">{{ 'Составь предложение' if russian else 'Word Jumble' }}</a>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </details>
+        {% endfor %}
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+</main>
+{% endblock %}

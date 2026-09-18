@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from models.database import connect_db
 from services.progression import award, legacy_profile
 from utils.activity_owner import activity_profile_id
+from services.curriculum import normalize_level
 
 
 class WritingConflict(ValueError):
@@ -77,7 +78,8 @@ class WritingRepository:
 
     def create(self, task, topic, difficulty, target_words):
         self.validate_task(task)
-        if difficulty not in ('beginner','intermediate','advanced') or target_words not in (30,100):
+        normalize_level(difficulty, legacy='writing')
+        if target_words not in (30,100,300):
             raise ValueError('Invalid setup')
         if not isinstance(topic,str) or not topic.strip() or len(topic) > 100:
             raise ValueError('Invalid topic')

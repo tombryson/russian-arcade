@@ -43,6 +43,7 @@ def activity_navigation(language="en"):
             link("lessons", "/lessons", "nav.lessons"),
             link("word_jumble", "/word_jumble", "nav.word_jumble"),
             link("sentences", "/sentences", "nav.sentences"),
+            labelled("curriculum", "/curriculum", "Curriculum", "Учебная программа", False),
         ],
         "tools": [
             link("flashcards", "/", "nav.anki_tools"),

@@ -5,7 +5,7 @@ from pathlib import Path
 import sqlite3
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import httpx
 import openai
@@ -58,8 +58,11 @@ class SentencePracticeTests(unittest.TestCase):
         self.assertEqual(saved['topic'], 'family')
         self.assertEqual(saved['difficulty'], 'easy')
         request = self.service.client.responses.create.call_args.kwargs
-        self.assertEqual(json.loads(request['input'][1]['content']), {
+        payload = json.loads(request['input'][1]['content'])
+        self.assertEqual({key: payload[key] for key in ('topic', 'level', 'existing_words', 'additional_count')}, {
             'topic': 'family', 'level': 'easy', 'existing_words': ['семья'], 'additional_count': 2})
+        self.assertEqual(payload['target_level'], 'A1')
+        self.assertEqual(payload['curriculum']['topic_id'], 'family')
         self.assertEqual(request['text']['format']['schema']['properties']['words']['minItems'], 2)
         self.assertTrue(request['text']['format']['strict'])
         self.service.client.responses.create.reset_mock()
@@ -247,6 +250,125 @@ class SentencePracticeTests(unittest.TestCase):
         self.assertEqual(self.service.get_words('family', 'easy', 5), ['семья'])
         with self.assertRaises(ValueError):
             self.service.get_words('any', 'invalid', 3)
+
+    def test_curriculum_task_level_does_not_reclassify_lemma_difficulty(self):
+        with sqlite3.connect(self.service.db_path) as conn:
+            before = conn.execute('SELECT id,lemma_difficulty FROM words ORDER BY id').fetchall()
+        # Advanced syntax can use common words; CEFR does not filter them out.
+        self.assertEqual(set(self.service.get_words('any', 'C2', 10)), set(self.game['words']))
+        with sqlite3.connect(self.service.db_path) as conn:
+            self.assertEqual(conn.execute('SELECT id,lemma_difficulty FROM words ORDER BY id').fetchall(), before)
+
+    def test_curriculum_setup_has_all_topics_and_can_override_primary_band(self):
+        for headers in ({}, {'HX-Request': 'true', 'HX-Target': 'mainContent'}):
+            html = self.client.get('/word_jumble?topic=law&level=C2', headers=headers).get_data(as_text=True)
+            topic_markup = html.split('id="topic"', 1)[1].split('</select>', 1)[0]
+            topic_options = [attrs for tag, attrs in Document(topic_markup).elements if tag == 'option']
+            self.assertEqual(len(topic_options), 52)
+            self.assertEqual([option['value'] for option in topic_options if 'selected' in option], ['law'])
+            level_markup = html.split('id="jumble-level"', 1)[1].split('</select>', 1)[0]
+            level_options = [attrs for tag, attrs in Document(level_markup).elements if tag == 'option']
+            self.assertEqual([option['value'] for option in level_options], ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'])
+            self.assertEqual([option['value'] for option in level_options if 'selected' in option], ['C2'])
+        self.service.client.responses.create.assert_not_called()
+
+    def test_c2_word_generation_and_feedback_receive_same_curriculum(self):
+        self.service.client.responses.create.return_value.output_text = json.dumps({'words': ['право', 'закон', 'суд', 'свидетель', 'решение']})
+        game = self.service.create_game('law', 'C2')
+        payload = json.loads(self.service.client.responses.create.call_args.kwargs['input'][1]['content'])
+        self.assertEqual(payload['target_level'], 'C2')
+        self.assertEqual(payload['curriculum']['topic_band'], 'C1-C2')
+        self.assertTrue(payload['curriculum']['grammar_focus'])
+        self.assertTrue(payload['curriculum']['level_guidance'])
+        self.assertEqual(game['difficulty'], 'C2')
+        self.assertIn(payload['curriculum']['activity_brief'], game['task_contract']['instruction']['en'])
+        self.assertIn(game['task_contract']['instruction']['en'], self.client.get('/word_jumble/load/' + game['id']).text)
+        self.service.client.responses.create.return_value.output_text = json.dumps(self.evaluation)
+        self.service.mark_response(game['id'], 'Суд вынес решение.', 0)
+        assessment = json.loads(self.service.client.responses.create.call_args.kwargs['input'][1]['content'])
+        self.assertEqual(assessment['curriculum'], payload['curriculum'])
+
+    def test_invalid_link_level_remains_suggestible_but_failed_post_keeps_explicit_level(self):
+        html = self.client.get('/word_jumble?topic=law&level=invalid').get_data(as_text=True)
+        self.assertNotIn('data-level-explicit="true"', html)
+        self.assertIn('value="C1" selected', html)
+        self.service.client.responses.create.side_effect = RuntimeError('offline')
+        response = self.client.post('/word_jumble/create', data={'topic': 'law', 'difficulty': 'C2'})
+        self.assertEqual(response.status_code, 503)
+        self.assertIn('data-level-explicit="true"', response.text)
+        self.assertIn('value="C2" selected', response.text)
+
+    def test_cefr_tasks_differ_even_when_saved_words_need_no_provider(self):
+        with sqlite3.connect(self.service.db_path) as conn:
+            conn.executemany("INSERT INTO words(lemma,pos,topic,lemma_difficulty) VALUES (?, 'VERB', '[\"daily_activities\"]', 1)",
+                             [('читать',), ('писать',)])
+        instructions = set()
+        for level in ('A1', 'A2', 'B1', 'B2', 'C1', 'C2'):
+            game = self.service.create_game('any', level)
+            contract = game['task_contract']
+            self.assertEqual(contract['target_level'], level)
+            self.assertEqual(contract['curriculum']['target_level'], level)
+            instructions.add(contract['instruction']['en'])
+            html = self.client.get('/word_jumble/load/' + game['id']).text
+            self.assertIn(contract['instruction']['en'], html)
+            self.assertIn('sentence-task-instruction', html)
+        self.assertEqual(len(instructions), 6)
+        self.service.client.responses.create.assert_not_called()
+        with self.client.session_transaction() as session:
+            session['ui_lang'] = 'ru'
+        html = self.client.get('/word_jumble/load/' + game['id']).text
+        self.assertIn(game['task_contract']['instruction']['ru'], html)
+        self.assertNotIn(game['task_contract']['instruction']['en'], html)
+
+    def test_saved_curriculum_task_survives_catalogue_changes_and_guides_assessment(self):
+        game = self.service.create_game('any', 'A2')
+        snapshot = game['task_contract']
+        self.assertIsNotNone(snapshot)
+        with patch('services.word_jumble_service.generation_context', side_effect=AssertionError('Rebuilt a saved task')):
+            self.assertEqual(self.service.get_game(game['id'])['task_contract'], snapshot)
+            self.service.mark_response(game['id'], 'Семья дома, и кофе готов.', 0)
+        request = self.service.client.responses.create.call_args.kwargs
+        payload = json.loads(request['input'][1]['content'])
+        self.assertEqual(payload['task_contract'], snapshot)
+        self.assertIn('fulfilling the displayed task', request['input'][0]['content'])
+        self.assertIn('not extra mandatory checks', request['input'][0]['content'])
+        self.assertEqual(self.service.get_game(game['id'])['task_contract'], snapshot)
+
+    def test_cross_band_revision_does_not_impose_the_primary_bands_task(self):
+        self.service.client.responses.create.return_value.output_text = json.dumps({'words': ['право', 'закон', 'суд']})
+        game = self.service.create_game('law', 'A1')
+        contract = game['task_contract']
+        self.assertEqual(contract['target_level'], 'A1')
+        self.assertEqual(contract['curriculum']['topic_band'], 'C1-C2')
+        self.assertNotIn(contract['curriculum']['activity_brief'], contract['instruction']['en'])
+        self.assertEqual(contract['instruction']['en'], 'Use these words in one short Russian sentence.')
+
+    def test_legacy_free_sentence_task_does_not_gain_new_curriculum_requirements(self):
+        self.assertIsNone(self.service.get_game(self.id)['task_contract'])
+        self.service.mark_response(self.id, 'Семья дома.', 0)
+        request = self.service.client.responses.create.call_args.kwargs
+        payload = json.loads(request['input'][1]['content'])
+        self.assertIsNone(payload['task_contract'])
+        self.assertIsNone(payload['curriculum'])
+        self.assertIn('free sentence practice', request['input'][0]['content'])
+        self.assertNotIn('fulfilling the displayed task', request['input'][0]['content'])
+
+    def test_curriculum_migration_preserves_legacy_game_and_saved_draft(self):
+        self.service.save_draft(self.id, 'Сохранить мой черновик.', 0)
+        with sqlite3.connect(self.service.db_path) as conn:
+            conn.execute('ALTER TABLE word_jumble_games DROP COLUMN task_json')
+            conn.execute('DELETE FROM schema_migrations WHERE version=40')
+            before_game = conn.execute('SELECT * FROM word_jumble_games WHERE id=?', (self.id,)).fetchone()
+            before_draft = conn.execute('SELECT * FROM word_jumble_drafts WHERE game_id=?', (self.id,)).fetchone()
+        version, backup = upgrade_database(self.service.db_path)
+        self.assertEqual(version, latest_schema_version())
+        self.assertTrue(backup)
+        with sqlite3.connect(self.service.db_path) as conn:
+            after_game = conn.execute('SELECT * FROM word_jumble_games WHERE id=?', (self.id,)).fetchone()
+            self.assertEqual(after_game[:-1], before_game)
+            self.assertIsNone(after_game[-1])
+            self.assertEqual(conn.execute('SELECT * FROM word_jumble_drafts WHERE game_id=?', (self.id,)).fetchone(), before_draft)
+        self.assertIsNone(self.service.get_game(self.id)['task_contract'])
 
     def test_russian_interface_and_assessment_prompt(self):
         with self.client.session_transaction() as session:
@@ -440,13 +562,15 @@ class SentencePracticeTests(unittest.TestCase):
             conn.execute('DELETE FROM schema_migrations WHERE version>=6')
             conn.execute('UPDATE word_jumble_games SET user_response=?,score=95,feedback=? WHERE id=?',
                          ('Мой отец дома.', 'Earlier advice.', self.id))
+            original_columns = ','.join(row[1] for row in conn.execute('PRAGMA table_info(word_jumble_games)'))
             original = conn.execute('SELECT * FROM word_jumble_games').fetchall()
         version, backup = upgrade_database(self.service.db_path)
         self.assertEqual(version, latest_schema_version())
         self.assertTrue(Path(backup).exists())
         with sqlite3.connect(self.service.db_path) as conn:
-            self.assertEqual([row[:-1] for row in conn.execute('SELECT * FROM word_jumble_games')], original)
+            self.assertEqual(conn.execute('SELECT ' + original_columns + ' FROM word_jumble_games').fetchall(), original)
             self.assertEqual(conn.execute('SELECT DISTINCT owner_profile_id FROM word_jumble_games').fetchall(), [('personal-learning',)])
+            self.assertEqual(conn.execute('SELECT DISTINCT task_json FROM word_jumble_games').fetchall(), [(None,)])
         game = self.service.get_game(self.id)
         self.assertEqual(game['attempts'][0]['score'], 95)
         self.assertIsNone(game['attempts'][0]['score_max'])

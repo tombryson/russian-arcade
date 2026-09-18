@@ -11,8 +11,8 @@ import openai
 
 from config import OPENAI_MODEL_FAST
 from repositories.translation_repository import TranslationRepository
-from repositories.word_repository import WordRepository
 from utils.lazy import LazyService
+from services.curriculum import generation_context, normalize_level, topic_options
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class SentenceService:
         os.makedirs(self.media_dir, exist_ok=True)
 
     def get_topics(self):
-        return WordRepository(self.db_path).list_topics()
+        return [topic['value'] for topic in topic_options()]
 
     def _structured(self, name, properties, instruction, payload):
         try:
@@ -56,15 +56,20 @@ class SentenceService:
             raise TranslationUnavailable('Translation provider unavailable') from error
 
     def get_sentence(self, topic, difficulty):
-        if type(difficulty) is not int or difficulty not in range(1, 6) or not topic or len(topic) > 100:
+        level = normalize_level(difficulty, legacy='translation')
+        if not isinstance(topic, str) or not topic or len(topic) > 100 or any(ord(char) < 32 for char in topic):
             raise ValueError('Invalid topic or level')
         return self._structured('translation_pair', {key: {'type': 'string'} for key in ('sentence', 'english')},
             '''Prepare one short, natural Russian sentence and its accurate English translation for a family language lesson.
 The exercise asks the learner to translate the English into Russian. Both versions must mean the same thing,
 including tense, negation, names and questions. Use everyday, child-appropriate content. Keep it to one sentence.
-The requested level maps to CEFR: 1=A1, 2=A2, 3=B1, 4=B2, 5=C1. Return Russian in sentence, English in english.
+Follow the requested CEFR task level and curriculum grammar focus. Choose one useful construction,
+not every objective at once. Vocabulary examples guide the topic; natural related words are welcome.
+For advanced levels, express a nuanced idea naturally without making the sentence artificially long.
+Return Russian in sentence, English in english.
 For topic any choose a familiar everyday situation. Do not add labels, explanations or Markdown.''',
-            {'topic': topic, 'level': difficulty})
+            {'topic': topic, 'level': level,
+             'curriculum': generation_context(topic, level, 'translation')})
 
     def assess_translation(self, sentence, english, user_response, language='en'):
         TranslationRepository.validate_answer(user_response, checking=True)

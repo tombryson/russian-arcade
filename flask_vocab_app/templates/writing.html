@@ -31,16 +31,16 @@
     {% endif %}
     {% include '_writing_library.html' %}
     {% if not exercise %}
-    <details class="sentence-library writing-setup" id="new-writing" {% if not saved_exercises or error %}open{% endif %}>
+    <details class="sentence-library writing-setup" id="new-writing" {% if not saved_exercises or error or selected_topic != 'any' %}open{% endif %}>
       <summary><span>{{ ui_t('writing.new_task') }}</span><span class="sentence-disclosure-icon" aria-hidden="true">+</span></summary>
       <div class="writing-setup-body"><p class="sentence-muted">{{ ui_t('writing.setup_help') }}</p>
-        <form action="/writing/generate" method="post" data-writing-prepare data-pending="{{ ui_t('writing.preparing') }}" data-error="{{ ui_t('writing.prepare_failed') }}" data-ready="{{ ui_t('writing.open_ready') }}">
+        <form action="/writing/generate" method="post" data-curriculum-setup data-level-explicit="{{ 'true' if level_explicit else 'false' }}" data-writing-prepare data-pending="{{ ui_t('writing.preparing') }}" data-error="{{ ui_t('writing.prepare_failed') }}" data-ready="{{ ui_t('writing.open_ready') }}">
           {% if household_enabled %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
           <div class="writing-setup-grid"><div><label for="writing-topic">{{ ui_t('writing.topic') }}</label>
-            <select class="form-select" id="writing-topic" name="topic"><option value="any">{{ ui_t('word_jumble.any') }}</option>{% for topic in topics %}<option value="{{ topic.value }}" {% if selected_topic == topic.value %}selected{% endif %}>{{ topic.label }}</option>{% endfor %}</select></div>
-            <div><label for="writing-level">{{ ui_t('writing.level') }}</label><select class="form-select" id="writing-level" name="difficulty">{% for level in ['beginner','intermediate','advanced'] %}<option value="{{ level }}" {% if selected_level|default('beginner') == level %}selected{% endif %}>{{ ui_t('writing.level_'+level) }}</option>{% endfor %}</select></div></div>
+            <select class="form-select" id="writing-topic" name="topic" data-curriculum-topic><option value="any">{{ ui_t('word_jumble.any') }}</option>{% for topic in topics %}<option value="{{ topic.value }}" data-level="{{ topic.level }}" {% if selected_topic == topic.value %}selected{% endif %}>{% if topic.band %}{{ topic.band }} · {% endif %}{{ topic.label }}</option>{% endfor %}</select></div>
+            <div><label for="writing-level">{{ ui_t('writing.level') }}</label><select class="form-select" id="writing-level" name="difficulty" data-curriculum-level>{% for level in levels %}<option value="{{ level.value }}" {% if selected_level == level.value %}selected{% endif %}>{{ level.label }}</option>{% endfor %}</select></div></div>
           <fieldset class="sentence-levels writing-length"><legend>{{ ui_t('writing.length') }}</legend>
-            {% for length in ['30','100'] %}<label class="sentence-level"><input type="radio" name="target_words" value="{{ length }}" {% if selected_length|default('30') == length %}checked{% endif %}><span><strong>{{ ui_t('writing.length_'+length) }}</strong><small>{{ ui_t('writing.goal') }} {{ length }} {{ ui_t('writing.words') }}</small></span></label>{% endfor %}
+            {% for length in ['30','100','300'] %}<label class="sentence-level"><input type="radio" name="target_words" value="{{ length }}" {% if selected_length|default('30') == length %}checked{% endif %}><span><strong>{{ ('Развёрнутый текст' if ui_lang == 'ru' else 'Longer text') if length == '300' else ui_t('writing.length_'+length) }}</strong><small>{{ ui_t('writing.goal') }} {{ length }} {{ ui_t('writing.words') }}</small></span></label>{% endfor %}
           </fieldset>
           <button type="submit" class="btn btn-primary">{{ ui_t('writing.create_task') }} <span aria-hidden="true">→</span></button><p data-prepare-status role="status" aria-live="polite"></p>
         </form>

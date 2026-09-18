@@ -1,5 +1,7 @@
 # Word Post migration programme
 
+The [curriculum](../curriculum.md) is the current reference for the fifty A1–C2 topics, target vocabulary, grammar and activity briefs. Earlier migration proposals remain historical context.
+
 [Describe the scene](scene-builder.md) replaces Postcard Pairs in the catalogue with focused grammar practice. Learners select Russian words and endings to describe a simple illustration and situation. Existing Postcard Pairs sessions remain available.
 
 Follow the directions uses the [procedural directions engine](procedural-directions-implementation.md). It assembles neighbourhood blocks, binds delivery events to real places and prepares short AI conversations around checked Russian directions. Each assignment includes similar buildings or entrances that require a spatial distinction. Towns stay stable between deliveries. [Earlier generators](procedural-deliveries.md) remain available for saved sessions and prepared demo content. The [wider redesign specification](directions-game-redesign.md) covers later assessment and spoken interactions.

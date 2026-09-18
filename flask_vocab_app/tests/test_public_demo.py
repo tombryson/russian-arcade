@@ -37,7 +37,7 @@ class PublicDemoTests(unittest.TestCase):
         self.assertEqual(result.status_code, 403)
 
     def test_sample_pages_work_and_provider_upload_edit_routes_are_blocked(self):
-        for path in ('/post/', '/vocab', '/api/v1/flashcards', '/api/v1/first-steps', '/api/v1/games'):
+        for path in ('/post/', '/vocab', '/curriculum', '/api/v1/flashcards', '/api/v1/first-steps', '/api/v1/games'):
             self.assertEqual(self.a.get(path, base_url=self.base).status_code, 200, path)
         for path in ('/sentence/generate', '/sync_vocab', '/vocab?source=cloud', '/sync/preview'):
             self.assertEqual(self.a.get(path, base_url=self.base).status_code, 403, path)

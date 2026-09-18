@@ -1,5 +1,7 @@
 """Presentation fields for legacy stories; stored titles are never rewritten."""
 import json
+from services.curriculum import LEVELS, level_options
+from utils.activity_display import topic_label
 
 
 def present_story(story, language="ru"):
@@ -24,7 +26,8 @@ def present_story(story, language="ru"):
         **story,
         "display_title": english_title if use_english else title,
         "display_title_lang": "en" if use_english else "ru",
-        "display_topic": topic if topic.lower() not in {"", "any"} else "",
+        "display_topic": topic_label(topic, language) if topic.lower() not in {"", "any"} else "",
+        "level_label": next((item["label"] for item in level_options(language) if item["value"] == level.upper()), "") if level.upper() in LEVELS else "",
         "level_key": f"comprehension.{level}" if known_level else "",
         "question_count": len(questions) if isinstance(questions, list) else None,
     }

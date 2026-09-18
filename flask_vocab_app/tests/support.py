@@ -19,6 +19,9 @@ def strip_progression_and_levels(conn):
     This helper is test-only. Dropping their version markers alone would leave
     tables/indexes behind and prevent the real migrations from being exercised.
     """
+    columns = {row[1] for row in conn.execute('PRAGMA table_info(word_jumble_games)')}
+    if 'task_json' in columns:
+        conn.execute('ALTER TABLE word_jumble_games DROP COLUMN task_json')
     conn.execute('DROP TABLE IF EXISTS journey_route_preparations')
     conn.execute('DROP TABLE IF EXISTS journey_route_audio_cache')
     conn.execute('DROP TABLE IF EXISTS journey_route_actions')

@@ -257,7 +257,7 @@ html { scroll-padding-top: 116px; }
 .arcade-workspace .writing-setup-body { padding: 0 24px 24px; }
 .arcade-workspace .writing-setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .arcade-workspace .writing-setup-grid label { display: block; font-weight: 600; margin-bottom: 8px; }
-.arcade-workspace .writing-length { grid-template-columns: 1fr 1fr; }
+.arcade-workspace .writing-length { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .arcade-workspace .writing-timer { border-top: 1px dashed var(--wp-border-subtle); padding-top: 16px; margin-top: 22px; }
 .arcade-workspace .writing-timer summary { padding: 8px 0; color: var(--wp-text-secondary); cursor: pointer; }
 .arcade-workspace .writing-timer-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }

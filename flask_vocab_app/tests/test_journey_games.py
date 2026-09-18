@@ -232,6 +232,7 @@ class JourneyGamesTests(unittest.TestCase):
             ledger = [tuple(row) for row in conn.execute('SELECT * FROM progression_events')]
             for table in ('journey_game_purchases', 'journey_game_access', 'journey_route_audio_cache', 'journey_route_preparations', 'journey_route_actions', 'journey_route_state', 'journey_game_corrections', 'journey_game_preparations', 'journey_game_examples', 'journey_game_media', 'journey_game_sessions', 'journey_game_unlocks'):
                 conn.execute('DROP TABLE ' + table)
+            conn.execute('ALTER TABLE word_jumble_games DROP COLUMN task_json')
             conn.execute('DELETE FROM schema_migrations WHERE version>=30')
         self.assertEqual(upgrade_database(self.db, backup=False)[0], latest_schema_version())
         with transaction(self.db) as conn:
@@ -510,6 +511,7 @@ class JourneyGamesTests(unittest.TestCase):
             conn.execute('DELETE FROM journey_game_unlocks')
             conn.executemany('INSERT INTO journey_game_unlocks(rowid,' + ','.join(unlock_columns) + ') VALUES (' + ','.join('?' for _ in range(len(unlock_columns) + 1)) + ')', unlocks)
             conn.executemany('INSERT INTO journey_game_sessions(rowid,' + ','.join(columns) + ') VALUES (' + ','.join('?' for _ in range(len(columns) + 1)) + ')', sessions)
+            conn.execute('ALTER TABLE word_jumble_games DROP COLUMN task_json')
             conn.execute('DELETE FROM schema_migrations WHERE version>=32')
             self.assertNotIn('support_json', {row[1] for row in conn.execute('PRAGMA table_info(journey_game_sessions)')})
         self.assertEqual(upgrade_database(self.db, backup=False)[0], latest_schema_version())

@@ -317,7 +317,7 @@ class TranslationCleanupTests(unittest.TestCase):
     def test_library_invalid_level_is_ignored_without_losing_other_filters(self):
         target_id, _ = self.repository.save_content('Кот в школе.', 'The cat is at school.', 'school', 2)
         self.repository.save_content('Мы в школе.', 'We are at school.', 'school', 3)
-        for level in ('', 'bad', '0', '6', '-1', '2.5'):
+        for level in ('', 'bad', '0', '7', '-1', '2.5'):
             with self.subTest(level=level):
                 html = self.client.get('/sentences/saved', query_string={
                     'level': level, 'topic': 'school', 'q': 'CAT',
@@ -330,6 +330,44 @@ class TranslationCleanupTests(unittest.TestCase):
                 self.assertEqual(self.selected_options(html, 'library-topic'), ['school'])
                 self.assertEqual(document.element('library-search')['value'], 'CAT')
         self.assertEqual(self.service.mock_calls, [])
+
+    def test_curriculum_setup_prefills_topic_and_all_six_task_levels(self):
+        html = self.client.get('/sentences?topic=law&level=C2').get_data(as_text=True)
+        self.assertEqual(self.selected_options(html, 'translation-topic'), ['law'])
+        self.assertEqual(self.selected_options(html, 'translation-level'), ['C2'])
+        markup = html.split('id="translation-topic"', 1)[1].split('</select>', 1)[0]
+        self.assertEqual(sum(tag == 'option' for tag, _ in Document(markup).elements), 52)
+        html = self.client.get('/sentences?topic=shopping').get_data(as_text=True)
+        self.assertEqual(self.selected_options(html, 'translation-level'), ['A2'])
+        html = self.client.get('/sentences?topic=shopping&level=invalid').get_data(as_text=True)
+        self.assertEqual(self.selected_options(html, 'translation-level'), ['A2'])
+        self.assertNotIn('data-level-explicit="true"', html)
+        self.service.get_sentence.assert_not_called()
+
+    def test_c2_generation_and_library_filter_preserve_historical_level_storage(self):
+        response = self.client.post('/sentence/generate', data={'topic': 'law', 'difficulty': 'C2'}, headers=self.headers)
+        self.assertEqual(response.status_code, 200)
+        self.service.get_sentence.assert_called_once_with('law', 6)
+        sentence_id = int(response.json['url'].rsplit('/', 1)[1])
+        saved = self.repository.load(sentence_id)
+        self.assertEqual(saved['difficulty'], 6)
+        html = self.client.get('/sentences/saved?level=6').get_data(as_text=True)
+        self.assertIn(saved['sentence'], html)
+        self.assertNotIn('Кот спит дома.', html)
+        self.assertEqual(self.selected_options(html, 'library-level'), ['6'])
+        self.assertEqual(self.repository.load(self.id)['difficulty'], 1)
+
+    def test_revisiting_same_content_at_another_level_preserves_the_earlier_task(self):
+        # A provider can return an existing sentence. Its earlier difficulty
+        # must not silently replace the task level the learner just selected.
+        self.repository.save_draft(self.id, 'Мой черновик.', 0)
+        sentence_id, created = self.repository.save_content(
+            'Кот спит дома.', 'The cat is sleeping at home.', 'home', 2)
+        self.assertTrue(created)
+        self.assertNotEqual(sentence_id, self.id)
+        self.assertEqual(self.repository.load(sentence_id)['difficulty'], 2)
+        self.assertEqual(self.repository.load(self.id)['difficulty'], 1)
+        self.assertEqual(self.repository.load(self.id)['draft'], 'Мой черновик.')
 
     def test_library_escapes_saved_text_and_localizes_new_controls(self):
         self.repository.save_content('Текст <script>bad()</script>.', 'Text <img src=x onerror=bad()>.', 'home', 1)
@@ -393,6 +431,24 @@ class TranslationProviderTests(unittest.TestCase):
         self.assertEqual(kwargs['reasoning'], {'effort':'low'})
         self.assertFalse(kwargs['store'])
         self.assertNotIn('temperature', kwargs)
+
+    def test_c2_generation_uses_topic_objectives_and_legacy_levels_still_work(self):
+        self.output({'sentence': 'Право нуждается в толковании.', 'english': 'The law needs interpretation.'})
+        for selected, expected in ((1, 'A1'), ('5', 'C1'), (6, 'C2'), ('C2', 'C2')):
+            with self.subTest(selected=selected):
+                self.service.get_sentence('law', selected)
+                payload = json.loads(self.service.client.responses.create.call_args.kwargs['input'][1]['content'])
+                self.assertEqual(payload['level'], expected)
+                self.assertEqual(payload['curriculum']['target_level'], expected)
+                self.assertEqual(payload['curriculum']['topic_band'], 'C1-C2')
+                self.assertTrue(payload['curriculum']['objectives'])
+                self.assertTrue(payload['curriculum']['grammar_focus'])
+                self.assertTrue(payload['curriculum']['activity_brief'])
+        self.service.client.responses.create.reset_mock()
+        for invalid in (0, 7, True, None, 'expert', 'B3'):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                self.service.get_sentence('law', invalid)
+        self.service.client.responses.create.assert_not_called()
 
     def test_refusal_incomplete_invalid_scores_and_empty_feedback_fail_closed(self):
         for result in [dict(self.good, score=95), dict(self.good, score=True), dict(self.good, score=-1),

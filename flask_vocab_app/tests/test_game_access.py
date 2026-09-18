@@ -260,6 +260,7 @@ class GameAccessTests(unittest.TestCase):
             conn.execute((MIGRATION_DIR / '038_practice_game_access.sql').read_text())
             conn.execute('INSERT INTO journey_game_access VALUES (?,?,?,?,?,?,?)',
                          ('personal-learning', 'pack-bag', 12, 12, 123, None, 'practice-coins-v1'))
+            conn.execute('ALTER TABLE word_jumble_games DROP COLUMN task_json')
             conn.execute('DELETE FROM schema_migrations WHERE version>=39')
         self.assertEqual(upgrade_database(self.db, backup=False)[0], latest_schema_version())
         with transaction(self.db) as conn:

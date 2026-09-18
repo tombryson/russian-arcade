@@ -119,7 +119,7 @@ class WritingCleanupTests(unittest.TestCase):
         self.service.generate_writing_task.side_effect = WritingUnavailable('private diagnostics')
         result = self.client.post('/writing/generate',data=dict(topic='family',difficulty='advanced',target_words=100))
         self.assertEqual(result.status_code,503)
-        self.assertIn('value="advanced" selected',result.get_data(as_text=True))
+        self.assertIn('value="B1" selected',result.get_data(as_text=True))
         self.assertIn('value="100" checked',result.get_data(as_text=True))
         self.assertEqual(len(self.repo.list_saved()),2)
 
