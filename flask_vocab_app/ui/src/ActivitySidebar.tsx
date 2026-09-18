@@ -35,7 +35,11 @@ export function ActivitySidebar({ navigation, activePage, language = 'en', profi
     <nav id="activity-navigation" class="activity-navigation" data-expanded={expanded} aria-label={navigation.title}>
       <div class="sidebar-menu-scroll">
         <a class="activity-sidebar-title" href="#activities" onClick={close}>{navigation.title}</a>
-        <div class="activity-sidebar-links">{navigation.activities.map(item => <a key={item.page} href={item.href} aria-current={item.page === activePage ? 'page' : undefined} onClick={close}>{item.label}</a>)}<a href="#shop" aria-current={activePage === 'shop' ? 'page' : undefined} onClick={close}>{language === 'ru' ? 'Магазин Барсика' : 'Barsik’s shop'}</a></div>
+        <div class="activity-sidebar-links">
+          {navigation.activities.filter(item => item.page !== 'curriculum').map(item => <a key={item.page} href={item.href} aria-current={item.page === activePage ? 'page' : undefined} onClick={close}>{item.label}</a>)}
+          <a href="#shop" aria-current={activePage === 'shop' ? 'page' : undefined} onClick={close}>{language === 'ru' ? 'Магазин Барсика' : 'Barsik’s shop'}</a>
+          {navigation.activities.filter(item => item.page === 'curriculum').map(item => <a key={item.page} href={item.href} aria-current={item.page === activePage ? 'page' : undefined} onClick={close}>{item.label}</a>)}
+        </div>
         {!!tools.length && <details class="activity-sidebar-more">
           <summary>{navigation.more}</summary>
           {tools.map(item => <a key={item.page} href={item.href} onClick={close}>{item.label}</a>)}
