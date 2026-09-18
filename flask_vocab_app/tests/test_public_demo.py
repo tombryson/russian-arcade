@@ -36,6 +36,17 @@ class PublicDemoTests(unittest.TestCase):
                              json={'profile_id': b['profile']['id']}, headers={'X-CSRF-Token': a['csrf_token']})
         self.assertEqual(result.status_code, 403)
 
+    def test_profile_control_without_trial_shows_public_preview_information(self):
+        self.assertNotIn('hosted_trial', self.app.extensions)
+        page = self.a.get('/post/profiles', base_url=self.base)
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('<h1>Demo profile</h1>', page.text)
+        self.assertIn('temporary profile', page.text.lower())
+        self.assertIn('sign-in', page.text.lower())
+        self.assertIn('not enabled', page.text.lower())
+        self.assertNotIn('href="/trial/sign-in"', page.text)
+        self.assertIn('href="/post/#home"', page.text)
+
     def test_sample_pages_work_and_provider_upload_edit_routes_are_blocked(self):
         for path in ('/post/', '/vocab', '/curriculum', '/api/v1/flashcards', '/api/v1/first-steps', '/api/v1/games'):
             self.assertEqual(self.a.get(path, base_url=self.base).status_code, 200, path)

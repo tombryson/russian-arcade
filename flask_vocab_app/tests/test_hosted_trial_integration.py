@@ -97,6 +97,37 @@ class HostedTrialIntegrationTests(unittest.TestCase):
         self.assertEqual(trial.config['LESSON_MAX_PAGES'], 12)
         self.assertEqual(trial.config['MAX_CONTENT_LENGTH'], 12 * 1024 * 1024)
 
+    def test_profile_control_reaches_account_before_and_after_signin(self):
+        app = self.app()
+        client = app.test_client()
+        visitor = client.get('/post/profiles', base_url=self.base)
+        self.assertEqual(visitor.status_code, 302)
+        self.assertEqual(visitor.location, '/trial/account')
+        page = client.get(visitor.location, base_url=self.base)
+        self.assertIn('href="/trial/sign-in"', page.text)
+        self.login(client)
+        learner = client.get('/post/profiles', base_url=self.base)
+        self.assertEqual(learner.status_code, 302)
+        self.assertEqual(learner.location, '/trial/account')
+        page = client.get(learner.location, base_url=self.base)
+        self.assertIn('Signed in as sample-user.', page.text)
+        self.assertIn('action="/trial/sign-out"', page.text)
+
+    def test_disabled_profile_account_explains_unavailable_signin(self):
+        with patch.dict(os.environ, {'AI_TRIAL_ENABLED': 'false',
+                                    'GITHUB_OAUTH_CLIENT_ID': '', 'GITHUB_OAUTH_CLIENT_SECRET': ''}):
+            client = create_hosted_app().test_client()
+            response = client.get('/post/profiles', base_url=self.base)
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(response.location, '/trial/account')
+            page = client.get(response.location, base_url=self.base)
+            self.assertEqual(page.status_code, 200)
+            self.assertIn('<h1>Public preview</h1>', page.text)
+            self.assertIn('sign-in', page.text.lower())
+            self.assertIn('not enabled', page.text.lower())
+            self.assertNotIn('href="/trial/sign-in"', page.text)
+            self.assertNotIn('action="/trial/sign-out"', page.text)
+
     def test_dedicated_credentials_required_to_enable_and_no_fallback_to_regular_keys(self):
         required = ('GITHUB_OAUTH_CLIENT_ID', 'GITHUB_OAUTH_CLIENT_SECRET', 'DEMO_OPENAI_API_KEY',
                     'DEMO_ELEVENLABS_API_KEY', 'DEMO_OPENROUTER_API_KEY')

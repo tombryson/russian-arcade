@@ -155,6 +155,12 @@ class HostedTrialTests(unittest.TestCase):
         self.login(self.a)
         cookie = self.a.get_cookie(COOKIE, domain='arcade.example').value
         page = self.get(self.a, '/trial/account')
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('<h1>Your account</h1>', page.text)
+        self.assertIn('Signed in as sample-user.', page.text)
+        self.assertIn('US$1 per day and US$20 per month', page.text)
+        self.assertIn('action="/trial/sign-out"', page.text)
+        self.assertNotIn('href="/trial/sign-in"', page.text)
         token = re.search('name="csrf_token" value="([^"]+)"', page.text)[1]
         self.assertEqual(self.a.post('/trial/sign-out', base_url=self.base, data={'csrf_token': 'bad'}).status_code, 403)
         self.assertEqual(self.a.post('/trial/sign-out', base_url=self.base, data={'csrf_token': token},
@@ -162,6 +168,25 @@ class HostedTrialTests(unittest.TestCase):
         self.assertEqual(self.a.post('/trial/sign-out', base_url=self.base, data={'csrf_token': token}).status_code, 302)
         self.a.set_cookie(COOKIE, cookie, domain='arcade.example')
         self.assertEqual(self.get(self.a, '/who').text, 'public samples')
+
+    def test_anonymous_account_offers_signin_only_when_available(self):
+        for enabled, configured in ((True, True), (False, True), (True, False), (False, False)):
+            with self.subTest(enabled=enabled, configured=configured):
+                self.dispatch.enabled = enabled
+                self.provider.configured = configured
+                page = self.get(self.a, '/trial/account')
+                self.assertEqual(page.status_code, 200)
+                self.assertNotIn('action="/trial/sign-out"', page.text)
+                if enabled and configured:
+                    self.assertIn('<h1>Sign in</h1>', page.text)
+                    self.assertIn('href="/trial/sign-in"', page.text)
+                    self.assertIn('Sign in with GitHub', page.text)
+                else:
+                    self.assertIn('<h1>Public preview</h1>', page.text)
+                    self.assertIn('sign-in', page.text.lower())
+                    self.assertIn('not enabled', page.text.lower())
+                    self.assertNotIn('href="/trial/sign-in"', page.text)
+                self.assertIn('href="/post/"', page.text)
 
     def test_tenant_cap_and_auth_status(self):
         self.login(self.a)

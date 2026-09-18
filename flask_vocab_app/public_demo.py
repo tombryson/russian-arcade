@@ -90,7 +90,15 @@ def install_demo(app):
         if request.path == '/':
             return redirect('/post/')
         if request.path == '/post/profiles' and request.method == 'GET':
-            return redirect('/post/#home')
+            if app.extensions.get('hosted_trial') is not None:
+                return redirect('/trial/account')
+            return ('<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width">'
+                    '<title>Demo profile · Russian Arcade</title>'
+                    '<link rel="stylesheet" href="/static/css/public_demo.css?v=2"></head>'
+                    '<body class="demo-unavailable"><main class="demo-unavailable-content">'
+                    '<h1>Demo profile</h1><p>This temporary profile is for trying the sample activities. '
+                    'Personal sign-in is not enabled on this site yet.</p>'
+                    '<p><a href="/post/#home">Back to Russian Arcade</a></p></main></body></html>')
         read = request.method in ('GET', 'HEAD')
         allowed = ((read and request.endpoint in READ_ENDPOINTS)
                    or (request.method == 'POST' and request.endpoint in WRITE_ENDPOINTS))

@@ -420,9 +420,16 @@ class HostedTrialDispatcher:
                     'configured': self.provider.configured, 'display_name': account['display_name'] if account else None,
                     'sign_in_url': '/trial/sign-in', 'account_url': '/trial/account'})
             elif request.path == '/trial/account' and request.method == 'GET':
-                response = self._page('Your demo account' if account else 'Try the AI activities',
-                    f"Signed in as {account['display_name']}. Your practice and uploads stay in this account. The shared AI allowance is US$1 per day and US$20 per month across all visitors."
-                    if account else 'Sign in with GitHub to use the AI activities. No repository access is requested.', account=account)
+                if account:
+                    response = self._page('Your account',
+                        f"Signed in as {account['display_name']}. Your practice and uploads stay in this account. The shared AI allowance is US$1 per day and US$20 per month across all visitors.",
+                        account=account)
+                elif self.enabled and self.provider.configured:
+                    response = self._page('Sign in',
+                        'Use your GitHub account to save your progress and use the AI activities. No repository access is requested.')
+                else:
+                    response = self._page('Public preview',
+                        'You are using a temporary demo profile. Personal sign-in is not enabled on this site yet. You can try the sample activities here, or use the full app in a local installation.')
             elif request.path == '/trial/sign-in' and request.method == 'GET':
                 response = self._begin(request)
             elif request.path == '/trial/callback' and request.method == 'GET':
