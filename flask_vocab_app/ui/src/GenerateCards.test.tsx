@@ -43,7 +43,7 @@ describe('Automatic flashcard generation',()=>{
     const fetch=vi.fn((url:string)=>response(url==='/api/v1/household'?{mode:'personal',configured:true,adult:false,profile:{id:'me',display_name:'Me'},csrf_token:'token'}:url==='/api/v1/post'?{profile:{id:'me',display_name:'Me'},content:[],sessions:[]}:url==='/api/v1/word-pocket'?{profile_id:'me',evidence:[]}:overview));
     vi.stubGlobal('fetch',fetch);render(<App />);
     await screen.findByRole('heading',{name:'Flashcards',exact:true});
-    expect(await screen.findByRole('link',{name:'Generate my first cards'})).toBeTruthy();
+    expect(await screen.findByRole('link',{name:/Generate cards/})).toBeTruthy();
     expect(screen.queryByText(/PIN|grown-up|Choose a learner/)).toBeNull();
     await act(()=>{window.history.replaceState(null,'','/post/');});
   });

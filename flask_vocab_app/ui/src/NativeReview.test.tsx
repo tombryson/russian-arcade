@@ -119,18 +119,24 @@ describe('Native reviewer',()=>{
 describe('Flashcard overview',()=>{
   it('uses server counts and opens one selected learner session with CSRF',async()=>{
     const fetch=vi.fn((url:string,_options?:RequestInit)=>response(url==='/api/v1/household'?{csrf_token:'token'}:url==='/api/v1/review-sessions'?front:overview));vi.stubGlobal('fetch',fetch);await api('/api/v1/household');
-    render(<Flashcards profileId="learner" />);fireEvent.click(await screen.findByRole('button',{name:/Start practice/}));
+    render(<Flashcards profileId="learner" />);
+    fireEvent.change(await screen.findByRole('combobox',{name:'Session size'}),{target:{value:'20'}});
+    expect(screen.getByText('Due').nextElementSibling?.textContent).toBe('1');
+    expect(screen.getByText('Reviewed today').nextElementSibling?.textContent).toBe('1');
+    fireEvent.click(screen.getByRole('button',{name:/Start practice/}));
     await vi.waitFor(()=>expect(window.location.hash).toBe('#review/session'));
     const [,options]=fetch.mock.calls.find(([url])=>url==='/api/v1/review-sessions') as unknown as [string,RequestInit];
-    expect(options.headers).toMatchObject({'X-CSRF-Token':'token'});expect(JSON.parse(options.body as string)).toMatchObject({profile_id:'learner',scope:{},size:10});
+    expect(options.headers).toMatchObject({'X-CSRF-Token':'token'});expect(JSON.parse(options.body as string)).toMatchObject({profile_id:'learner',scope:{},size:20});
   });
   it('resumes an existing session without another start command',async()=>{
     const fetch=vi.fn(()=>response({...overview,active_session_id:'existing'}));vi.stubGlobal('fetch',fetch);render(<Flashcards profileId="learner" />);
-    fireEvent.click(await screen.findByRole('button',{name:/Continue practice/}));expect(window.location.hash).toBe('#review/existing');expect(fetch.mock.calls).toHaveLength(1);
+    const resume=await screen.findByRole('button',{name:/Continue practice/});
+    expect(screen.queryByRole('combobox',{name:'Session size'})).toBeNull();
+    fireEvent.click(resume);expect(window.location.hash).toBe('#review/existing');expect(fetch.mock.calls).toHaveLength(1);
   });
   it('browses card history without a review or scheduling write',async()=>{
     const fetch=vi.fn((url:string,_options?:RequestInit)=>response(url.endsWith('/history')?{profile_id:'learner',card_id:'card',events:[]}:overview));vi.stubGlobal('fetch',fetch);render(<Flashcards profileId="learner" />);
-    await screen.findByRole('button',{name:/Start practice/});fireEvent.click(screen.getByText('Browse your cards'));fireEvent.click(screen.getByRole('button',{name:'Open card: давать'}));fireEvent.click(screen.getByRole('button',{name:'History'}));await screen.findByText('No reviews yet.');
+    await screen.findByRole('button',{name:/Start practice/});fireEvent.click(screen.getByRole('button',{name:'Open card: давать'}));fireEvent.click(screen.getByRole('button',{name:'History'}));await screen.findByText('No reviews yet.');
     expect(fetch.mock.calls.every((call)=>(call[1] as RequestInit)?.method==='GET')).toBe(true);
   });
 });
@@ -150,17 +156,23 @@ describe('Rich card presentation',()=>{
     expect(screen.getByText('Verb')).toBeTruthy();expect(screen.getByText('Plural')).toBeTruthy();expect(screen.queryByText('Let’s play a game together.')).toBeNull();
     fireEvent.click(screen.getByRole('button',{name:/Show answer/}));expect(await screen.findByText('Let’s play a game together.')).toBeTruthy();
   });
-  it('sends grammar, difficulty and order selections to the library',async()=>{
+  it('keeps grammar, difficulty and sort filters when searching the library',async()=>{
     const value={...overview,facets:{decks:[],topics:['food'],pos:['NOUN'],cases:['nomn']}};
     const fetch=vi.fn((_url:string)=>response(value));vi.stubGlobal('fetch',fetch);render(<Flashcards profileId="learner" personal />);
-    await screen.findByText('Choose cards & session size');fireEvent.click(screen.getByText('Choose cards & session size'));
+    fireEvent.click(await screen.findByRole('button',{name:/^Filters/}));
     fireEvent.change(screen.getByLabelText('Word type'),{target:{value:'NOUN'}});fireEvent.change(screen.getByLabelText('Case'),{target:{value:'nomn'}});
     fireEvent.change(screen.getByLabelText('Difficulty'),{target:{value:'2'}});fireEvent.change(screen.getByLabelText('Sort collection'),{target:{value:'alphabetical'}});
     fireEvent.click(screen.getByRole('button',{name:'Apply selection'}));
     await vi.waitFor(()=>expect(fetch.mock.calls.some(call=>String(call[0]).includes('pos=NOUN') && String(call[0]).includes('case=nomn') && String(call[0]).includes('difficulty=2') && String(call[0]).includes('sort=alphabetical'))).toBe(true));
-    await screen.findByText('Choose cards & session size');
+    await screen.findByRole('button',{name:/^Filters/});
     expect((screen.getByLabelText('Word type') as HTMLSelectElement).value).toBe('NOUN');
     expect((screen.getByLabelText('Sort collection') as HTMLSelectElement).value).toBe('alphabetical');
+    fireEvent.input(screen.getByRole('searchbox',{name:'Search cards'}),{target:{value:'давать'}});
+    fireEvent.click(screen.getByRole('button',{name:'Search'}));
+    await vi.waitFor(()=>{
+      const query=new URL(String(fetch.mock.calls.at(-1)![0]),'http://localhost').searchParams;
+      expect(Object.fromEntries(query)).toMatchObject({q:'давать',pos:'NOUN',case:'nomn',difficulty:'2',sort:'alphabetical'});
+    });
   });
 });
 
@@ -217,7 +229,7 @@ describe('Anki cloze recall',()=>{
     const events=['again','hard','good','easy'].map(rating=>({rating,at:1000,due_at:1600,assisted:false,undone:false}));
     vi.stubGlobal('fetch',vi.fn((url:string)=>response(url.endsWith('/history')?{profile_id:'learner',card_id:'card',events}:overview)));
     render(<Flashcards profileId="learner" />);
-    await screen.findByRole('button',{name:/Start practice/});fireEvent.click(screen.getByText('Browse your cards'));
+    await screen.findByRole('button',{name:/Start practice/});
     fireEvent.click(screen.getByRole('button',{name:'Open card: давать'}));
     fireEvent.click(screen.getByRole('button',{name:'History'}));await screen.findByText(/· Hard/);
     for(const label of ['Again','Hard','Good','Easy']) expect(screen.getByText(new RegExp('· '+label))).toBeTruthy();

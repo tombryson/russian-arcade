@@ -66,9 +66,9 @@ it('passes the selected word into the card browser and retains it when applying 
  fetch.mockResolvedValue({ok:true,json:async () => ({profile_id:'p',scope:{word_id:'1'},server_now:0,active_session_id:null,
   counts:{cards:0,words:0,ready:0,new:0,due:0,new_allowance:5,practised_today:0},facets:{decks:[],topics:[],pos:[],cases:[]},cards:[]})});
  render(<Flashcards profileId="p" personal wordId={1} />);
- await screen.findByText('No flashcards yet.');
+ await screen.findByRole('heading',{name:/Your cards/});
  expect(fetch.mock.calls[0][0]).toBe('/api/v1/flashcards?word_id=1');
- fireEvent.click(screen.getByText('Choose cards & session size'));
+ fireEvent.click(screen.getByRole('button',{name:/^Filters/}));
  expect(document.querySelector('input[name="word_id"]').value).toBe('1');
  fireEvent.click(screen.getByRole('button',{name:'Show all cards'}));
  await waitFor(() => expect(fetch.mock.calls.at(-1)[0]).toBe('/api/v1/flashcards'));

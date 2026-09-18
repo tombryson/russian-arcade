@@ -49,7 +49,6 @@ const overview: CardOverview = {
 
 async function openLibrary() {
   render(<Flashcards profileId="learner" personal />);
-  fireEvent.click(await screen.findByText('Browse your cards'));
   return screen.findAllByRole('button', {name: /^Open card:/});
 }
 
@@ -59,11 +58,12 @@ afterEach(() => {
 });
 
 describe('Compact card library', () => {
-  it('lists each card in one selectable row without mounting its answer, media or management controls', async () => {
+  it('shows every card row immediately without mounting its answer, media or management controls', async () => {
     const fetch = vi.fn((_url: string, _options?: RequestInit) => response(overview));
     vi.stubGlobal('fetch', fetch);
     const rows = await openLibrary();
 
+    expect(screen.getByRole('heading', {name: /Your cards/})).toBeTruthy();
     expect(rows).toHaveLength(2);
     expect(rows[0].textContent).toContain('карта');
     expect(rows[0].textContent).toContain('Это [...].');
@@ -174,7 +174,7 @@ describe('Compact card library', () => {
     expect(focus).toHaveBeenLastCalledWith({preventScroll: true});
   });
 
-  it('returns focus to the library summary after deleting the last card', async () => {
+  it('returns focus to the library heading after deleting the last card', async () => {
     let deleted = false;
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     vi.stubGlobal('fetch', vi.fn((url: string) => {
@@ -189,9 +189,9 @@ describe('Compact card library', () => {
     const dialog = await screen.findByRole('dialog', {name: 'Card details'});
     fireEvent.click(within(dialog).getByRole('button', {name: 'Delete card'}));
 
-    await screen.findByText('No cards match this selection.');
-    const summary = screen.getByText('Browse your cards').closest('summary');
-    await vi.waitFor(() => expect(document.activeElement).toBe(summary));
+    await screen.findByText('No flashcards yet.');
+    const heading = screen.getByRole('heading', {name: /Your cards/});
+    await vi.waitFor(() => expect(document.activeElement).toBe(heading));
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
