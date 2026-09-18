@@ -3,7 +3,7 @@ import json
 import unittest
 
 from repositories.learning_repository import encoded, transaction
-from services.journey_vocabulary import cache_source_available, catalogue_sources, select_examples
+from services.journey_vocabulary import _vocabulary, cache_source_available, catalogue_sources, select_examples
 from tests import test_first_steps_practice as practice
 
 
@@ -35,6 +35,16 @@ class JourneyVocabularyTests(unittest.TestCase):
     def sources(self, profile='personal-learning'):
         with self.app.app_context(), transaction(self.db) as conn:
             return catalogue_sources(conn, profile, None)
+
+    def complete_vocabulary_selection(self):
+        # This small fixture fits in one selection. Check every lexical form so
+        # recent-form avoidance cannot hide the example whose cache is tested.
+        with self.app.app_context(), transaction(self.db) as conn:
+            identities = {record['identity'] for record in _vocabulary(conn)}
+        self.assertLessEqual(len(identities), 20, 'Expand this helper if the fixture exceeds the selection limit.')
+        selected = self.choose(limit=len(identities))
+        self.assertCountEqual([record['identity'] for record in selected], identities)
+        return selected
 
     def counts(self):
         with transaction(self.db) as conn:
@@ -182,7 +192,9 @@ class JourneyVocabularyTests(unittest.TestCase):
             self.assertFalse(cache_source_available(conn, example, 'another-profile'))
             self.assertFalse(cache_source_available(conn, example, None))
         self.app.extensions['learning']['card_authoring'].retire(self.access, example['source']['id'])
-        fresh = next(record for record in self.choose(limit=10) if record['identity'] == example['identity'])
+        selected = self.complete_vocabulary_selection()
+        self.assertFalse(any(record['source'].get('id') == example['source']['id'] for record in selected))
+        fresh = next(record for record in selected if record['identity'] == example['identity'])
         self.assertNotIn('sentence', fresh)
         self.assertNotIn('cached_id', fresh)
         self.assertEqual(fresh['source']['kind'], 'vocabulary')
@@ -193,8 +205,12 @@ class JourneyVocabularyTests(unittest.TestCase):
     def test_withdrawn_latest_native_version_does_not_fall_back_to_older_published_examples(self):
         example = self.native_cache()
         self.gen.content.withdraw(self.access, example['source']['version'])
-        fresh = next(record for record in self.choose(limit=10) if record['identity'] == example['identity'])
+        selected = self.complete_vocabulary_selection()
+        self.assertFalse(any(record['source'].get('id') == example['source']['id'] for record in selected))
+        fresh = next(record for record in selected if record['identity'] == example['identity'])
         self.assertNotIn('sentence', fresh)
+        self.assertNotIn('cached_id', fresh)
+        self.assertEqual(fresh['source']['kind'], 'vocabulary')
         with self.app.app_context(), transaction(self.db) as conn:
             self.assertFalse(cache_source_available(conn, example, 'personal-learning'))
             lesson = {**example, 'source': {'kind': 'lesson', 'id': 'tutor', 'card_id': example['source']['id'],
