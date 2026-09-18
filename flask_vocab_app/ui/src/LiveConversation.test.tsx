@@ -57,6 +57,44 @@ beforeEach(()=>{vi.stubGlobal('scrollTo',vi.fn());});
 afterEach(()=>{vi.useRealTimers();vi.restoreAllMocks();vi.unstubAllGlobals();});
 
 describe('Speaking activity',()=>{
+  it.each([
+    {configured:false,max_seconds:60,duration:null},
+    {configured:true,max_seconds:60,duration:'Up to one minute in the demo.'},
+    {configured:true,max_seconds:300,duration:'Up to five minutes.'},
+  ])('shows the fluent duration and recording notice only when available ($configured, $max_seconds seconds)',async({configured,max_seconds,duration})=>{
+    vi.stubGlobal('fetch',vi.fn((url:string)=>response(url.includes('/scenarios') ? catalogue : {...options,configured,max_seconds,scenario})));
+    render(<LiveConversation />);await chooseCafe();
+    expect(screen.getByRole('button',{name:/Start talking/}).hasAttribute('disabled')).toBe(!configured);
+    expect(!!screen.queryByText('Fluent conversation is currently unavailable.')).toBe(!configured);
+    const notice=screen.queryByText(/Up to (one minute|five minutes)/);
+    if (duration) {
+      expect(notice?.textContent).toBe(`${duration} Your microphone audio is saved for speaking feedback.`);
+      fireEvent.click(screen.getByRole('radio',{name:'Step-through',exact:true}));
+      expect(screen.queryByText(/Up to (one minute|five minutes)/)).toBeNull();
+    } else {
+      expect(notice).toBeNull();
+      expect(screen.queryByText(/Your microphone audio is saved for speaking feedback/)).toBeNull();
+    }
+  });
+  it('waits for the selected situation to load before showing a fluent duration or recording notice',async()=>{
+    let resolveOptions:(value:unknown)=>void=()=>{};
+    vi.stubGlobal('fetch',vi.fn((url:string)=>url.includes('/options')
+      ? new Promise(resolve=>{resolveOptions=resolve;}) : response(catalogue)));
+    render(<LiveConversation />);
+    fireEvent.click(await scenarioButton('At the café'));
+    await screen.findByRole('button',{name:'Finding a situation…'});
+    expect(screen.getByRole('button',{name:/Start talking/}).hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByText(/Up to (one minute|five minutes)/)).toBeNull();
+    expect(screen.queryByText(/Your microphone audio is saved for speaking feedback/)).toBeNull();
+    await act(async()=>{resolveOptions(await response({...options,max_seconds:60,scenario}));});
+    expect(await screen.findByText(/Up to one minute in the demo/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'Another situation'}));
+    expect(screen.getByRole('button',{name:/Start talking/}).hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByText(/Up to (one minute|five minutes)/)).toBeNull();
+    expect(screen.queryByText(/Your microphone audio is saved for speaking feedback/)).toBeNull();
+    await act(async()=>{resolveOptions(await response({...options,max_seconds:60,scenario}));});
+    expect(await screen.findByText(/Up to one minute in the demo/)).toBeTruthy();
+  });
   it('offers step-through inside the selected scenario without starting audio or generation',async()=>{
     const fetch=setup();const {getUserMedia}=fakeMedia();render(<LiveConversation />);
     await scenarioButton('At the café');

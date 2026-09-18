@@ -270,6 +270,7 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
 
   const rows=captionRows(captions);
   const scenario=state==='idle' ? options?.scenario : saved?.scenario;
+  const fluentReady=state==='idle' && practiceMode==='fluent' && !!options?.configured && !!selectedScenarioId && !!scenario && !changingScenario;
   const choice=catalogue?.scenarios.find(item=>item.id===selectedScenarioId);
   const showCatalogue=state==='idle' && !selectedScenarioId;
   const role=language==='ru' ? scenario?.role_ru ?? choice?.role_ru ?? 'Сотрудник кафе' : scenario?.role ?? choice?.role ?? 'Café worker';
@@ -347,7 +348,7 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
           {state==='idle' && modeChoices}
           {state==='idle' && practiceMode==='step' && scenario?.seed && !changingScenario && <StepThroughConversation key={`${selectedScenarioId}:${scenario.seed}:${level}`} embeddedSetup scenarioId={selectedScenarioId} scenarioSeed={scenario.seed} targetLevel={level} language={language} onPreparingChange={setPreparingStep} />}
           {state === 'idle' && <div class={`action-row${practiceMode==='step' ? ' speaking-step-secondary' : ''}`}>
-            {practiceMode==='fluent' && <button class="cta" disabled={!options?.configured || !scenario || starting.current || changingScenario} onClick={start}>{t('Start talking','Начать разговор')} <span aria-hidden="true">↗</span></button>}
+            {practiceMode==='fluent' && <button class="cta" disabled={!fluentReady || starting.current} onClick={start}>{t('Start talking','Начать разговор')} <span aria-hidden="true">↗</span></button>}
             <button class="text-link" disabled={changingScenario || preparingStep} onClick={()=>void refreshScenario(!!options)}>{changingScenario ? t('Finding a situation…','Выбираем ситуацию…') : options ? t('Another situation','Другая ситуация') : t('Try loading the situation again','Загрузить ситуацию ещё раз')}</button>
           </div>}
           {active && <>
@@ -363,8 +364,8 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
               {(saved?.connected || saved?.needs_recovery) && <button class="live-end" onClick={finishSaved}>{saved.needs_recovery ? t('Recover saved audio','Восстановить запись') : t('End conversation','Завершить разговор')}</button>}</div>
           </div>}
           {playbackBlocked && active && <button class="cta" onClick={enablePlayback}>{t('Turn on sound','Включить звук')}</button>}
-          {practiceMode==='fluent' && options && !options.configured && <p role="status" class="quiet">{t('Fluent conversation is currently unavailable.','Свободный разговор сейчас недоступен.')}</p>}
-          {state==='idle' && practiceMode==='fluent' && <p class="quiet">{(options?.max_seconds ?? 300) <= 60
+          {state==='idle' && practiceMode==='fluent' && options && !options.configured && <p role="status" class="quiet">{t('Fluent conversation is currently unavailable.','Свободный разговор сейчас недоступен.')}</p>}
+          {fluentReady && options && <p class="quiet">{options.max_seconds <= 60
             ? t('Up to one minute in the demo. Your microphone audio is saved for speaking feedback.','В демоверсии — до одной минуты. Запись микрофона сохраняется для разбора речи.')
             : t('Up to five minutes. Your microphone audio is saved for speaking feedback.','До пяти минут. Запись микрофона сохраняется для разбора речи.')}</p>}
         </div>
