@@ -116,7 +116,7 @@ The [native batch selector](../flask_vocab_app/services/card_generation.py) filt
 
 ## Lesson and game integration
 
-A lesson selection records a word as it appeared in the source. It keeps the exact form, sentence, document revision, page, OCR reading and corrections. It can link to existing vocabulary or add a validated lemma/form pair. It does not generate the full family of forms or apply the bulk-import frequency filters.
+A lesson selection records a word as it appeared in the source. It keeps the exact form, sentence, document revision, page, OCR reading and corrections. It can link to existing vocabulary or add a validated lemma/form pair. For a new lemma, it now runs the same form-generation and frequency filters as the vocabulary importer. The exact, dictionary-validated form selected in the lesson is retained even if those frequency filters would exclude it. Existing vocabulary rows and their IDs are preserved.
 
 | Table | Purpose |
 | --- | --- |
@@ -128,6 +128,14 @@ A lesson selection records a word as it appeared in the source. It keeps the exa
 Lesson cards use the same review tables and scheduler as other native cards.
 
 [Journey vocabulary](../flask_vocab_app/services/journey_vocabulary.py) draws from stored forms, confirmed lesson selections and prepared examples. Difficulty filters use form difficulty where available, with lemma difficulty as a fallback. New words use a separate validation and capture workflow.
+
+## Sample vocabulary
+
+The public demo and hosted trial use authored examples, not personal vocabulary. Their words go through the same local form-generation pipeline. Topics are reviewed values from the existing 51-topic taxonomy, so sample preparation needs no AI calls. For example, greetings use `greetings`, while рынок uses `shopping` and `places`.
+
+“First steps” identifies a lesson source. It is not a lexical topic. Trial startup repairs that old seed label without replacing word IDs, linked cards, counts, mnemonics or review history. New sample cards retain their lesson source separately from vocabulary metadata.
+
+New lesson and game captures also use the shared morphological pipeline. This does not run AI classification inside the database transaction. Known authored words receive reviewed topics; other captures remain unclassified until enriched. Contextual meanings stay on their cards.
 
 ## Contextual meanings and translations
 

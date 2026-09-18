@@ -155,7 +155,7 @@ class GameWordTests(unittest.TestCase):
             self.assertNotIn('meaning', details); self.assertNotIn('translation', details)
             result = save_word(conn, self.content, 'открывает', 'открывать')
             self.assertTrue(result['added']); self.assertTrue(result['in_vocabulary'])
-            form = conn.execute('SELECT form,tags FROM forms WHERE word_id=?', (result['word_id'],)).fetchone()
+            form = conn.execute('SELECT form,tags FROM forms WHERE word_id=? AND form=?', (result['word_id'], 'открывает')).fetchone()
             self.assertEqual(form['form'], 'открывает')
             self.assertEqual(json.loads(form['tags'])['person'], '3per')
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM card_definitions').fetchone()[0], 0)
@@ -163,11 +163,13 @@ class GameWordTests(unittest.TestCase):
     def test_explicit_save_is_idempotent_and_keeps_forms_linked_to_the_lemma(self):
         with transaction(self.db, write=True) as conn:
             first = save_word(conn, self.content, 'посылкой', 'посылка')
+            original_forms = [tuple(row) for row in conn.execute('SELECT * FROM forms ORDER BY id')]
+            self.assertGreater(len(original_forms), 1)
             second = save_word(conn, self.content, 'посылкой', 'посылка')
             self.assertTrue(first['added']); self.assertFalse(second['added'])
             self.assertEqual(first['word_id'], second['word_id'])
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM words').fetchone()[0], 1)
-            self.assertEqual(conn.execute('SELECT COUNT(*) FROM forms').fetchone()[0], 1)
+            self.assertEqual([tuple(row) for row in conn.execute('SELECT * FROM forms ORDER BY id')], original_forms)
             self.assertFalse(conn.execute('PRAGMA foreign_key_check').fetchall())
             self.assertNotIn('translation', {row['name'] for row in conn.execute('PRAGMA table_info(words)')})
 

@@ -2,6 +2,7 @@
 import json
 import logging
 import re
+from functools import lru_cache
 
 from repositories.learning_repository import LearningError, encoded, identifier, payload_hash, transaction
 from services.card_metadata import GRAMMAR, metadata_for
@@ -10,6 +11,13 @@ from utils.story_processing import get_morph
 from utils.pos_case import POS_MAP
 
 log = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def _local_vocabulary_pipeline():
+    """Reuse the morphology pipeline without configuring external providers."""
+    from services.sync_service import SyncService
+    return SyncService(db_path=None, drive_service=object(), api_key='', config={})
 
 
 def normal(value):
@@ -106,8 +114,15 @@ class LessonCards:
         if len(rows) > 1:
             raise ValueError('More than one vocabulary entry matches this word.')
         if not rows:
-            conn.execute('INSERT INTO words(lemma,pos,count,lemma_difficulty,topic,date_added) VALUES (?,?,0,0,?,date(\'now\'))', (lemma, pos, '[]'))
+            from services.sample_vocabulary import sample_topics
+            topics = sample_topics(lemma, candidate['pos'])
+            conn.execute('INSERT INTO words(lemma,pos,count,lemma_difficulty,topic,date_added) VALUES (?,?,0,0,?,date(\'now\'))', (lemma, pos, encoded(topics)))
             row = conn.execute('SELECT * FROM words WHERE id=last_insert_rowid()').fetchone()
+            # Keep the contextual parse and row identity: parsing the lemma
+            # again could choose a different homograph or part of speech.
+            if not _local_vocabulary_pipeline().process_word(lemma, conn, conn.cursor(), parsed=parses[0], word_id=row['id']):
+                raise ValueError('The vocabulary forms could not be prepared.')
+            row = conn.execute('SELECT * FROM words WHERE id=?', (row['id'],)).fetchone()
         else:
             row = rows[0]
         forms = []
@@ -119,7 +134,12 @@ class LessonCards:
             if normal(f['form']) == surface and isinstance(existing, dict) and all(existing.get(k) == v for k, v in tags.items()):
                 forms.append(f)
         if not forms:
-            conn.execute('INSERT INTO forms(word_id,form,count,tags) VALUES (?,?,0,?)', (row['id'], surface, encoded(tags)))
+            # Frequency filtering may omit the precise form in this lesson.
+            # Preserve that verified form even when it is uncommon.
+            difficulty = row['lemma_difficulty']
+            if difficulty:
+                difficulty = min(8, difficulty + (tags.get('number') == 'plur') + (2 if candidate['pos'] in ('PRTF', 'PRTS') else 0))
+            conn.execute('INSERT INTO forms(word_id,form,count,tags,form_difficulty) VALUES (?,?,0,?,?)', (row['id'], surface, encoded(tags), difficulty))
             form = conn.execute('SELECT * FROM forms WHERE id=last_insert_rowid()').fetchone()
         else:
             form = forms[0]

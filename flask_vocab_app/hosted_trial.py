@@ -5,7 +5,7 @@ GitHub account gets a separate database, media directory and Flask session.
 Provider credentials never pass through the browser or the identity database.
 """
 from collections import OrderedDict
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from hashlib import sha256
 import base64
 import hmac
@@ -113,38 +113,26 @@ def seed_trial_workspace(config, display_name):
     """Seed authored vocabulary and sample cards, never a personal DB snapshot."""
     from migrations import upgrade_database
     from repositories.learning_repository import transaction
-    from services.first_steps import HELLO, chapter_content
+    from services.sample_vocabulary import seed_sample_items
     from services.learning_assets import LocalAssetStore
     from services.learning_content import ContentService
     from services.personal_learning import personal_access
     database = config['DB_PATH']
     Path(database).parent.mkdir(parents=True, exist_ok=True)
     upgrade_database(database, backup=Path(database).is_file())
-    with transaction(database) as conn:
+    with closing(sqlite3.connect(database)) as existing:
+        needs_repair = existing.execute("SELECT 1 FROM words w WHERE EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(w.topic) THEN w.topic ELSE '[]' END) WHERE value='First steps') LIMIT 1").fetchone()
+        if needs_repair:
+            backup = str(database) + '.before-vocabulary-repair-' + secrets.token_hex(6) + '.bak'
+            with closing(sqlite3.connect(backup)) as snapshot:
+                existing.backup(snapshot)
+    with transaction(database, write=True) as conn:
         seeded = conn.execute("SELECT 1 FROM learning_content_versions WHERE content_id='trial-sample' AND status='published'").fetchone()
+        # Repair earlier sample vocabulary even when its published deck exists.
+        # Card IDs, published content and review schedules remain unchanged.
+        items = seed_sample_items(conn, 'trial-sample')
     if seeded:
         return
-    items = []
-    with transaction(database, write=True) as conn:
-        for lesson in [HELLO, *chapter_content()['lessons']]:
-            for word in lesson['vocabulary']:
-                existing = conn.execute('SELECT id FROM words WHERE lemma=?', (word['lemma'],)).fetchone()
-                word_id = existing['id'] if existing else conn.execute(
-                    "INSERT INTO words(lemma,pos,count,lemma_difficulty,topic,date_added) VALUES (?,?,0,1,?,date('now'))",
-                    (word['lemma'], word['pos'], json.dumps(['First steps']))).lastrowid
-                tags = json.dumps(word.get('grammar', {}))
-                conn.execute('INSERT OR IGNORE INTO forms(word_id,form,count,tags,form_difficulty) VALUES (?,?,0,?,1)',
-                    (word_id, word['form'], tags))
-                form_id = conn.execute('SELECT id FROM forms WHERE word_id=? AND form=? AND tags=?',
-                    (word_id, word['form'], tags)).fetchone()['id']
-                context, answer = word['sentence'], word['form']
-                if answer not in context:
-                    continue
-                identifier = f'trial-sample-{len(items) + 1}'
-                items.append(dict(id=identifier, card_id=identifier, word_id=word_id, form_id=form_id,
-                    type='cloze', direction='ru-cloze', sense_key=identifier, sense_label=lesson['title'],
-                    context=context, prompt=context.replace(answer, '[[blank]]', 1), answer=answer,
-                    cue_en=word['target_meaning'], context_meaning=word['translation'], topic='First steps', difficulty=1))
     credential = personal_access(database)
     content = ContentService(database, LocalAssetStore(config['WORD_POST_ASSET_DIR']))
     version = content.import_draft(dict(schema_version=2, id='trial-sample', kind='deck',

@@ -1,5 +1,4 @@
 """Disposable public preview: authored samples, isolated visitors, no providers."""
-import json
 import hashlib
 import os
 from pathlib import Path
@@ -42,35 +41,13 @@ def prepare_demo():
     for name, relative in paths.items():
         os.environ[name] = str(root / relative)
     from migrations import upgrade_database
-    from services.first_steps import HELLO, chapter_content
+    from services.sample_vocabulary import seed_sample_items
     from services.learning_assets import LocalAssetStore
     from services.learning_content import ContentService
     db = os.environ['VOCAB_DB_PATH']
     upgrade_database(db, backup=False)
-    items = []
     with transaction(db, write=True) as conn:
-        for lesson in [HELLO, *chapter_content()['lessons']]:
-            for word in lesson['vocabulary']:
-                existing = conn.execute('SELECT id FROM words WHERE lemma=?', (word['lemma'],)).fetchone()
-                if existing:
-                    word_id = existing['id']
-                else:
-                    word_id = conn.execute("INSERT INTO words(lemma,pos,count,lemma_difficulty,topic,date_added) VALUES (?,?,0,1,?,date('now'))",
-                        (word['lemma'], word['pos'], json.dumps(['First steps']))).lastrowid
-                tags = json.dumps(word.get('grammar', {}))
-                conn.execute('INSERT OR IGNORE INTO forms(word_id,form,count,tags,form_difficulty) VALUES (?,?,0,?,1)',
-                    (word_id, word['form'], tags))
-                form_id = conn.execute('SELECT id FROM forms WHERE word_id=? AND form=? AND tags=?',
-                    (word_id, word['form'], tags)).fetchone()['id']
-                context, answer = word['sentence'], word['form']
-                if answer not in context:
-                    continue
-                identifier = f'demo-{len(items) + 1}'
-                items.append(dict(id=identifier, card_id=identifier, word_id=word_id, form_id=form_id,
-                    type='cloze', direction='ru-cloze', sense_key=identifier, sense_label=lesson['title'],
-                    context=context, prompt=context.replace(answer, '[[blank]]', 1), answer=answer,
-                    cue_en=word['target_meaning'], context_meaning=word['translation'],
-                    topic='First steps', difficulty=1))
+        items = seed_sample_items(conn, 'demo')
     credential = personal_access(db)
     content = ContentService(db, LocalAssetStore(os.environ['WORD_POST_ASSET_DIR']))
     version = content.import_draft(dict(schema_version=2, id='public-demo', kind='deck',

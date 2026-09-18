@@ -132,6 +132,24 @@ class HostedTrialTests(unittest.TestCase):
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM words').fetchone()[0], before)
             self.assertEqual(conn.execute('SELECT display_name FROM learning_profiles').fetchone()[0], 'sample-user')
 
+    def test_existing_sample_topics_are_repaired_with_backup_without_republishing_cards(self):
+        self.login(self.a)
+        path = self.get(self.a, '/who').json['database']
+        with sqlite3.connect(path) as conn:
+            word_id = conn.execute("SELECT id FROM words WHERE lemma='письмо'").fetchone()[0]
+            conn.execute("UPDATE words SET topic=?,count=11,mnemonic='Keep this hint' WHERE id=?", (json.dumps(['First steps']), word_id))
+            versions = conn.execute('SELECT id,payload FROM learning_content_versions').fetchall()
+        seed_trial_workspace(self.apps[-1].config, 'different')
+        with sqlite3.connect(path) as conn:
+            word = conn.execute('SELECT topic,count,mnemonic FROM words WHERE id=?', (word_id,)).fetchone()
+            self.assertEqual(json.loads(word[0]), ['daily_activities', 'social'])
+            self.assertEqual(word[1:], (11, 'Keep this hint'))
+            self.assertEqual(conn.execute('SELECT id,payload FROM learning_content_versions').fetchall(), versions)
+        backups = list(Path(path).parent.glob('vocab.db.before-vocabulary-repair-*.bak'))
+        self.assertEqual(len(backups), 1)
+        with sqlite3.connect(backups[0]) as conn:
+            self.assertEqual(json.loads(conn.execute('SELECT topic FROM words WHERE id=?', (word_id,)).fetchone()[0]), ['First steps'])
+
     def test_signout_csrf_and_revocation(self):
         self.login(self.a)
         cookie = self.a.get_cookie(COOKIE, domain='arcade.example').value

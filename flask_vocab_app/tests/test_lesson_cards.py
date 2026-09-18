@@ -80,7 +80,7 @@ class LessonCardTests(unittest.TestCase):
         self.assertEqual(len(self.text.calls),0)  # No unrelated sentence regeneration.
         with transaction(self.db) as conn:
             word=conn.execute("SELECT * FROM words WHERE lemma='город'").fetchone()
-            form=conn.execute('SELECT * FROM forms WHERE word_id=?',(word['id'],)).fetchone()
+            form=conn.execute('SELECT * FROM forms WHERE word_id=? AND form=?',(word['id'],'городах')).fetchone()
             self.assertEqual(form['form'],'городах')
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM card_definitions WHERE word_id=?',(word['id'],)).fetchone()[0],1)
             self.assertFalse(conn.execute('PRAGMA foreign_key_check').fetchall())

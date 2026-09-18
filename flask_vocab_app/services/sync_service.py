@@ -16,6 +16,7 @@ import logging
 import time
 from openai import OpenAI
 from services.google_drive_service import GoogleDriveService
+from services.vocabulary_topics import TOPICS
 from config import OPENAI_API_KEY, OPENAI_MODEL_HIGH, OPENAI_MODEL_FAST
 from datetime import datetime
 
@@ -29,15 +30,7 @@ class SyncService:
         self.api_key = OPENAI_API_KEY if api_key is None else api_key
         self.config = config_snapshot(config)
         self.openai_client = LazyService("OpenAI sync client", lambda: openai_client(config=self.config, factory=OpenAI, api_key=self.api_key, timeout=60.0))
-        self.TOPICS = [
-            "greetings", "numbers", "family", "home", "food", "daily_activities", "colors", "clothing",
-            "places", "weather", "shopping", "travel", "restaurant", "body", "school", "hobbies",
-            "animals", "nature", "jobs", "holidays", "city", "technology", "environment", "sports",
-            "music", "feelings", "news", "housekeeping", "social", "history", "work", "education",
-            "health", "tourism", "cuisine", "fashion", "literature", "politics", "economy", "religion",
-            "law", "science", "philosophy", "psychology", "sociology", "architecture", "cinema",
-            "global_issues", "linguistics", "russian_culture", "grammar"
-        ]
+        self.TOPICS = list(TOPICS)
 
     def is_valid_russian_word(self, word):
         logger.debug(f"Validating word: {word}")
@@ -96,34 +89,70 @@ class SyncService:
         logger.debug(f"No lemma change: {word} ({pos})")
         return word, pos, ""
 
-    def process_word(self, lemma, conn, cursor):
+    def process_word(self, lemma, conn, cursor, *, parsed=None, word_id=None):
+        """Import a lemma, or add missing lexical data to an explicit reading.
+
+        A supplied dictionary parse keeps a context-verified reading instead of
+        reranking homographs. Supplying a word ID backfills that row in place;
+        existing forms, counts, enrichment and nonzero difficulty are retained.
+        The caller owns the transaction, including any rollback on failure.
+        """
         logger.debug(f"Processing word: {lemma}")
         try:
-            if cursor.execute("SELECT 1 FROM words WHERE lemma = ?", (lemma,)).fetchone():
-                return True
-            cursor.execute("""
-                SELECT w.lemma, w.pos
-                FROM forms f
-                JOIN words w ON f.word_id = w.id
-                WHERE f.form = ?
-            """, (lemma,))
-            existing_form = cursor.fetchone()
-            if existing_form:
-                logger.info(f"Skipping '{lemma}' as it is a form of lemma '{existing_form[0]}' ({existing_form[1]})")
-                return True
+            explicit = parsed is not None or word_id is not None
+            existing_word = None
+            if word_id is not None:
+                existing_word = cursor.execute(
+                    'SELECT id, lemma, pos, lemma_difficulty FROM words WHERE id=?', (word_id,)
+                ).fetchone()
+                if not existing_word or self.normalize_capture(existing_word[1]) != self.normalize_capture(lemma):
+                    logger.warning('Cannot backfill a missing or mismatched vocabulary ID')
+                    return False
+            if not explicit:
+                if cursor.execute("SELECT 1 FROM words WHERE lemma = ?", (lemma,)).fetchone():
+                    return True
+                cursor.execute("""
+                    SELECT w.lemma, w.pos
+                    FROM forms f
+                    JOIN words w ON f.word_id = w.id
+                    WHERE f.form = ?
+                """, (lemma,))
+                existing_form = cursor.fetchone()
+                if existing_form:
+                    logger.info(f"Skipping '{lemma}' as it is a form of lemma '{existing_form[0]}' ({existing_form[1]})")
+                    return True
 
-            parses = self.morph.parse(lemma)
             pos_map = {
                 'NOUN': 'NOUN', 'VERB': 'VERB', 'INFN': 'VERB', 'ADJF': 'ADJ', 'ADJS': 'ADJ',
                 'PRTF': 'ADJ', 'PRTS': 'ADJ', 'ADVB': 'ADVB', 'NUMR': 'NUMR', 'NPRO': 'NPRO',
                 'CONJ': 'CONJ', 'COMP': 'COMP', 'PRCL': 'PART', 'PRED': 'PRED', 'PREP': 'PREP'
             }
 
+            def matching_pos(tag_pos):
+                if not existing_word:
+                    return True
+                stored_pos = str(existing_word[2]).upper()
+                # Contextual captures historically use PART for participles and
+                # PRCL for particles; preserve those stored labels as well.
+                return (stored_pos in {tag_pos, pos_map.get(tag_pos, tag_pos)}
+                        or (stored_pos == 'PART' and tag_pos in ('PRTF', 'PRTS')))
+
+            if parsed is not None:
+                if (not parsed.tag.POS or not parsed.is_known
+                        or self.normalize_capture(parsed.normal_form) != self.normalize_capture(lemma)
+                        or not matching_pos(parsed.tag.POS)):
+                    logger.warning('The supplied dictionary reading does not match the vocabulary entry')
+                    return False
+                parses = [parsed]
+            else:
+                parses = self.morph.parse(lemma)
+
             scored_parses = []
             for parse in parses:
                 pos = parse.tag.POS
                 logger.debug(f"Parse for '{lemma}': POS={pos}, Score={parse.score}, Normal Form={parse.normal_form}")
-                if not pos:
+                if not pos or (explicit and (not matching_pos(pos)
+                        or self.normalize_capture(parse.normal_form) != self.normalize_capture(lemma))):
                     continue
                 freq = word_frequency(parse.normal_form, 'ru')
                 score = parse.score + (freq * 1e6 if freq > 0 else 0)
@@ -135,21 +164,29 @@ class SyncService:
 
             scored_parses.sort(key=lambda x: x[2], reverse=True)
             parsed, pos_tag, score = scored_parses[0]
-            pos = pos_map.get(pos_tag, 'ADJ')
+            pos = pos_map.get(pos_tag, pos_tag if explicit else 'ADJ')
             logger.debug(f"Selected POS: {pos}, Score: {score}")
 
-            cursor.execute("SELECT id, pos FROM words WHERE lemma = ?", (lemma,))
-            existing = cursor.fetchall()
-            if existing:
-                existing_pos = [row[1] for row in existing]
-                if pos in existing_pos:
-                    logger.info(f"Skipping duplicate lemma '{lemma}' with POS '{pos}'")
-                    return True
-                for word_id, old_pos in existing:
-                    if old_pos != pos:
-                        cursor.execute("UPDATE words SET pos = ? WHERE id = ?", (pos, word_id))
-                        cursor.execute("DELETE FROM forms WHERE word_id = ?", (word_id))
-                        logger.info(f"Updated POS for '{lemma}' from {old_pos} to {pos}")
+            if explicit:
+                if existing_word is None:
+                    existing_word = cursor.execute(
+                        'SELECT id, lemma, pos, lemma_difficulty FROM words WHERE lemma=? AND pos=?', (lemma, pos)
+                    ).fetchone()
+                if existing_word:
+                    word_id, pos = existing_word[0], existing_word[2]
+            else:
+                cursor.execute("SELECT id, pos FROM words WHERE lemma = ?", (lemma,))
+                existing = cursor.fetchall()
+                if existing:
+                    existing_pos = [row[1] for row in existing]
+                    if pos in existing_pos:
+                        logger.info(f"Skipping duplicate lemma '{lemma}' with POS '{pos}'")
+                        return True
+                    for word_id, old_pos in existing:
+                        if old_pos != pos:
+                            cursor.execute("UPDATE words SET pos = ? WHERE id = ?", (pos, word_id))
+                            cursor.execute("DELETE FROM forms WHERE word_id = ?", (word_id))
+                            logger.info(f"Updated POS for '{lemma}' from {old_pos} to {pos}")
 
             forms = set()
             form_count = 0
@@ -232,7 +269,7 @@ class SyncService:
                     elif form.tag.POS in ("PRCL", "PRED"):
                         tags["pos"] = "particle" if form.tag.POS == "PRCL" else "predicative"
                     else:
-                        tags["pos"] = pos_map.get(form.tag.POS, "other")
+                        tags["pos"] = pos_map.get(form.tag.POS, form.tag.POS if explicit else "other")
                     dedup_tags = {k: v for k, v in tags.items() if k not in ('animacy', 'case') or form.tag.POS not in ('ADJF', 'ADJS', 'PRTF', 'PRTS')}
                     if form.tag.POS in ('ADJF', 'ADJS', 'PRTF', 'PRTS') and 'gender' in dedup_tags and dedup_tags.get('number') == 'plur':
                         del dedup_tags['gender']
@@ -254,16 +291,34 @@ class SyncService:
 
             logger.debug(f"Generated forms: {[f[0] for f in forms]}")
             try:
-                cursor.execute(
-                    "INSERT OR IGNORE INTO words (lemma, pos, count, lemma_difficulty, date_added) VALUES (?, ?, ?, ?, ?)",
-                    (lemma, pos, 0, lemma_difficulty, current_date)
-                )
-                cursor.execute("SELECT id FROM words WHERE lemma = ? AND pos = ?", (lemma, pos))
-                word_id = cursor.fetchone()
-                if not word_id:
-                    logger.error(f"Failed to insert or find '{lemma}' with POS '{pos}'")
-                    return False
-                word_id = word_id[0]
+                if explicit and existing_word:
+                    if existing_word[3] is None or existing_word[3] == 0:
+                        cursor.execute('UPDATE words SET lemma_difficulty=? WHERE id=?', (lemma_difficulty, word_id))
+                    else:
+                        lemma_difficulty = existing_word[3]
+                else:
+                    cursor.execute(
+                        "INSERT OR IGNORE INTO words (lemma, pos, count, lemma_difficulty, date_added) VALUES (?, ?, ?, ?, ?)",
+                        (lemma, pos, 0, lemma_difficulty, current_date)
+                    )
+                    cursor.execute("SELECT id FROM words WHERE lemma = ? AND pos = ?", (lemma, pos))
+                    inserted_word = cursor.fetchone()
+                    if not inserted_word:
+                        logger.error(f"Failed to insert or find '{lemma}' with POS '{pos}'")
+                        return False
+                    word_id = inserted_word[0]
+
+                existing_forms = {}
+                if explicit:
+                    for form_id, surface, stored_tags, difficulty in cursor.execute(
+                            'SELECT id, form, tags, form_difficulty FROM forms WHERE word_id=?', (word_id,)).fetchall():
+                        try:
+                            decoded = json.loads(stored_tags)
+                        except (TypeError, ValueError):
+                            continue
+                        if isinstance(decoded, dict):
+                            signature = (surface, json.dumps(decoded, sort_keys=True))
+                            existing_forms.setdefault(signature, []).append((form_id, difficulty))
 
                 # Insert forms with form_difficulty
                 for form, tags_json in forms:
@@ -275,6 +330,11 @@ class SyncService:
                         modifier += 1
                     form_difficulty = min(8, lemma_difficulty + modifier)  # Cap at 8
                     logger.debug(f"Form '{form}' (POS: {tags.get('pos', '')}, Tags: {tags}): Lemma {lemma_difficulty}, Modifier {modifier}, Form {form_difficulty}")
+                    if explicit and (form, tags_json) in existing_forms:
+                        for form_id, difficulty in existing_forms[(form, tags_json)]:
+                            if difficulty is None or difficulty == 0:
+                                cursor.execute('UPDATE forms SET form_difficulty=? WHERE id=?', (form_difficulty, form_id))
+                        continue
                     try:
                         cursor.execute(
                             "INSERT INTO forms (word_id, form, count, tags, form_difficulty) VALUES (?, ?, ?, ?, ?)",
@@ -282,6 +342,8 @@ class SyncService:
                         )
                     except sqlite3.IntegrityError as e:
                         logger.warning(f"Skipping duplicate form '{form}' for lemma '{lemma}': {str(e)}")
+                        if explicit:
+                            raise
                         # Update existing form's form_difficulty
                         cursor.execute(
                             "UPDATE forms SET form_difficulty = ? WHERE word_id = ? AND form = ?",
