@@ -289,11 +289,19 @@ export function LiveConversation({sessionId,language='en',initialScenarioId,init
         {rows.map(row => <div key={row.id} class={`live-caption ${row.role}`}><span>{row.role==='you' ? t('You','Вы') : role}</span><p lang="ru">{row.text}</p></div>)}
       </div>}
     </div>;
-  const modePicker = <div class="speaking-mode-picker" role="group" aria-label={t('Conversation mode','Режим разговора')}>
-        {(['fluent','step'] as const).map(mode=><button type="button" class="live-mute" aria-pressed={practiceMode===mode} onClick={()=>{setPracticeMode(mode);history.replaceState(null,'',mode==='step' ? '#speaking/step' : '#speaking');}} key={mode}>{mode==='fluent' ? t('Fluent conversation','Свободный разговор') : t('Step-through','Пошаговый разговор')}</button>)}
-    </div>;
+  const stepToggle = <div class="speaking-step-option">
+    <button type="button" class="speaking-step-toggle" role="switch" aria-checked={practiceMode==='step'} aria-describedby="speaking-step-help" onClick={()=>{
+      const mode=practiceMode==='step' ? 'fluent' : 'step';
+      setPracticeMode(mode);history.replaceState(null,'',mode==='step' ? '#speaking/step' : '#speaking');
+    }}>
+      <span>{t('Step-through','Пошаговый разговор')}</span>
+      <span class="speaking-step-state" aria-hidden="true">{practiceMode==='step' ? t('On','Вкл.') : t('Off','Выкл.')}</span>
+      <span class="speaking-step-track" aria-hidden="true"><span /></span>
+    </button>
+    <p id="speaking-step-help">{t('Pause after each line for reply choices and hints.','Пауза после каждой реплики: варианты ответа и подсказки.')}</p>
+  </div>;
   const content = <>
-    {showCatalogue ? <ActivityHeader title={t('Speaking','Разговорная практика')} description={practiceMode==='fluent' ? t('Choose a scenario and talk naturally with your microphone.','Выберите ситуацию и говорите свободно в микрофон.') : t('Choose what to say next, with a hint when you need one.','Выбирайте следующую реплику. Если нужно, откройте подсказку.')} actions={modePicker} headingRef={heading} headingTabIndex={-1} /> : <nav class="speaking-task-nav" aria-label={t('Speaking','Разговорная практика')}>
+    {showCatalogue ? <ActivityHeader title={t('Speaking','Разговорная практика')} description={practiceMode==='fluent' ? t('Fluent conversation: speak naturally with your microphone.','Свободный разговор: говорите естественно в микрофон.') : t('Step-through: choose a reply after each line.','Пошаговый разговор: выбирайте ответ после каждой реплики.')} actions={stepToggle} headingRef={heading} headingTabIndex={-1} /> : <nav class="speaking-task-nav" aria-label={t('Speaking','Разговорная практика')}>
       {state==='idle' ? <button class="text-link" onClick={()=>newConversation()}>{t('← All scenarios','← Все ситуации')}</button>
         : <a class="text-link" href="#speaking" onClick={newConversation}>{t('← All scenarios','← Все ситуации')}</a>}
     </nav>}

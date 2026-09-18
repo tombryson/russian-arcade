@@ -7,7 +7,7 @@ chooses a fresh situation.
 
 ## Learner flow
 
-1. Open **Speaking**, choose **Fluent conversation** or **Step-through**, then choose a scenario: café, shops, directions, station or
+1. Open **Speaking**. Fluent conversation is the default; turn on **Step-through** for guided replies. Choose a scenario: café, shops, directions, station or
    meeting people.
 2. Read the short situation, its three goals and any useful reference information.
    **Another situation** offers a different version within the selected scenario.

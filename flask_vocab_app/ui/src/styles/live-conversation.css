@@ -3,6 +3,7 @@
 .page.live-page { max-width:1240px; margin-inline:auto; padding:16px 32px 40px; container-type:inline-size; }
 .live-page.activity-entry > .activity-entry-content { max-width:none; }
 .live-page.activity-entry .activity-header { margin-bottom:20px; }
+.live-page.activity-entry .activity-header-actions { max-width:100%; }
 .live-page.activity-entry .activity-description { margin-top:6px; font-size:16px; }
 .speaking-task-nav { display:flex; margin-bottom:12px; }
 .speaking-task-nav .text-link { font-size:14px; }
@@ -119,8 +120,15 @@
 @media(max-width:560px) { .live-stage.live-stage-finished { padding:22px 20px; } .live-task-reference { grid-template-columns:1fr; gap:20px; } .live-feedback { padding:24px 20px; } .live-score-grid { grid-template-columns:1fr; gap:12px; } .live-score { padding:20px; } .live-goal-review li { grid-template-columns:24px 1fr; } .live-goal-review small { grid-column:2; } }
 
 .speaking-level-group { margin:0 0 36px; }
-.speaking-mode-picker { display:flex; flex-wrap:wrap; gap:8px; }
-.speaking-mode-picker button[aria-pressed="true"] { background:var(--wp-text-primary); color:var(--wp-surface-paper); border-color:var(--wp-text-primary); }
+.speaking-step-option { width:320px; max-width:100%; }
+.speaking-step-toggle { display:flex; align-items:center; gap:12px; width:100%; min-height:44px; padding:0; border:0; background:transparent; color:var(--wp-text-primary); font:500 16px/1.4 var(--wp-font-reading); text-align:left; cursor:pointer; }
+.speaking-step-toggle:focus-visible { outline:3px solid var(--wp-accent-delivery); outline-offset:5px; border-radius:8px; }
+.speaking-step-state { margin-left:auto; color:var(--wp-text-secondary); font-size:13px; font-weight:400; }
+.speaking-step-track { display:flex; align-items:center; flex:0 0 52px; height:30px; padding:3px; border:1px solid var(--wp-text-secondary); border-radius:999px; background:var(--wp-surface-sheet); }
+.speaking-step-track>span { width:22px; height:22px; border-radius:50%; background:var(--wp-text-primary); }
+.speaking-step-toggle[aria-checked="true"] .speaking-step-track { background:var(--wp-surface-ticket); border-color:var(--wp-surface-ticket); }
+.speaking-step-toggle[aria-checked="true"] .speaking-step-track>span { margin-left:auto; background:var(--wp-text-onTicket); }
+.speaking-step-option p { margin:3px 0 0; color:var(--wp-text-secondary); font-size:13px; line-height:1.5; }
 .speaking-level-group h2 { margin:0 0 12px; font:500 22px/1.25 var(--wp-font-display); }
 .speaking-level-group + .speaking-level-group { padding-top:24px; border-top:1px solid var(--wp-border-subtle); }
 .speaking-level-group-muted { filter:grayscale(1); }
