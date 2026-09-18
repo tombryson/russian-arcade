@@ -17,7 +17,7 @@ const navigation: ActivityNavigation = {
   ],
   tools: [
     {page:'flashcards', href:'/', label:'Anki card tools', boost:true},
-    {page:'sentences_saved', href:'/sentences/saved', label:'Saved sentences', boost:false},
+    {page:'sentences_saved', href:'/sentences/saved', label:'Phrasebook', boost:false},
   ],
 };
 async function navigate(hash: string) {
@@ -63,7 +63,7 @@ describe('Saved navigation layout', () => {
     expect(account.querySelector<HTMLInputElement>('input[name="csrf_token"]')?.value).toBe('test-token');
     expect(account.querySelector<HTMLInputElement>('input[name="next"]')?.value).toBe('/post/#words');
     expect(footer.querySelector('.sidebar-utilities')).toBeNull();
-    for (const [label, href] of [[language === 'ru' ? 'Мои слова' : 'My words', '/vocab'], [language === 'ru' ? 'Сохранённые предложения' : 'Saved sentences', '/sentences/saved']]) {
+    for (const [label, href] of [[language === 'ru' ? 'Мои слова' : 'My words', '/vocab'], [language === 'ru' ? 'Разговорник' : 'Phrasebook', '/sentences/saved']]) {
       const link = within(shortcuts).getByRole('link', {name:label});
       expect(link.getAttribute('href')).toBe(href);
       expect(link.getAttribute('title')).toBe(label);
@@ -146,7 +146,7 @@ describe('Saved navigation layout', () => {
     else await screen.findByRole('link', {name:/Open vocabulary library/});
     const shortcuts = container.querySelector<HTMLElement>('.sidebar-shortcuts')!;
     expect(within(shortcuts).getByRole('link', {name:'My words'}).getAttribute('href')).toBe(mode === 'adult' ? '/vocab' : '#words');
-    expect(!!within(shortcuts).queryByRole('link', {name:'Saved sentences'})).toBe(mode === 'adult');
+    expect(!!within(shortcuts).queryByRole('link', {name:'Phrasebook'})).toBe(mode === 'adult');
   });
 
   it('keeps the menu through collection, generator and review routes, including loading or error states', async () => {

@@ -99,8 +99,8 @@ class NavigationPreferenceTests(unittest.TestCase):
         self.select_profile()
         self.introduce_progress()
         for language, words, sentences, appearance in (
-            ('en', 'My words', 'Saved Sentences', 'Appearance'),
-            ('ru', 'Мои слова', 'Сохраненные предложения', 'Внешний вид'),
+            ('en', 'My words', 'Phrasebook', 'Appearance'),
+            ('ru', 'Мои слова', 'Разговорник', 'Внешний вид'),
         ):
             with self.subTest(language=language):
                 with self.client.session_transaction() as saved:

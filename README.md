@@ -26,7 +26,7 @@ Google Drive and SQLite have separate roles. Drive supports quick word capture, 
 | **Reading** | Generate or paste passages, answer comprehension questions and save new vocabulary. Revisit stories with English or Russian titles. |
 | **Word Jumble** | Compose an original sentence using a supplied word set and receive feedback on meaning, grammar and use of the target words. |
 | **Sentence practice** | Practise translation and review feedback on your attempt. |
-| **Saved sentences** | Read Russian sentences beside their English translations and play each recording for shadowing. Search either language or filter by topic and level. |
+| **Phrasebook** | Read Russian sentences beside their English translations and play each recording for shadowing. Search either language or filter by topic and level. |
 | **Writing** | Respond to a prompt, save your writing and revisit assessed attempts. |
 | **Speaking** | Practise a scenario such as ordering at a café or asking directions. A separate audio review assesses grammar, fluency and task completion. |
 | **Tutor lessons** | Upload a PDF or image, save revisions, and practise with exercises based on the document. Select words on its pages for flashcards. |

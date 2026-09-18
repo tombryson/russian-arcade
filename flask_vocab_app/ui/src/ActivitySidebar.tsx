@@ -22,7 +22,7 @@ export function ActivitySidebar({ navigation, activePage, language = 'en', profi
   const close = () => setExpanded(false);
   const tools = navigation.tools.filter(item => item.page !== 'sentences_saved');
   const wordsLabel = language === 'ru' ? 'Мои слова' : 'My words';
-  const savedLabel = language === 'ru' ? 'Сохранённые предложения' : 'Saved sentences';
+  const savedLabel = language === 'ru' ? 'Разговорник' : 'Phrasebook';
   return <aside class="activity-sidebar">
     <div class="sidebar-brand-row" onClick={event => { if ((event.target as Element).closest('a')) close(); }}>
       <a class="sidebar-brand" href="#home" aria-label={language === 'ru' ? 'Russian Arcade — главная' : 'Russian Arcade home'} onClick={close}>
