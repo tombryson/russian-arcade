@@ -585,8 +585,15 @@ def game_word(session_id, word, *, lemma=None, pos=None):
         transcript_open = bool(content.get('broadcast') and json.loads(row['support_json']).get('broadcast', {}).get('transcript'))
         if row['completed_at'] is None and not transcript_open:
             raise LearningError('game_incomplete', 'Finish this activity to explore and save its words.', 409)
-        return read_word(conn, content, word) if lemma is None else save_word(
+        result = read_word(conn, content, word) if lemma is None else save_word(
             conn, content, word, lemma, pos, profile_id=row['profile_id'], guest_token=row['guest_token'])
+    if lemma is not None:
+        enrichment = current_app.extensions['services']['SyncService'].enrich_words([result['word_id']])
+        if enrichment['pending']:
+            raise LearningError('vocabulary_enrichment_pending',
+                                'The word is saved. Its topics and memory hint could not be prepared yet. Try again to finish adding it.',
+                                503, {'saved': True, 'word_id': result['word_id'], 'enrichment_pending': True})
+    return result
 
 
 def _credit(conn, row, now):

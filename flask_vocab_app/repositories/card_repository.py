@@ -38,9 +38,14 @@ def contextual_cue(conn, meta, item):
     return None
 
 
+def _usable_hint(value, lemma):
+    return (isinstance(value, str) and bool(value.strip())
+            and value.strip() != f'Recall {lemma} phonetically.')
+
+
 def load_card(conn, version_id, *, published=True):
     row = conn.execute(
-        'SELECT cv.*,v.payload,v.status,v.title,v.content_id,d.retired,d.word_id,d.sibling_key,w.lemma '
+        'SELECT cv.*,v.payload,v.status,v.title,v.content_id,d.retired,d.word_id,d.sibling_key,w.lemma,w.mnemonic AS word_mnemonic '
         'FROM card_versions cv JOIN learning_content_versions v ON v.id=cv.content_version_id '
         'JOIN card_definitions d ON d.id=cv.card_id LEFT JOIN words w ON w.id=d.word_id WHERE cv.id=?', (version_id,)).fetchone()
     if not row or (published and (row['status'] != 'published' or row['retired'])):
@@ -48,6 +53,13 @@ def load_card(conn, version_id, *, published=True):
     pack = json.loads(row['payload'])
     item = next(i for i in pack['items'] if i['id'] == row['item_id'])
     card = card_item(pack, item)
+    # Vocabulary enrichment can finish after a card is published. Read its
+    # mnemonic without rewriting the immutable example or review history;
+    # an explicitly authored card hint continues to take precedence.
+    if not _usable_hint(card.get('hint'), row['lemma']):
+        card.pop('hint', None)
+        if _usable_hint(row['word_mnemonic'], row['lemma']):
+            card['hint'] = row['word_mnemonic'].strip()
     cue = contextual_cue(conn,row,card)
     if cue:
         card['cue_en'] = cue

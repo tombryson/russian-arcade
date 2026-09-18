@@ -142,7 +142,8 @@ class HostedTrialTests(unittest.TestCase):
         seed_trial_workspace(self.apps[-1].config, 'different')
         with sqlite3.connect(path) as conn:
             word = conn.execute('SELECT topic,count,mnemonic FROM words WHERE id=?', (word_id,)).fetchone()
-            self.assertEqual(json.loads(word[0]), ['daily_activities', 'social'])
+            from services.sample_vocabulary import prepared_vocabulary
+            self.assertEqual(json.loads(word[0]), prepared_vocabulary()[('письмо', 'NOUN')]['topics'])
             self.assertEqual(word[1:], (11, 'Keep this hint'))
             self.assertEqual(conn.execute('SELECT id,payload FROM learning_content_versions').fetchall(), versions)
         backups = list(Path(path).parent.glob('vocab.db.before-vocabulary-repair-*.bak'))

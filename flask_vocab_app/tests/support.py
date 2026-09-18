@@ -1,8 +1,11 @@
 import tempfile
+import json
+import sqlite3
 from pathlib import Path
 from unittest.mock import patch
 from flask.testing import FlaskClient
 from app import create_app
+from services.sync_service import SyncService
 from migrations import MIGRATION_DIR, upgrade_database, seed_demo
 
 
@@ -81,6 +84,37 @@ class PersonalStudyTestClient(FlaskClient):
             select_test_profile(self)
 
 
+class VocabularyEnrichmentStub(SyncService):
+    """Provider-free completion for activity tests, with real committed writes."""
+
+    def __init__(self, db_path, drive_service):
+        super().__init__(db_path, drive_service=drive_service, api_key='', config={})
+        self.calls = []
+        self.pending = False
+        self.error = None
+
+    def enrich_words(self, word_ids=None, *, batch_size=20):
+        ids = list(dict.fromkeys(word_ids or []))
+        self.calls.append(ids)
+        if self.error:
+            raise self.error
+        if self.pending:
+            return {'updated': [], 'completed': [], 'pending': ids, 'warnings': ['Test provider unavailable.']}
+        updated = []
+        # A second writer also catches accidental provider work inside a write
+        # transaction: tests fail promptly instead of silently skipping the lock.
+        with sqlite3.connect(self.db_path, timeout=0) as conn:
+            conn.row_factory = sqlite3.Row
+            for word_id in ids:
+                row = conn.execute('SELECT * FROM words WHERE id=?', (word_id,)).fetchone()
+                topics = row['topic'] if row['topic'] and json.loads(row['topic']) else '["places"]'
+                mnemonic = row['mnemonic'] or 'Test memory association for ' + row['lemma']
+                if (topics, mnemonic) != (row['topic'], row['mnemonic']):
+                    conn.execute('UPDATE words SET topic=?,mnemonic=? WHERE id=?', (topics, mnemonic, word_id))
+                    updated.append(word_id)
+        return {'updated': updated, 'completed': ids, 'pending': [], 'warnings': []}
+
+
 def isolated_app(test_case, services=None, demo=True, *, signed_in=True):
     temporary = tempfile.TemporaryDirectory(prefix="russian-vocab-test-")
     test_case.addCleanup(temporary.cleanup)
@@ -92,6 +126,9 @@ def isolated_app(test_case, services=None, demo=True, *, signed_in=True):
     network = patch("socket.socket.connect", side_effect=AssertionError("External network calls are forbidden in unit tests"))
     network.start()
     test_case.addCleanup(network.stop)
+    from utils.lazy import LazyService
+    providers = {'SyncService': LazyService('SyncService', lambda: VocabularyEnrichmentStub(db, app.extensions['services']['GoogleDriveService']))}
+    providers.update(services or {})
     app = create_app({
         "TESTING": True, "SECRET_KEY": "test-only", "DB_PATH": db,
         "SESSION_FILE_DIR": str(root / "sessions"),
@@ -104,7 +141,7 @@ def isolated_app(test_case, services=None, demo=True, *, signed_in=True):
         "GOOGLE_DRIVE_CREDENTIALS_FILE": str(root / "credentials.json"),
         "GOOGLE_DRIVE_TOKEN_FILE": str(root / "token.json"),
         "GOOGLE_DRIVE_CACHE_FILE": str(root / "cache.txt"),
-    }, services)
+    }, providers)
     if signed_in:
         app.test_client_class = PersonalStudyTestClient
     return app

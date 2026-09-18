@@ -233,6 +233,7 @@ def _create_context_flashcards(generator, credential, source_loader):
         if origin['lesson_id'] == 'hello':
             source['url'] = '/post/#first-delivery'
         conn.execute('UPDATE native_card_batches SET options=? WHERE id=?', (encoded(options), batch_id))
+    generator.enrich_batch(credential, batch_id)
     return generator.read(credential, batch_id)
 
 

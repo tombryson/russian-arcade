@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from services.sample_vocabulary import SAMPLE_TOPICS, seed_sample_items
+from services.sample_vocabulary import prepared_vocabulary, seed_sample_items, sample_needs_repair
 from services.vocabulary_topics import TOPICS
 
 
@@ -22,11 +22,13 @@ class SampleVocabularyTests(unittest.TestCase):
     def test_sample_words_have_real_topics_filtered_forms_and_contextual_card_links(self):
         items = seed_sample_items(self.conn, 'demo')
         words = self.conn.execute('SELECT * FROM words').fetchall()
-        self.assertEqual(len(words), len(SAMPLE_TOPICS))
+        self.assertEqual(len(words), len(prepared_vocabulary()))
         for word in words:
             self.assertTrue(set(json.loads(word['topic'])) <= set(TOPICS))
             self.assertNotIn('First steps', word['topic'])
             self.assertGreaterEqual(word['lemma_difficulty'], 1)
+            self.assertTrue(word['mnemonic'].strip())
+            self.assertFalse(word['mnemonic'].startswith('Recall '))
         for lemma in ('письмо', 'сумка', 'рынок'):
             count = self.conn.execute('SELECT count(*) FROM forms f JOIN words w ON w.id=f.word_id WHERE w.lemma=?', (lemma,)).fetchone()[0]
             self.assertGreater(count, 3, lemma)
@@ -36,6 +38,17 @@ class SampleVocabularyTests(unittest.TestCase):
             self.assertEqual(form['form'].casefold(), item['answer'].casefold())
             self.assertNotIn('topic', item)
             self.assertIn('[[blank]]', item['prompt'])
+            self.assertTrue(item['hint'])
+        self.assertFalse(sample_needs_repair(self.conn))
+
+    def test_repair_fills_missing_mnemonics_even_after_topics_were_fixed(self):
+        seed_sample_items(self.conn, 'demo')
+        self.conn.execute("UPDATE words SET mnemonic=NULL WHERE lemma='письмо'")
+        self.assertTrue(sample_needs_repair(self.conn))
+        seed_sample_items(self.conn, 'demo')
+        mnemonic = self.conn.execute("SELECT mnemonic FROM words WHERE lemma='письмо'").fetchone()[0]
+        self.assertEqual(mnemonic, prepared_vocabulary()[('письмо', 'NOUN')]['mnemonic'])
+        self.assertFalse(sample_needs_repair(self.conn))
 
     def test_old_seed_repair_preserves_ids_counts_custom_topics_mnemonics_and_existing_forms(self):
         self.conn.execute("INSERT INTO words(id,lemma,pos,count,lemma_difficulty,topic,mnemonic) VALUES (42,'письмо','NOUN',9,1,?,?)",

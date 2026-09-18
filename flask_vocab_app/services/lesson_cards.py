@@ -114,9 +114,7 @@ class LessonCards:
         if len(rows) > 1:
             raise ValueError('More than one vocabulary entry matches this word.')
         if not rows:
-            from services.sample_vocabulary import sample_topics
-            topics = sample_topics(lemma, candidate['pos'])
-            conn.execute('INSERT INTO words(lemma,pos,count,lemma_difficulty,topic,date_added) VALUES (?,?,0,0,?,date(\'now\'))', (lemma, pos, encoded(topics)))
+            conn.execute('INSERT INTO words(lemma,pos,count,lemma_difficulty,topic,date_added) VALUES (?,?,0,0,?,date(\'now\'))', (lemma, pos, encoded([])))
             row = conn.execute('SELECT * FROM words WHERE id=last_insert_rowid()').fetchone()
             # Keep the contextual parse and row identity: parsing the lemma
             # again could choose a different homograph or part of speech.
@@ -175,11 +173,14 @@ class LessonCards:
             self._materialize(credential, row, response, pages, token)
         except Exception as error:
             log.warning('Lesson card preparation failed (%s)', type(error).__name__)
-            message = str(error) if isinstance(error, LearningError) else 'These cards could not be prepared. Your lesson and existing cards are kept. Please retry.'
+            from services.ai_trial_budget import TrialDenied
+            message = str(error) if isinstance(error, (LearningError, TrialDenied)) else 'These cards could not be prepared. Your lesson and existing cards are kept. Please retry.'
             with transaction(self.db_path, write=True) as conn:
                 conn.execute("UPDATE lesson_card_requests SET state='failed',lease_until=0,error=? WHERE id=? AND lease_token=?", (message, request_id, token))
                 if isinstance(error, LearningError) and error.code == 'no_lesson_cards':
                     conn.execute('UPDATE lesson_card_requests SET response=NULL WHERE id=? AND lease_token=?', (request_id,token))
+            if isinstance(error, TrialDenied):
+                raise
         return self.read(credential, request_id, lesson_id)
 
     def _materialize(self, credential, row, response, pages, token):
@@ -246,4 +247,10 @@ class LessonCards:
             report.insert(0, {'added': added, 'reused': reused, 'requested': row['quantity']})
             if picks:
                 conn.execute("UPDATE lesson_word_picks SET error='No card was made for this reading. Check the word or try again.' WHERE request_id=? AND item_id IS NULL",(row['id'],))
-            conn.execute("UPDATE lesson_card_requests SET state='ready',batch_id=?,report=?,lease_until=0 WHERE id=?", (batch, encoded(report), row['id']))
+            conn.execute("UPDATE lesson_card_requests SET batch_id=?,report=? WHERE id=?", (batch, encoded(report), row['id']))
+        # Lexical rows and source evidence must commit before paid enrichment.
+        # Freeze their completed metadata only after the shared importer returns.
+        self.generator.enrich_batch(credential, batch)
+        with transaction(self.db_path, write=True) as conn:
+            if not conn.execute("UPDATE lesson_card_requests SET state='ready',lease_until=0 WHERE id=? AND lease_token=?", (row['id'], token)).rowcount:
+                raise LearningError('request_changed', 'Another request is preparing these cards.', 409)

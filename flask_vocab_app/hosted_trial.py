@@ -113,7 +113,7 @@ def seed_trial_workspace(config, display_name):
     """Seed authored vocabulary and sample cards, never a personal DB snapshot."""
     from migrations import upgrade_database
     from repositories.learning_repository import transaction
-    from services.sample_vocabulary import seed_sample_items
+    from services.sample_vocabulary import seed_sample_items, sample_needs_repair
     from services.learning_assets import LocalAssetStore
     from services.learning_content import ContentService
     from services.personal_learning import personal_access
@@ -121,7 +121,7 @@ def seed_trial_workspace(config, display_name):
     Path(database).parent.mkdir(parents=True, exist_ok=True)
     upgrade_database(database, backup=Path(database).is_file())
     with closing(sqlite3.connect(database)) as existing:
-        needs_repair = existing.execute("SELECT 1 FROM words w WHERE EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(w.topic) THEN w.topic ELSE '[]' END) WHERE value='First steps') LIMIT 1").fetchone()
+        needs_repair = sample_needs_repair(existing)
         if needs_repair:
             backup = str(database) + '.before-vocabulary-repair-' + secrets.token_hex(6) + '.bak'
             with closing(sqlite3.connect(backup)) as snapshot:

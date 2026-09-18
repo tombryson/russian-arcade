@@ -1,35 +1,28 @@
-"""Provider-free sample vocabulary using the application's lexical pipeline.
-
-These reviewed topics describe the words. Lesson titles remain source metadata.
-No personal vocabulary is copied into the public demo or trial workspaces.
-"""
+"""Load sample words prepared by the full vocabulary import pipeline."""
 import json
 from functools import lru_cache
+from pathlib import Path
 
 from services.vocabulary_topics import TOPICS
 
-SAMPLE_TOPICS = {
-    ('привет', 'INTJ'): ('greetings',),
-    ('спасибо', 'INTJ'): ('greetings',),
-    ('письмо', 'NOUN'): ('daily_activities', 'social'),
-    ('сумка', 'NOUN'): ('clothing', 'travel'),
-    ('карта', 'NOUN'): ('travel', 'places'),
-    ('прямо', 'ADVB'): ('places', 'travel'),
-    ('налево', 'ADVB'): ('places', 'travel'),
-    ('направо', 'ADVB'): ('places', 'travel'),
-    ('рынок', 'NOUN'): ('shopping', 'places'),
-    ('показать', 'VERB'): ('daily_activities', 'social'),
-    ('пожалуйста', 'PRCL'): ('greetings',),
-    ('потом', 'ADVB'): ('grammar', 'daily_activities'),
-    ('там', 'ADVB'): ('grammar', 'places'),
-}
+SAMPLE_VOCABULARY_PATH = Path(__file__).resolve().parents[1] / 'data/sample_vocabulary.json'
 
-
-def sample_topics(lemma, pos):
-    topics = SAMPLE_TOPICS.get((lemma, pos), ())
-    if any(topic not in TOPICS for topic in topics):
-        raise ValueError('Sample vocabulary uses an unsupported topic.')
-    return list(topics)
+@lru_cache(maxsize=1)
+def prepared_vocabulary():
+    payload = json.loads(SAMPLE_VOCABULARY_PATH.read_text(encoding='utf-8'))
+    if payload.get('schema_version') != 1 or payload.get('pipeline') != 'SyncService.process_word + SyncService.enrich_words':
+        raise ValueError('Prepare sample vocabulary through scripts/prepare_sample_vocabulary.py.')
+    entries = {}
+    for word in payload['words']:
+        topics, mnemonic = word.get('topics'), word.get('mnemonic')
+        key = (word['lemma'], word['pos'])
+        if (key in entries or not isinstance(topics, list) or not topics
+                or any(topic not in TOPICS for topic in topics)
+                or not isinstance(mnemonic, str) or not mnemonic.strip()
+                or mnemonic.startswith('Recall ') or len(mnemonic.split()) > 7):
+            raise ValueError('Sample vocabulary enrichment is incomplete. Re-run its preparation script.')
+        entries[key] = word
+    return entries
 
 
 def _topics(value):
@@ -38,6 +31,16 @@ def _topics(value):
     except (ValueError, TypeError):
         return []
     return result if isinstance(result, list) else []
+
+
+def sample_needs_repair(conn):
+    prepared = prepared_vocabulary()
+    for lemma, pos, topic, mnemonic in conn.execute('SELECT lemma,pos,topic,mnemonic FROM words'):
+        if ((lemma, pos) in prepared
+                and ('First steps' in _topics(topic) or not _topics(topic)
+                     or not mnemonic or not mnemonic.strip() or mnemonic.startswith('Recall '))):
+            return True
+    return False
 
 
 @lru_cache(maxsize=1)
@@ -53,9 +56,10 @@ def seed_sample_items(conn, prefix):
     items = []
     for lesson in [HELLO, *chapter_content()['lessons']]:
         for word in lesson['vocabulary']:
-            topics = sample_topics(word['lemma'], word['pos'])
-            if not topics:
-                raise ValueError('Classify new sample vocabulary before publishing it.')
+            prepared = prepared_vocabulary().get((word['lemma'], word['pos']))
+            if not prepared:
+                raise ValueError('Run scripts/prepare_sample_vocabulary.py for new sample words.')
+            topics = prepared['topics']
             resolved = LessonCards.resolve(conn, {**word, 'surface': word['form']})
             row = conn.execute('SELECT * FROM words WHERE id=?', (resolved['word_id'],)).fetchone()
             previous = _topics(row['topic'])
@@ -72,6 +76,10 @@ def seed_sample_items(conn, prefix):
                     raise ValueError('Could not repair sample word forms.')
             conn.execute('UPDATE words SET topic=? WHERE id=?',
                          (json.dumps(previous or topics, ensure_ascii=False), row['id']))
+            mnemonic = row['mnemonic']
+            if not mnemonic or not mnemonic.strip() or mnemonic.startswith('Recall '):
+                mnemonic = prepared['mnemonic']
+                conn.execute('UPDATE words SET mnemonic=? WHERE id=?', (mnemonic, row['id']))
             context, answer = word['sentence'], word['form']
             if answer not in context:
                 raise ValueError('Sample sentence is missing its target form.')
@@ -79,5 +87,5 @@ def seed_sample_items(conn, prefix):
             items.append(dict(id=identifier, card_id=identifier, word_id=resolved['word_id'], form_id=resolved['form_id'],
                 type='cloze', direction='ru-cloze', sense_key=identifier, sense_label=lesson['title'],
                 context=context, prompt=context.replace(answer, '[[blank]]', 1), answer=answer,
-                cue_en=word['target_meaning'], context_meaning=word['translation']))
+                cue_en=word['target_meaning'], context_meaning=word['translation'], hint=mnemonic))
     return items

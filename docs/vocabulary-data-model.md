@@ -47,6 +47,8 @@ For each new entry, the service:
 3. Generates the chosen reading’s family of forms through `lexeme`.
 4. Filters candidates, removes duplicates and saves the remaining forms.
 
+After that transaction commits, `SyncService.enrich_words` assigns topics and a mnemonic through the existing AI methods. This is part of vocabulary import, not optional card decoration. Drive imports, lesson selections and game captures share this step. Existing annotations are preserved. A failed call leaves the missing fields eligible for retry; it does not save a placeholder as a completed mnemonic.
+
 The ranking formula is `analyser score + frequency × 1,000,000`. It favours common readings but does not resolve meaning from sentence context.
 
 ### Current filters in `SyncService.process_word`
@@ -131,11 +133,13 @@ Lesson cards use the same review tables and scheduler as other native cards.
 
 ## Sample vocabulary
 
-The public demo and hosted trial use authored examples, not personal vocabulary. Their words go through the same local form-generation pipeline. Topics are reviewed values from the existing 51-topic taxonomy, so sample preparation needs no AI calls. For example, greetings use `greetings`, while рынок uses `shopping` and `places`.
+The public demo and hosted trial use authored examples, not personal vocabulary. Their words go through the same form generation, topic assignment and mnemonic generation as other imports. The prepared topics and mnemonics are stored in `flask_vocab_app/data/sample_vocabulary.json`, with the model names and preparation date.
 
-“First steps” identifies a lesson source. It is not a lexical topic. Trial startup repairs that old seed label without replacing word IDs, linked cards, counts, mnemonics or review history. New sample cards retain their lesson source separately from vocabulary metadata.
+Maintainers regenerate that file with `scripts/prepare_sample_vocabulary.py`. The script uses a temporary database and the existing provider configuration. It publishes the file only when every sample word has valid topics and a mnemonic. Deployment loads the saved results, so restarts and new visitors do not trigger paid generation.
 
-New lesson and game captures also use the shared morphological pipeline. This does not run AI classification inside the database transaction. Known authored words receive reviewed topics; other captures remain unclassified until enriched. Contextual meanings stay on their cards.
+“First steps” identifies a lesson source. It is not a lexical topic. Trial startup backs up and repairs incomplete sample entries without replacing word IDs, linked cards, counts, custom mnemonics or review history. New sample cards retain their lesson source separately from vocabulary metadata.
+
+Lesson and game capture run enrichment after saving the validated word and its forms. Card preparation refreshes its saved selection with that enrichment before generating the card. Existing cards without their own hint can use the linked vocabulary mnemonic. Hints remain hidden until requested. Contextual meanings stay on the cards.
 
 ## Contextual meanings and translations
 

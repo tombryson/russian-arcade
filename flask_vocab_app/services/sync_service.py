@@ -22,6 +22,24 @@ from datetime import datetime
 
 logger = logging.getLogger('SyncService')
 
+
+class VocabularyEnrichmentUnavailable(RuntimeError):
+    """The account needs attention before any more enrichment calls can work."""
+
+
+def _account_failure(error):
+    body = getattr(error, 'body', {})
+    if not isinstance(body, dict):
+        body = {}
+    if isinstance(body.get('error'), dict):
+        body = body['error']
+    codes = {getattr(error, 'code', None), body.get('code'), body.get('type')}
+    if codes & {'insufficient_quota', 'credit_balance_exhausted', 'billing_hard_limit_reached'}:
+        return "Vocabulary enrichment is pending: the AI account has no available credit."
+    if getattr(error, 'status_code', None) in (401, 403):
+        return "Vocabulary enrichment is pending: check the AI account credentials and permissions."
+    return None
+
 class SyncService:
     def __init__(self, db_path, drive_service=None, api_key=None, config=None):
         self.db_path = db_path
@@ -29,7 +47,7 @@ class SyncService:
         self.morph = pymorphy3.MorphAnalyzer()
         self.api_key = OPENAI_API_KEY if api_key is None else api_key
         self.config = config_snapshot(config)
-        self.openai_client = LazyService("OpenAI sync client", lambda: openai_client(config=self.config, factory=OpenAI, api_key=self.api_key, timeout=60.0))
+        self.openai_client = LazyService("OpenAI sync client", lambda: openai_client(config=self.config, factory=OpenAI, api_key=self.api_key, timeout=60.0, max_retries=0))
         self.TOPICS = list(TOPICS)
 
     def is_valid_russian_word(self, word):
@@ -386,7 +404,7 @@ class SyncService:
             try:
                 logger.debug(f"Mnemonic assignment attempt {attempt + 1}/{max_retries}")
                 response = self.openai_client.chat.completions.create(
-                    model=model_for("OPENAI_MODEL_HIGH"),
+                    model=self.config.get("OPENAI_MODEL_HIGH") or model_for("OPENAI_MODEL_HIGH"),
                     messages=[
                         {"role": "system", "content": "You are a precise mnemonic generator."},
                         {"role": "user", "content": prompt}
@@ -422,12 +440,139 @@ class SyncService:
                     return valid_result
                 logger.warning("No valid mnemonics assigned, retrying")
 
-            except (json.JSONDecodeError, Exception) as e:
+            except TrialDenied:
+                raise
+            except Exception as e:
+                account_failure = _account_failure(e)
+                if account_failure:
+                    raise VocabularyEnrichmentUnavailable(account_failure) from e
                 logger.error(f"Mnemonic assignment error on attempt {attempt + 1}: {str(e)}, raw response: {raw_content if 'raw_content' in locals() else 'N/A'}")
                 time.sleep(2 ** attempt)  # Exponential backoff
 
         logger.error("All mnemonic assignment attempts failed")
-        return {word['lemma']: f"Recall {word['lemma']} phonetically." for word in words}
+        return {}
+
+    @staticmethod
+    def _missing_topics(value):
+        """Legacy empty and fallback labels must remain eligible for enrichment."""
+        try:
+            topics = json.loads(value) if isinstance(value, str) else value
+        except (TypeError, ValueError):
+            return True
+        return not (isinstance(topics, list) and any(topic in TOPICS for topic in topics))
+
+    @staticmethod
+    def _missing_mnemonic(value, lemma):
+        return (not isinstance(value, str) or not value.strip()
+                or value.strip() == f"Recall {lemma} phonetically.")
+
+    def enrich_words(self, word_ids=None, *, batch_size=20):
+        """Complete saved vocabulary through the importer's AI enrichment.
+
+        Call after the capture transaction commits. Provider calls run without a
+        database connection; each short write transaction rechecks the row so
+        edits made while generation runs are not overwritten. Missing values
+        stay missing on failure and can be retried by selecting the same IDs.
+        Existing topics, mnemonics, forms and history are retained.
+        """
+        if not isinstance(batch_size, int) or not 1 <= batch_size <= 100:
+            raise ValueError("Enrich between 1 and 100 words per batch.")
+        if word_ids is not None:
+            word_ids = list(dict.fromkeys(word_ids))
+            if any(type(word_id) is not int or word_id <= 0 for word_id in word_ids):
+                raise ValueError("Vocabulary IDs must be positive integers.")
+        result = {"updated": [], "completed": [], "pending": [], "warnings": []}
+        if word_ids == []:
+            return result
+        with connect_db(self.db_path) as conn:
+            query = 'SELECT id,lemma,pos,topic,mnemonic FROM words'
+            args = []
+            if word_ids is not None:
+                query += ' WHERE id IN (' + ','.join('?' for _ in word_ids) + ')'
+                args = word_ids
+            rows = [dict(zip(('id', 'lemma', 'pos', 'topic', 'mnemonic'), row))
+                    for row in conn.execute(query + ' ORDER BY id', args)]
+        incomplete = []
+        for word in rows:
+            if (self._missing_topics(word['topic'])
+                    or self._missing_mnemonic(word['mnemonic'], word['lemma'])):
+                incomplete.append(word)
+            else:
+                result['completed'].append(word['id'])
+        if not self.api_key:
+            result['pending'] = [word['id'] for word in incomplete]
+            return result
+
+        # Provider output is keyed by lemma. Separate homographs with different
+        # readings instead of asking a JSON object to represent duplicate keys.
+        batches = []
+        for word in incomplete:
+            if (not batches or len(batches[-1]) >= batch_size
+                    or any(other['lemma'] == word['lemma'] for other in batches[-1])):
+                batches.append([])
+            batches[-1].append(word)
+        for batch_index, batch in enumerate(batches):
+            halted = False
+            topic_words = [word for word in batch if self._missing_topics(word['topic'])]
+            mnemonic_words = [word for word in batch
+                              if self._missing_mnemonic(word['mnemonic'], word['lemma'])]
+            topics, mnemonics = {}, {}
+            for kind, words, assign in (
+                    ('topics', topic_words, self.assign_topics),
+                    ('mnemonics', mnemonic_words, self.assign_mnemonics)):
+                if not words:
+                    continue
+                try:
+                    assigned = assign(words)
+                    if isinstance(assigned, dict):
+                        if kind == 'topics':
+                            topics = assigned
+                        else:
+                            mnemonics = assigned
+                except TrialDenied:
+                    raise
+                except VocabularyEnrichmentUnavailable as error:
+                    result['warnings'].append(str(error))
+                    halted = True
+                    break
+                except Exception:
+                    logger.exception('Vocabulary %s enrichment failed', kind)
+                    result['warnings'].append(f"Some {kind} could not be generated. Retry enrichment.")
+            with connect_db(self.db_path) as conn:
+                conn.execute('BEGIN IMMEDIATE')
+                for word in batch:
+                    current = conn.execute('SELECT lemma,pos,topic,mnemonic FROM words WHERE id=?',
+                                           (word['id'],)).fetchone()
+                    if not current or current[:2] != (word['lemma'], word['pos']):
+                        result['pending'].append(word['id'])
+                        continue
+                    topic_value, mnemonic = current[2:]
+                    updates = {}
+                    candidate_topics = topics.get(word['lemma'])
+                    if (self._missing_topics(topic_value) and isinstance(candidate_topics, list)
+                            and 1 <= len(candidate_topics) <= 2
+                            and all(topic in TOPICS for topic in candidate_topics)):
+                        topic_value = json.dumps(list(dict.fromkeys(candidate_topics)))
+                        updates['topic'] = topic_value
+                    candidate_mnemonic = mnemonics.get(word['lemma'])
+                    if (self._missing_mnemonic(mnemonic, word['lemma'])
+                            and isinstance(candidate_mnemonic, str)
+                            and not self._missing_mnemonic(candidate_mnemonic, word['lemma'])
+                            and len(candidate_mnemonic.split()) <= 7):
+                        mnemonic = candidate_mnemonic.strip()
+                        updates['mnemonic'] = mnemonic
+                    if updates:
+                        conn.execute('UPDATE words SET ' + ','.join(f'{key}=?' for key in updates)
+                                     + ' WHERE id=?', [*updates.values(), word['id']])
+                        result['updated'].append(word['id'])
+                    complete = (not self._missing_topics(topic_value)
+                                and not self._missing_mnemonic(mnemonic, word['lemma']))
+                    result['completed' if complete else 'pending'].append(word['id'])
+            if halted:
+                result['pending'].extend(word['id'] for remaining in batches[batch_index + 1:]
+                                         for word in remaining)
+                break
+        return result
 
     def preview_sync(self, cloud_only):
         logger.debug(f"Previewing sync for {len(cloud_only)} cloud-only words")
@@ -677,7 +822,7 @@ class SyncService:
             try:
                 logger.debug(f"Topic assignment attempt {attempt + 1}/{max_retries}")
                 response = self.openai_client.chat.completions.create(
-                    model=model_for("OPENAI_MODEL_FAST"),
+                    model=self.config.get("OPENAI_MODEL_FAST") or model_for("OPENAI_MODEL_FAST"),
                     messages=[
                         {"role": "system", "content": "You are a precise topic classifier."},
                         {"role": "user", "content": prompt}
@@ -713,13 +858,16 @@ class SyncService:
             except TrialDenied:
                 raise
             except Exception as e:
+                account_failure = _account_failure(e)
+                if account_failure:
+                    raise VocabularyEnrichmentUnavailable(account_failure) from e
                 logger.error(f"OpenAI error on attempt {attempt + 1}: {str(e)}")
             
             if attempt < max_retries - 1:
                 time.sleep(1)  # 1s delay before retry
 
         logger.error("All topic assignment attempts failed")
-        return {word['lemma']: ["generic"] for word in words}
+        return {}
 
     @staticmethod
     def normalize_capture(word):
@@ -791,22 +939,25 @@ class SyncService:
                         conn.execute('RELEASE import_word')
                         result["failed"].append(entry["word"])
             import_committed = True
-            # Imported words survive provider failures. Never call AI while a write
-            # transaction is open, or overwrite enrichment on existing words.
-            for lemma in result["imported"]:
-                if not self.api_key:
-                    result["enrichment_pending"].append(lemma)
-                    continue
+            # Enrichment is shared by every capture path and happens after the
+            # import commits. Re-selecting an incomplete capture can retry it.
+            selected = sorted(set(captures) | set(result["imported"]))
+            with connect_db(self.db_path) as conn:
+                selected_ids = []
+                if selected:
+                    placeholders = ','.join('?' for _ in selected)
+                    selected_ids = [row[0] for row in conn.execute(
+                        f"SELECT DISTINCT w.id FROM words w LEFT JOIN forms f ON f.word_id=w.id "
+                        f"WHERE w.lemma IN ({placeholders}) OR f.form IN ({placeholders})",
+                        selected + selected)]
+            enrichment = self.enrich_words(selected_ids)
+            if enrichment["pending"]:
                 with connect_db(self.db_path) as conn:
-                    row = conn.execute('SELECT id, lemma, pos FROM words WHERE lemma = ?', (lemma,)).fetchone()
-                word = dict(zip(('id', 'lemma', 'pos'), row))
-                topics = self.assign_topics([word]).get(lemma)
-                mnemonic = self.assign_mnemonics([word]).get(lemma)
-                if not topics or topics == ["generic"] or not mnemonic or mnemonic.startswith("Recall "):
-                    result["enrichment_pending"].append(lemma)
-                with connect_db(self.db_path) as conn:
-                    conn.execute('UPDATE words SET topic = COALESCE(topic, ?), mnemonic = COALESCE(mnemonic, ?) WHERE id = ?',
-                                 (json.dumps(topics) if topics else None, mnemonic, word['id']))
+                    placeholders = ','.join('?' for _ in enrichment["pending"])
+                    result["enrichment_pending"] = [row[0] for row in conn.execute(
+                        f"SELECT DISTINCT lemma FROM words WHERE id IN ({placeholders}) ORDER BY lemma",
+                        enrichment["pending"])]
+            result["warnings"].extend(enrichment["warnings"])
             with connect_db(self.db_path) as conn:
                 db_words = {row[0] for row in conn.execute('SELECT DISTINCT lemma FROM words')}
             to_export = sorted(db_words - current)

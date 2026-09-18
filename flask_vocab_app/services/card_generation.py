@@ -17,10 +17,11 @@ CASES = {'instr':'ablt', 'prep':'loct'}
 
 
 class CardGenerationService:
-    def __init__(self, db_path, content, provider, *, household=False, media=None, clock=timestamp):
+    def __init__(self, db_path, content, provider, *, household=False, media=None, clock=timestamp, vocabulary=None):
         self.db_path, self.content, self.provider = db_path, content, provider
         self.household, self.clock = household, clock
         self.media = media
+        self.vocabulary = vocabulary
 
     def _owner(self, conn, credential):
         access = require_access(conn, credential, self.clock(), adult=True)
@@ -210,7 +211,42 @@ class CardGenerationService:
                     'complete':all(i['status'] in ('saved','failed','removed') and len(i.get('media_jobs',[])) >= i.get('media_expected',0) and all(j['status'] in ('saved','failed') for j in i.get('media_jobs',[])) for i in items),
                     'saved':sum(i['status']=='saved' for i in items), 'total':len(items)}
 
+    def enrich_batch(self, credential, batch_id):
+        """Complete captured vocabulary before freezing its card hints.
+
+        Existing published cards stay immutable. Only queued lesson/game items
+        participate; ordinary vocabulary reviews never trigger enrichment.
+        """
+        if self.vocabulary is None:
+            return
+        with transaction(self.db_path) as conn:
+            _, items = self._batch_items(conn, credential, batch_id)
+            selected = []
+            for item in items:
+                word = json.loads(item['selection'])
+                if (item['status'] not in ('saved', 'removed') and not item['version_id']
+                        and (word.get('lesson_source') or word.get('first_steps_source'))):
+                    selected.append((item['id'], word['word_id']))
+        if not selected:
+            return
+        result = self.vocabulary.enrich_words(list(dict.fromkeys(word_id for _, word_id in selected)))
+        if result['pending']:
+            raise LearningError('vocabulary_enrichment_pending',
+                                'Your selected words are saved. Their topics and memory hints could not be prepared yet. Try again to finish these cards.', 503)
+        with transaction(self.db_path, write=True) as conn:
+            self._batch(conn, credential, batch_id)
+            for item_id, word_id in selected:
+                item = conn.execute('SELECT selection,status,version_id FROM native_card_generation_items WHERE id=?', (item_id,)).fetchone()
+                if not item or item['status'] in ('saved', 'removed') or item['version_id']:
+                    continue
+                word = json.loads(item['selection'])
+                row = conn.execute('SELECT * FROM words WHERE id=?', (word_id,)).fetchone()
+                form = conn.execute('SELECT * FROM forms WHERE id=? AND word_id=?', (word.get('form_id'), word_id)).fetchone()
+                word.update(mnemonic=row['mnemonic'] or '', metadata=metadata_for(row, form))
+                conn.execute('UPDATE native_card_generation_items SET selection=? WHERE id=?', (encoded(word), item_id))
+
     def next(self, credential, batch_id):
+        self.enrich_batch(credential, batch_id)
         with transaction(self.db_path,write=True) as conn:
             batch, selected = self._batch_items(conn,credential,batch_id)
             options = json.loads(batch['options'])
@@ -273,9 +309,12 @@ class CardGenerationService:
                     self.media.queue(credential,pack['items'][0]['card_id'],kinds)
         except Exception as error:
             logger.warning('Native card generation failed (%s)',type(error).__name__)
-            message = str(error) if isinstance(error,LearningError) else 'This card could not be generated. The other cards are kept.'
+            from services.ai_trial_budget import TrialDenied
+            message = str(error) if isinstance(error,(LearningError, TrialDenied)) else 'This card could not be generated. The other cards are kept.'
             with transaction(self.db_path,write=True) as conn:
                 conn.execute("UPDATE native_card_generation_items SET status='failed',error=?,lease_until=0 WHERE id=? AND claim_id=? AND status<>'saved'",(message,item['id'],claim))
+            if isinstance(error, TrialDenied):
+                raise
         return self.read(credential,batch_id)
 
     def _reusable_assets(self, conn, assets):
