@@ -37,6 +37,65 @@ describe('Step-through conversation',()=>{
     fireEvent.click(screen.getByRole('button',{name:'← Speaking'}));expect(onBack).toHaveBeenCalledOnce();
   });
 
+  it('embeds only setup controls and starts the exact variant shown by the parent',async()=>{
+    let finish!:(value:Awaited<ReturnType<typeof response>>)=>void;
+    const fetch=setup(url=>url.includes('/options')?response({...options,sessions:[{id:'old',state:'completed',title:'Older conversation',target_level:'A1',created_at:1}]}):new Promise(resolve=>{finish=resolve;}) as ReturnType<typeof response>);
+    const onPreparingChange=vi.fn();
+    const {container}=render(<StepThroughConversation embeddedSetup scenarioId="cafe" scenarioSeed="live-selected-variant" targetLevel="A2" onPreparingChange={onPreparingChange}/>);
+    fireEvent.click(await screen.findByRole('button',{name:'Start step-through'}));
+    expect(screen.queryByRole('heading')).toBeNull();
+    expect(screen.queryByRole('navigation')).toBeNull();
+    expect(screen.queryByText('Order tea to take away.')).toBeNull();
+    expect(screen.queryByText('Previous conversations')).toBeNull();
+    expect(container.querySelector('.page')).toBeNull();
+    expect(screen.getByText(/recording is not needed/)).toBeTruthy();
+    expect(onPreparingChange.mock.calls.map(([value])=>value)).toEqual([false,true]);
+    expect(body(fetch.mock.calls.find(([url])=>url==='/api/v1/step-conversations')?.[1])).toMatchObject({scenario_id:'cafe',scenario_seed:'live-selected-variant',target_level:'A2'});
+    await act(async()=>{finish({ok:true,json:async()=>active});});
+    await vi.waitFor(()=>expect(window.location.hash).toBe('#speaking/step/step-one'));
+    expect(onPreparingChange).toHaveBeenLastCalledWith(false);
+    expect(screen.getByRole('status').textContent).toBe('Opening your conversation…');
+    expect(screen.queryByRole('group')).toBeNull();
+  });
+
+  it('keeps embedded setup locked through an uncertain start and its exact retry',async()=>{
+    let failed=false;
+    const fetch=setup(url=>{if(url.includes('/options'))return response(options);if(!failed){failed=true;return failure();}return response(active);});
+    const onPreparingChange=vi.fn();
+    render(<StepThroughConversation embeddedSetup scenarioId="cafe" scenarioSeed="live-selected-variant" onPreparingChange={onPreparingChange}/>);
+    fireEvent.click(await screen.findByRole('button',{name:'Start step-through'}));
+    const retry=await screen.findByRole('button',{name:'Try again'});
+    expect(screen.getByRole('alert').textContent).toContain('Connection lost');
+    expect(onPreparingChange.mock.calls.map(([value])=>value)).toEqual([false,true]);
+    expect(screen.queryByRole('button',{name:'Reload scenario'})).toBeNull();
+    fireEvent.click(retry);
+    await vi.waitFor(()=>expect(onPreparingChange).toHaveBeenLastCalledWith(false));
+    const creates=fetch.mock.calls.filter(([url])=>url==='/api/v1/step-conversations');
+    expect(creates).toHaveLength(2);
+    expect(body(creates[0][1])).toEqual(body(creates[1][1]));
+  });
+
+  it('releases the parent setup when unmounted during preparation and ignores the late response',async()=>{
+    let finish!:(value:Awaited<ReturnType<typeof response>>)=>void;
+    setup(url=>url.includes('/options')?response(options):new Promise(resolve=>{finish=resolve;}) as ReturnType<typeof response>);
+    const onPreparingChange=vi.fn();
+    const {unmount}=render(<StepThroughConversation embeddedSetup scenarioId="cafe" scenarioSeed="live-selected-variant" onPreparingChange={onPreparingChange}/>);
+    fireEvent.click(await screen.findByRole('button',{name:'Start step-through'}));
+    expect(onPreparingChange).toHaveBeenLastCalledWith(true);
+    unmount();
+    expect(onPreparingChange).toHaveBeenLastCalledWith(false);
+    await act(async()=>{finish({ok:true,json:async()=>active});});
+    expect(window.location.hash).toBe('');
+  });
+
+  it('does not silently choose a different variant when embedded without the parent seed',async()=>{
+    const fetch=setup();
+    render(<StepThroughConversation embeddedSetup scenarioId="cafe"/>);
+    expect(await screen.findByText('No conversation is available for this level yet.')).toBeTruthy();
+    expect(screen.queryByRole('button',{name:'Start step-through'})).toBeNull();
+    expect(fetch.mock.calls.every(([,init])=>init?.method==='GET')).toBe(true);
+  });
+
   it('starts explicitly with the chosen variant and suppresses repeated clicks',async()=>{
     let finish!:(value:Awaited<ReturnType<typeof response>>)=>void;
     const fetch=setup((url)=>url.includes('/options')?response(options):new Promise(resolve=>{finish=resolve;}) as ReturnType<typeof response>);

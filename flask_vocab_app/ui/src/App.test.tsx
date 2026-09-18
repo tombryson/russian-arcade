@@ -58,7 +58,7 @@ describe('Russian Arcade activity home', () => {
     expect(fetch.mock.calls.every(([url])=>['/api/v1/progression','/api/v1/first-steps','/api/v1/games'].includes(url))).toBe(true);
     expect(screen.queryByRole('link', {name:/^Conversation|^Live conversation/})).toBeNull();
   });
-  it.each(['speaking','conversation','live-conversation'])('opens %s as Speaking without starting a call', async hash => {
+  it.each(['speaking','speaking/step','conversation','live-conversation'])('opens %s as Speaking without starting a call', async hash => {
     window.history.replaceState(null, '', `/post/#${hash}`);
     const fetch = vi.fn((url: string) => response(url.endsWith('/household')
       ? {adult:false,profile:{id:'personal',display_name:'Learner'},csrf_token:'csrf'}
@@ -67,6 +67,7 @@ describe('Russian Arcade activity home', () => {
     render(<App />);
     expect(await screen.findByRole('heading', {name:'Speaking'})).toBeTruthy();
     expect(window.location.hash).toBe('#speaking');
+    expect(screen.queryByRole('switch',{name:'Step-through'})).toBeNull();
     expect(screen.getByLabelText('Activities').getAttribute('data-active')).toBe('true');
     expect(fetch.mock.calls.some(([url]) => url.endsWith('/connect') || url === '/api/v1/conversations')).toBe(false);
   });

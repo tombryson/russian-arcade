@@ -28,9 +28,10 @@ type Saved = {id:string;scenario_id?:string;state:string;connected:boolean;needs
 type Options = {configured:boolean;notes_configured:boolean;max_seconds:number;sessions:{id:string;state:string;created_at:number}[];scenario?:Scenario};
 const practiceLevels:readonly PracticeLevel[]=['A1','A2','B1','B2'];
 
-export function LiveConversation({sessionId,language='en',initialScenarioId,initialMode='fluent'}:{sessionId?:string;language?:Language;initialScenarioId?:string;initialMode?:'fluent'|'step'}) {
+export function LiveConversation({sessionId,language='en',initialScenarioId}:{sessionId?:string;language?:Language;initialScenarioId?:string}) {
   const t = (en:string,ru:string) => language === 'ru' ? ru : en;
-  const [practiceMode,setPracticeMode] = useState<'fluent'|'step'>(initialMode);
+  const [practiceMode,setPracticeMode] = useState<'fluent'|'step'>('fluent');
+  const [preparingStep,setPreparingStep] = useState(false);
   const [options,setOptions] = useState<Options>();
   const [catalogue,setCatalogue] = useState<Catalogue>();
   const [catalogueError,setCatalogueError] = useState('');
@@ -250,8 +251,8 @@ export function LiveConversation({sessionId,language='en',initialScenarioId,init
   function chooseScenario(id:string,targetLevel:PracticeLevel) {
     focusNextView.current=true;
     window.scrollTo(0,0);
-    setLevel(targetLevel); setSelectedScenarioId(id); setOptions(undefined); startKey.current=crypto.randomUUID();
-    if (practiceMode==='fluent') void refreshScenario(false,id,targetLevel);
+    setLevel(targetLevel); setSelectedScenarioId(id); setOptions(undefined); setPracticeMode('fluent'); startKey.current=crypto.randomUUID();
+    void refreshScenario(false,id,targetLevel);
   }
 
   function newConversation(event?: Event) {
@@ -263,7 +264,8 @@ export function LiveConversation({sessionId,language='en',initialScenarioId,init
     setSaved(undefined); setCaptions([]); setState('idle'); setError(''); setSeconds(0); setMuted(false); setPlaybackBlocked(false);
     setRequestingReview(false); setDeleting(false); setFollowing(true);
     scenarioRequest.current++; setChangingScenario(false); setSelectedScenarioId(undefined); setOptions(undefined);
-    startKey.current=crypto.randomUUID(); history.replaceState(null,'',practiceMode==='step' ? '#speaking/step' : '#speaking');
+    setPracticeMode('fluent'); setPreparingStep(false);
+    startKey.current=crypto.randomUUID(); history.replaceState(null,'','#speaking');
   }
 
   const rows=captionRows(captions);
@@ -290,10 +292,7 @@ export function LiveConversation({sessionId,language='en',initialScenarioId,init
       </div>}
     </div>;
   const stepToggle = <div class="speaking-step-option">
-    <button type="button" class="speaking-step-toggle" role="switch" aria-checked={practiceMode==='step'} aria-describedby="speaking-step-help" onClick={()=>{
-      const mode=practiceMode==='step' ? 'fluent' : 'step';
-      setPracticeMode(mode);history.replaceState(null,'',mode==='step' ? '#speaking/step' : '#speaking');
-    }}>
+    <button type="button" class="speaking-step-toggle" role="switch" aria-checked={practiceMode==='step'} aria-describedby="speaking-step-help" disabled={!scenario || changingScenario || preparingStep} onClick={()=>setPracticeMode(practiceMode==='step' ? 'fluent' : 'step')}>
       <span>{t('Step-through','Пошаговый разговор')}</span>
       <span class="speaking-step-state" aria-hidden="true">{practiceMode==='step' ? t('On','Вкл.') : t('Off','Выкл.')}</span>
       <span class="speaking-step-track" aria-hidden="true"><span /></span>
@@ -301,8 +300,8 @@ export function LiveConversation({sessionId,language='en',initialScenarioId,init
     <p id="speaking-step-help">{t('Pause after each line for reply choices and hints.','Пауза после каждой реплики: варианты ответа и подсказки.')}</p>
   </div>;
   const content = <>
-    {showCatalogue ? <ActivityHeader title={t('Speaking','Разговорная практика')} description={practiceMode==='fluent' ? t('Fluent conversation: speak naturally with your microphone.','Свободный разговор: говорите естественно в микрофон.') : t('Step-through: choose a reply after each line.','Пошаговый разговор: выбирайте ответ после каждой реплики.')} actions={stepToggle} headingRef={heading} headingTabIndex={-1} /> : <nav class="speaking-task-nav" aria-label={t('Speaking','Разговорная практика')}>
-      {state==='idle' ? <button class="text-link" onClick={()=>newConversation()}>{t('← All scenarios','← Все ситуации')}</button>
+    {showCatalogue ? <ActivityHeader title={t('Speaking','Разговорная практика')} description={t('Choose a scenario and practise speaking Russian.','Выберите ситуацию и практикуйте разговорный русский.')} headingRef={heading} headingTabIndex={-1} /> : <nav class="speaking-task-nav" aria-label={t('Speaking','Разговорная практика')}>
+      {state==='idle' ? <button class="text-link" disabled={preparingStep} onClick={()=>newConversation()}>{t('← All scenarios','← Все ситуации')}</button>
         : <a class="text-link" href="#speaking" onClick={newConversation}>{t('← All scenarios','← Все ситуации')}</a>}
     </nav>}
     {showCatalogue ? <section class="speaking-catalogue" aria-label={t('Choose a scenario','Выберите ситуацию')}>
@@ -335,10 +334,13 @@ export function LiveConversation({sessionId,language='en',initialScenarioId,init
         </div>{!compact && !active && <div class="live-cafe-sign" aria-hidden="true"><span>{scenario?.sign ?? choice?.sign ?? 'КАФЕ'}</span><span>{scenario?.icon ?? choice?.icon ?? '☕'}</span></div>}</div>
         <p>{scenario ? (language==='ru' ? scenario.description_ru ?? scenario.description : scenario.description) : choice ? language==='ru' ? choice.description_ru : choice.description : t('Practise speaking Russian at your own pace.','Практикуйте разговорный русский в своём темпе.')}</p>
         {goals && !compact && <ul class="live-task-goals" aria-label={t('Your task','Ваша задача')}>{goals.map(goal=><li key={goal}>{goal}</li>)}</ul>}
-        {state === 'idle' && <p class="quiet">{t('Your conversation partner is an AI. You can pause, change your mind or ask them to repeat.','Ваш собеседник — ИИ. Можно подумать, передумать или попросить повторить.')}</p>}
+        {state === 'idle' && practiceMode==='fluent' && <p class="quiet">{t('Your conversation partner is an AI. You can pause, change your mind or ask them to repeat.','Ваш собеседник — ИИ. Можно подумать, передумать или попросить повторить.')}</p>}
         <div class="live-controls">
-          {state === 'idle' && <div class="action-row"><button class="cta" disabled={!options?.configured || !scenario || starting.current || changingScenario} onClick={start}>{t('Start talking','Начать разговор')} <span aria-hidden="true">↗</span></button>
-            <button class="text-link" disabled={changingScenario} onClick={()=>void refreshScenario(!!options)}>{changingScenario ? t('Finding a situation…','Выбираем ситуацию…') : options ? t('Another situation','Другая ситуация') : t('Try loading the situation again','Загрузить ситуацию ещё раз')}</button>
+          {state==='idle' && <div class="speaking-scenario-mode">{stepToggle}</div>}
+          {state==='idle' && practiceMode==='step' && scenario?.seed && !changingScenario && <StepThroughConversation key={`${selectedScenarioId}:${scenario.seed}:${level}`} embeddedSetup scenarioId={selectedScenarioId} scenarioSeed={scenario.seed} targetLevel={level} language={language} onPreparingChange={setPreparingStep} />}
+          {state === 'idle' && <div class={`action-row${practiceMode==='step' ? ' speaking-step-secondary' : ''}`}>
+            {practiceMode==='fluent' && <button class="cta" disabled={!options?.configured || !scenario || starting.current || changingScenario} onClick={start}>{t('Start talking','Начать разговор')} <span aria-hidden="true">↗</span></button>}
+            <button class="text-link" disabled={changingScenario || preparingStep} onClick={()=>void refreshScenario(!!options)}>{changingScenario ? t('Finding a situation…','Выбираем ситуацию…') : options ? t('Another situation','Другая ситуация') : t('Try loading the situation again','Загрузить ситуацию ещё раз')}</button>
           </div>}
           {active && <>
             <p class="live-status" role="status"><span class={state==='listening' && !muted ? 'live-dot' : 'live-dot muted'} />{state==='connecting' ? t('Connecting…','Соединяем…') : state==='ending' ? t('Ending the call…','Завершаем разговор…') : muted ? t('Microphone muted','Микрофон выключен') : t('The conversation is live','Разговор начался')} <span>{Math.floor(seconds/60)}:{String(seconds%60).padStart(2,'0')}</span></p>
@@ -353,8 +355,8 @@ export function LiveConversation({sessionId,language='en',initialScenarioId,init
               {(saved?.connected || saved?.needs_recovery) && <button class="live-end" onClick={finishSaved}>{saved.needs_recovery ? t('Recover saved audio','Восстановить запись') : t('End conversation','Завершить разговор')}</button>}</div>
           </div>}
           {playbackBlocked && active && <button class="cta" onClick={enablePlayback}>{t('Turn on sound','Включить звук')}</button>}
-          {options && !options.configured && <p role="alert">{t('Add the OpenAI key to the existing app .env file to use Speaking.','Для разговорной практики нужен ключ OpenAI в существующем файле .env приложения.')}</p>}
-          {state==='idle' && <p class="quiet">{(options?.max_seconds ?? 300) <= 60
+          {practiceMode==='fluent' && options && !options.configured && <p role="alert">{t('Add the OpenAI key to the existing app .env file to use Speaking.','Для разговорной практики нужен ключ OpenAI в существующем файле .env приложения.')}</p>}
+          {state==='idle' && practiceMode==='fluent' && <p class="quiet">{(options?.max_seconds ?? 300) <= 60
             ? t('Up to one minute in the demo. Your microphone audio is saved for speaking feedback.','В демоверсии — до одной минуты. Запись микрофона сохраняется для разбора речи.')
             : t('Up to five minutes. Your microphone audio is saved for speaking feedback.','До пяти минут. Запись микрофона сохраняется для разбора речи.')}</p>}
         </div>
@@ -409,7 +411,6 @@ export function LiveConversation({sessionId,language='en',initialScenarioId,init
       </details>
     </>}
   </>;
-  if (state==='idle' && selectedScenarioId && practiceMode==='step') return <StepThroughConversation key={`${selectedScenarioId}:${level}`} scenarioId={selectedScenarioId} targetLevel={level} language={language} onBack={()=>newConversation()} />;
   return <section class={`page live-page${showCatalogue ? ' activity-entry' : ''}`}>
     {showCatalogue ? <div class="activity-entry-content">{content}</div> : content}
   </section>;

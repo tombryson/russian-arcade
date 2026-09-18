@@ -22,10 +22,10 @@ export type StepConversation = {
 };
 type Options = {configured:boolean;audio_configured:boolean;scenario:Scenario|null;sessions:{id:string;state:string;created_at:number;title:string;title_ru?:string;target_level:PracticeLevel}[]};
 type Command = {kind:'start'|'answer'|'hint'|'next'|'retry'|'npc'|'reply';url:string;body:Record<string,unknown>};
-type Props = {sessionId?:string;scenarioId?:string;scenarioSeed?:string;targetLevel?:PracticeLevel;language?:Language;onBack?:()=>void};
+type Props = {sessionId?:string;scenarioId?:string;scenarioSeed?:string;targetLevel?:PracticeLevel;language?:Language;onBack?:()=>void;embeddedSetup?:boolean;onPreparingChange?:(busy:boolean)=>void};
 const endpoint='/api/v1/step-conversations';
 
-export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targetLevel='A1',language='en',onBack}:Props) {
+export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targetLevel='A1',language='en',onBack,embeddedSetup=false,onPreparingChange}:Props) {
   const t=(en:string,ru:string)=>language==='ru' ? ru : en;
   const local=(value:Localized)=>language==='ru' ? value.ru : value.en;
   const [options,setOptions]=useState<Options>();
@@ -39,6 +39,8 @@ export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targe
   const [accountChanged,setAccountChanged]=useState(false);
   const [audioNotice,setAudioNotice]=useState('');
   const [playing,setPlaying]=useState<'npc'|'reply'|null>(null);
+  const preparingCallback=useRef(onPreparingChange);
+  preparingCallback.current=onPreparingChange;
   const playbackRequest=useRef(0);
   const controller=useRef<AbortController>();
   const generation=useRef(0);
@@ -56,6 +58,11 @@ export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targe
   const accepted=!!turn?.answered && !!turn.feedback?.correct;
   const blockingRetry=retryCommand && !['npc','reply'].includes(retryCommand.kind);
   const disabled=loading || !!busy || !!blockingRetry || needsReload || accountChanged;
+  const embedded=embeddedSetup && !sessionId;
+  const preparing=busy==='start' || retryCommand?.kind==='start';
+
+  useLayoutEffect(()=>{onPreparingChange?.(preparing);},[preparing,onPreparingChange]);
+  useEffect(()=>()=>preparingCallback.current?.(false),[]);
 
   function accept(value:StepConversation,restore=false) {
     if (restore || currentTurn.current!==value.current_turn?.id) {
@@ -193,26 +200,23 @@ export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targe
       onError={()=>{setPlaying(current=>current===kind ? null : current);setAudioNotice(t('Audio could not play. Try again.','Не удалось воспроизвести аудио. Попробуйте ещё раз.'));}}/>}
   </div>;
 
-  return <section class="page activity-entry step-conversation-page"><div class="activity-entry-content">
-    <div class="step-meta"><nav class="step-back" aria-label={t('Speaking','Разговорная практика')}>
-      {onBack ? <button class="step-text-button" type="button" onClick={onBack}>← {t('Speaking','Разговорная практика')}</button>
-        : <a class="text-link" href="#speaking/step">← {t('Speaking','Разговорная практика')}</a>}
-    </nav>
-    <p class="step-mode">{t('Step-through','По шагам')} · {saved?.target_level ?? targetLevel}</p></div>
-    <ActivityHeader title={title} headingRef={heading} headingTabIndex={-1}/>
+  const startSeed=embedded ? scenarioSeed : scenarioSeed ?? options?.scenario?.seed;
+  const messages=<>
     {error && <div class="step-error" role="alert"><p>{error}</p><div class="step-actions">
       {accountChanged ? <button type="button" class="step-text-button" onClick={()=>window.location.reload()}>{t('Reload page','Обновить страницу')}</button>
         : <>{retryCommand && <button type="button" class="step-text-button" disabled={!!busy || loading} onClick={()=>void run(retryCommand)}>{t('Try again','Попробовать ещё раз')}</button>}
           {retryCommand?.kind!=='start' && <button type="button" class="step-text-button" disabled={!!busy || loading} onClick={()=>void load()}>{saved || sessionId ? t('Reload conversation','Обновить разговор') : t('Reload scenario','Обновить ситуацию')}</button>}</>}
     </div></div>}
     {loading && <p role="status">{t('Opening your conversation…','Открываем разговор…')}</p>}
+  </>;
+  const setupContent=<>
     {!loading && !saved && options && <div class="step-preview">
-      <p>{language==='ru' ? scenario?.description_ru || scenario?.description : scenario?.description}</p>
+      {!embedded && <p>{language==='ru' ? scenario?.description_ru || scenario?.description : scenario?.description}</p>}
       <p class="step-muted">{t('Choose a reply, check it, then continue. You can say the lines aloud; recording is not needed.','Выберите ответ, проверьте его и продолжайте. Реплики можно произносить вслух — запись не нужна.')}</p>
-      {options.configured && options.scenario ? <button type="button" class="cta" disabled={disabled} onClick={()=>void run({kind:'start',url:endpoint,body:{submission_id:startKey.current,scenario_id:scenarioId ?? 'cafe',scenario_seed:scenarioSeed ?? options.scenario?.seed,target_level:targetLevel,language}})}>
+      {options.configured && options.scenario && startSeed ? <button type="button" class="cta" disabled={disabled} onClick={()=>void run({kind:'start',url:endpoint,body:{submission_id:startKey.current,scenario_id:scenarioId ?? 'cafe',scenario_seed:startSeed,target_level:targetLevel,language}})}>
         {busy==='start' ? t('Preparing your conversation…','Готовим разговор…') : t('Start step-through','Начать пошаговый разговор')}
       </button> : <p role="status" class="step-muted">{options.configured ? t('No conversation is available for this level yet.','Для этого уровня пока нет подходящего разговора.') : t('Step-through conversations are not available right now.','Пошаговые разговоры сейчас недоступны.')}</p>}
-      {!!options.sessions?.length && <details class="step-history"><summary>{t('Previous conversations','Предыдущие разговоры')}</summary><ul class="step-history-links">
+      {!embedded && !!options.sessions?.length && <details class="step-history"><summary>{t('Previous conversations','Предыдущие разговоры')}</summary><ul class="step-history-links">
         {options.sessions.map(item=><li key={item.id}><a href={`#speaking/step/${encodeURIComponent(item.id)}`}>{language==='ru' ? item.title_ru || item.title : item.title} <span>{item.target_level} · {item.state==='completed' ? t('Complete','Завершён') : t('Continue','Продолжить')}</span></a></li>)}
       </ul></details>}
     </div>}
@@ -220,6 +224,19 @@ export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targe
     {!loading && saved && (saved.state==='failed' || saved.state==='preparing' && saved.retryable) && <div class="step-error"><p role="alert">{saved.error || t('The conversation could not be prepared.','Не удалось подготовить разговор.')}</p>
       {saved.retryable && <button type="button" class="cta" disabled={disabled} onClick={()=>command('retry')}>{busy==='retry' ? t('Preparing…','Готовим…') : t('Try preparing again','Попробовать снова')}</button>}
     </div>}
+  </>;
+  if (embedded) return <div class="step-embedded-setup">{messages}{setupContent}
+    {!loading && (saved?.state==='active' || saved?.state==='completed') && <p role="status">{t('Opening your conversation…','Открываем разговор…')}</p>}
+  </div>;
+
+  return <section class="page activity-entry step-conversation-page"><div class="activity-entry-content">
+    <div class="step-meta"><nav class="step-back" aria-label={t('Speaking','Разговорная практика')}>
+      {onBack ? <button class="step-text-button" type="button" onClick={onBack}>← {t('Speaking','Разговорная практика')}</button>
+        : <a class="text-link" href="#speaking/step">← {t('Speaking','Разговорная практика')}</a>}
+    </nav>
+    <p class="step-mode">{t('Step-through','По шагам')} · {saved?.target_level ?? targetLevel}</p></div>
+    <ActivityHeader title={title} headingRef={heading} headingTabIndex={-1}/>
+    {messages}{setupContent}
     {!loading && saved?.state==='active' && turn && <>
       <div class="step-progress"><span>{t(`Step ${turn.ordinal} of ${saved.turn_count}`,`Шаг ${turn.ordinal} из ${saved.turn_count}`)}</span><progress value={saved.completed_turns} max={saved.turn_count} aria-label={t('Conversation progress','Прогресс разговора')}/></div>
       <div class="step-npc"><span class="step-speaker">{role || t('Other speaker','Собеседник')}</span><p ref={prompt} tabIndex={-1} lang="ru">{turn.npc.russian}</p>{audio('npc')}</div>

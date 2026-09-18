@@ -3,7 +3,6 @@
 .page.live-page { max-width:1240px; margin-inline:auto; padding:16px 32px 40px; container-type:inline-size; }
 .live-page.activity-entry > .activity-entry-content { max-width:none; }
 .live-page.activity-entry .activity-header { margin-bottom:20px; }
-.live-page.activity-entry .activity-header-actions { max-width:100%; }
 .live-page.activity-entry .activity-description { margin-top:6px; font-size:16px; }
 .speaking-task-nav { display:flex; margin-bottom:12px; }
 .speaking-task-nav .text-link { font-size:14px; }
@@ -121,8 +120,11 @@
 
 .speaking-level-group { margin:0 0 36px; }
 .speaking-step-option { width:320px; max-width:100%; }
+.speaking-scenario-mode { margin:0 0 18px; padding:14px 0; border-top:1px solid var(--wp-border-subtle); border-bottom:1px solid var(--wp-border-subtle); }
+.live-controls .speaking-step-secondary { margin-top:12px; }
 .speaking-step-toggle { display:flex; align-items:center; gap:12px; width:100%; min-height:44px; padding:0; border:0; background:transparent; color:var(--wp-text-primary); font:500 16px/1.4 var(--wp-font-reading); text-align:left; cursor:pointer; }
 .speaking-step-toggle:focus-visible { outline:3px solid var(--wp-accent-delivery); outline-offset:5px; border-radius:8px; }
+.speaking-step-toggle:disabled { opacity:.6; cursor:default; }
 .speaking-step-state { margin-left:auto; color:var(--wp-text-secondary); font-size:13px; font-weight:400; }
 .speaking-step-track { display:flex; align-items:center; flex:0 0 52px; height:30px; padding:3px; border:1px solid var(--wp-text-secondary); border-radius:999px; background:var(--wp-surface-sheet); }
 .speaking-step-track>span { width:22px; height:22px; border-radius:50%; background:var(--wp-text-primary); }

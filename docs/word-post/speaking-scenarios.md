@@ -7,11 +7,11 @@ chooses a fresh situation.
 
 ## Learner flow
 
-1. Open **Speaking**. Fluent conversation is the default; turn on **Step-through** for guided replies. Choose a scenario: café, shops, directions, station or
+1. Open **Speaking** and choose a scenario: café, shops, directions, station or
    meeting people.
 2. Read the short situation, its three goals and any useful reference information.
    **Another situation** offers a different version within the selected scenario.
-3. Start talking, or choose replies one exchange at a time in Step-through.
+3. Start talking in Fluent conversation mode, or turn on **Step-through** in this scenario's setup screen for guided replies. Switching keeps the same situation and level.
    The character, opening, facts and goals come from that exact
    preview; changing a preview never opens the microphone or starts a paid call.
 4. Finish naturally or use the end control. The saved conversation keeps its

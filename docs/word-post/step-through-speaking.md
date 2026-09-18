@@ -1,8 +1,10 @@
 # Step-through conversations
 
 Speaking has two modes. Both use the existing scenario catalogue and A1–B2 levels.
-Fluent conversation is the default. A labelled **Step-through** switch above the
-scenarios turns guided replies on or off. Saved Step-through links keep their mode.
+Choose a scenario first. Its setup screen opens in Fluent conversation mode.
+A labelled **Step-through** switch beside the start controls turns guided replies
+on or off. Switching preserves the situation and level. Saved conversations keep
+their original mode.
 
 | Mode | Learner action | Feedback |
 |---|---|---|
@@ -15,7 +17,7 @@ The microphone is not required for this mode. Learners can say each reply aloud.
 
 ## Learner flow
 
-1. Open Speaking and turn on **Step-through**, then choose a scenario under its level.
+1. Open Speaking, choose a scenario under its level, then turn on **Step-through** in its setup screen.
 2. Read the situation and start the conversation. Opening a preview does not generate content.
 3. Read the character's Russian line. Listen to it when audio is available.
 4. Follow the short task and choose one of three Russian replies.

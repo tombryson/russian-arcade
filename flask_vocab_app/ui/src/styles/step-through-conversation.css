@@ -10,7 +10,7 @@
 .step-mode { flex:0 0 auto; margin:0; }
 .step-text-button { min-height:44px; padding:8px 0; border:0; background:transparent; color:var(--wp-accent-delivery); text-decoration:underline; text-underline-offset:4px; cursor:pointer; }
 .step-text-button:disabled { opacity:.6; cursor:default; }
-.step-conversation-page :focus-visible { outline:3px solid var(--wp-accent-delivery); outline-offset:4px; }
+.step-conversation-page :focus-visible,.step-embedded-setup :focus-visible { outline:3px solid var(--wp-accent-delivery); outline-offset:4px; }
 .step-preview>p { max-width:620px; line-height:1.6; margin:0 0 16px; }
 .step-muted,.step-translation { color:var(--wp-text-secondary); font-size:14px; line-height:1.6; }
 .step-preview>.cta { margin-top:4px; }
