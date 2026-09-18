@@ -11,7 +11,7 @@ chooses a fresh situation.
    meeting people.
 2. Read the short situation, its three goals and any useful reference information.
    **Another situation** offers a different version within the selected scenario.
-3. Start talking in Fluent conversation mode, or turn on **Step-through** in this scenario's setup screen for guided replies. Switching keeps the same situation and level.
+3. Start talking in Fluent conversation mode, or select **Step-through** in this scenario's setup screen for guided replies. The two text choices keep the same situation and level.
    The character, opening, facts and goals come from that exact
    preview; changing a preview never opens the microphone or starts a paid call.
 4. Finish naturally or use the end control. The saved conversation keeps its

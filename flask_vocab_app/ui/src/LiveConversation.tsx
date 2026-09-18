@@ -291,14 +291,22 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
         {rows.map(row => <div key={row.id} class={`live-caption ${row.role}`}><span>{row.role==='you' ? t('You','Вы') : role}</span><p lang="ru">{row.text}</p></div>)}
       </div>}
     </div>;
-  const stepToggle = <div class="speaking-step-option">
-    <button type="button" class="speaking-step-toggle" role="switch" aria-checked={practiceMode==='step'} aria-describedby="speaking-step-help" disabled={!scenario || changingScenario || preparingStep} onClick={()=>setPracticeMode(practiceMode==='step' ? 'fluent' : 'step')}>
-      <span>{t('Step-through','Пошаговый разговор')}</span>
-      <span class="speaking-step-state" aria-hidden="true">{practiceMode==='step' ? t('On','Вкл.') : t('Off','Выкл.')}</span>
-      <span class="speaking-step-track" aria-hidden="true"><span /></span>
-    </button>
-    <p id="speaking-step-help">{t('Pause after each line for reply choices and hints.','Пауза после каждой реплики: варианты ответа и подсказки.')}</p>
-  </div>;
+  const modeChoices = <fieldset class="speaking-mode-choices" disabled={!scenario || changingScenario || preparingStep} aria-describedby="speaking-mode-help">
+    <legend class="sr-only">{t('Conversation mode','Режим разговора')}</legend>
+    <div class="speaking-mode-options">
+      <label class="speaking-mode-choice">
+        <input type="radio" name="speaking-mode" value="fluent" checked={practiceMode==='fluent'} onChange={()=>setPracticeMode('fluent')} />
+        <span>{t('Fluent conversation','Свободный разговор')}</span>
+      </label>
+      <label class="speaking-mode-choice">
+        <input type="radio" name="speaking-mode" value="step" checked={practiceMode==='step'} onChange={()=>setPracticeMode('step')} />
+        <span>{t('Step-through','Пошаговый разговор')}</span>
+      </label>
+    </div>
+    <p id="speaking-mode-help">{practiceMode==='fluent'
+      ? t('Speak naturally using your microphone.','Говорите свободно в микрофон.')
+      : t('Pause after each line for reply choices and hints.','Пауза после каждой реплики: варианты ответа и подсказки.')}</p>
+  </fieldset>;
   const content = <>
     {showCatalogue ? <ActivityHeader title={t('Speaking','Разговорная практика')} description={t('Choose a scenario and practise speaking Russian.','Выберите ситуацию и практикуйте разговорный русский.')} headingRef={heading} headingTabIndex={-1} /> : <nav class="speaking-task-nav" aria-label={t('Speaking','Разговорная практика')}>
       {state==='idle' ? <button class="text-link" disabled={preparingStep} onClick={()=>newConversation()}>{t('← All scenarios','← Все ситуации')}</button>
@@ -336,7 +344,7 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
         {goals && !compact && <ul class="live-task-goals" aria-label={t('Your task','Ваша задача')}>{goals.map(goal=><li key={goal}>{goal}</li>)}</ul>}
         {state === 'idle' && practiceMode==='fluent' && <p class="quiet">{t('Your conversation partner is an AI. You can pause, change your mind or ask them to repeat.','Ваш собеседник — ИИ. Можно подумать, передумать или попросить повторить.')}</p>}
         <div class="live-controls">
-          {state==='idle' && <div class="speaking-scenario-mode">{stepToggle}</div>}
+          {state==='idle' && modeChoices}
           {state==='idle' && practiceMode==='step' && scenario?.seed && !changingScenario && <StepThroughConversation key={`${selectedScenarioId}:${scenario.seed}:${level}`} embeddedSetup scenarioId={selectedScenarioId} scenarioSeed={scenario.seed} targetLevel={level} language={language} onPreparingChange={setPreparingStep} />}
           {state === 'idle' && <div class={`action-row${practiceMode==='step' ? ' speaking-step-secondary' : ''}`}>
             {practiceMode==='fluent' && <button class="cta" disabled={!options?.configured || !scenario || starting.current || changingScenario} onClick={start}>{t('Start talking','Начать разговор')} <span aria-hidden="true">↗</span></button>}

@@ -60,13 +60,17 @@ describe('Speaking activity',()=>{
   it('offers step-through inside the selected scenario without starting audio or generation',async()=>{
     const fetch=setup();const {getUserMedia}=fakeMedia();render(<LiveConversation />);
     await scenarioButton('At the café');
-    expect(screen.queryByRole('switch',{name:'Step-through',exact:true})).toBeNull();
+    expect(screen.queryByRole('group',{name:'Conversation mode'})).toBeNull();
+    expect(screen.queryByRole('radio',{name:'Fluent conversation',exact:true})).toBeNull();
+    expect(screen.queryByRole('radio',{name:'Step-through',exact:true})).toBeNull();
     await chooseCafe();
-    const stepSwitch=screen.getByRole('switch',{name:'Step-through',exact:true});
-    expect(stepSwitch.getAttribute('aria-checked')).toBe('false');
-    expect(stepSwitch.compareDocumentPosition(screen.getByRole('button',{name:/Start talking/})) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    fireEvent.click(stepSwitch);
-    expect(screen.getByRole('switch',{name:'Step-through',exact:true}).getAttribute('aria-checked')).toBe('true');
+    const mode=screen.getByRole('group',{name:'Conversation mode'});
+    expect(within(mode).getByRole('radio',{name:'Fluent conversation',exact:true,checked:true})).toBeTruthy();
+    const stepChoice=within(mode).getByRole('radio',{name:'Step-through',exact:true,checked:false});
+    expect(stepChoice.compareDocumentPosition(screen.getByRole('button',{name:/Start talking/})) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(stepChoice);
+    expect(screen.getByRole('radio',{name:'Step-through',exact:true,checked:true})).toBeTruthy();
+    expect(screen.getByRole('radio',{name:'Fluent conversation',exact:true,checked:false})).toBeTruthy();
     await screen.findByRole('button',{name:'Start step-through'});
     expect(screen.queryByRole('button',{name:/Start talking/})).toBeNull();
     expect(screen.getAllByRole('heading',{level:1})).toHaveLength(1);
@@ -88,15 +92,16 @@ describe('Speaking activity',()=>{
     vi.stubGlobal('fetch',fetch);const {getUserMedia}=fakeMedia();render(<LiveConversation />);
     fireEvent.click(await scenarioButton('At the shop','A2'));
     await screen.findByRole('heading',{name:'A notebook for class'});
-    fireEvent.click(screen.getByRole('switch',{name:'Step-through',exact:true}));
+    fireEvent.click(screen.getByRole('radio',{name:'Step-through',exact:true}));
     await screen.findByRole('button',{name:'Start step-through'});
-    fireEvent.click(screen.getByRole('switch',{name:'Step-through',exact:true}));
-    expect(screen.getByRole('switch',{name:'Step-through',exact:true}).getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(screen.getByRole('radio',{name:'Fluent conversation',exact:true}));
+    expect(screen.getByRole('radio',{name:'Fluent conversation',exact:true,checked:true})).toBeTruthy();
+    expect(screen.getByRole('radio',{name:'Step-through',exact:true,checked:false})).toBeTruthy();
     expect(screen.getByRole('button',{name:/Start talking/})).toBeTruthy();
     expect(screen.queryByRole('button',{name:'Start step-through'})).toBeNull();
     expect(screen.getByRole('heading',{name:'A notebook for class'})).toBeTruthy();
     expect(fetch.mock.calls.filter(([url])=>url.includes('/live-conversations/options')).map(([url])=>url)).toEqual(['/api/v1/live-conversations/options?scenario_id=shop&level=A2']);
-    fireEvent.click(screen.getByRole('switch',{name:'Step-through',exact:true}));
+    fireEvent.click(screen.getByRole('radio',{name:'Step-through',exact:true}));
     fireEvent.click(await screen.findByRole('button',{name:'Start step-through'}));
     await vi.waitFor(()=>expect(fetch.mock.calls.filter(([url])=>url==='/api/v1/step-conversations')).toHaveLength(1));
     const request=fetch.mock.calls.find(([url])=>url==='/api/v1/step-conversations')!;
@@ -105,7 +110,8 @@ describe('Speaking activity',()=>{
       '/api/v1/step-conversations/options?scenario_id=shop&level=A2',
       '/api/v1/step-conversations/options?scenario_id=shop&level=A2',
     ]);
-    expect(screen.getByRole('switch',{name:'Step-through',exact:true}).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('radio',{name:'Fluent conversation',exact:true}).matches(':disabled')).toBe(true);
+    expect(screen.getByRole('radio',{name:'Step-through',exact:true}).matches(':disabled')).toBe(true);
     expect(screen.getByRole('button',{name:'Another situation'}).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button',{name:'← All scenarios'}).hasAttribute('disabled')).toBe(true);
     expect(screen.queryByRole('button',{name:/Start talking/})).toBeNull();
@@ -114,20 +120,24 @@ describe('Speaking activity',()=>{
     await act(async()=>{resolveStart(await response({id:'step-one',state:'active',scenario:task,target_level:'A2',language:'en',created_at:1,error:null,retryable:false,turn_count:4,completed_turns:0,transcript:[],
       current_turn:{id:'turn-one',ordinal:1,npc:{russian:'Здравствуйте!',english:'Hello!'},intent:{en:'Greet the assistant.',ru:'Поздоровайтесь с продавцом.'},options:[{id:'reply-one',russian:'Здравствуйте!'},{id:'reply-two',russian:'До свидания!'},{id:'reply-three',russian:'Спасибо!'}],hint:null,answered:false,feedback:null,npc_audio_url:null,reply_audio_url:null}}));});
     await vi.waitFor(()=>expect(window.location.hash).toBe('#speaking/step/step-one'));
-    expect(screen.getByRole('switch',{name:'Step-through',exact:true}).hasAttribute('disabled')).toBe(false);
+    expect(screen.getByRole('radio',{name:'Fluent conversation',exact:true}).matches(':disabled')).toBe(false);
+    expect(screen.getByRole('radio',{name:'Step-through',exact:true}).matches(':disabled')).toBe(false);
     expect(fetch.mock.calls.filter(([url])=>url.includes('/live-conversations/options'))).toHaveLength(1);
   });
   it('defaults the next selected scenario to fluent after returning from step-through setup',async()=>{
     const fetch=vi.fn((url:string)=>response(url.includes('/scenarios') ? catalogue : {...options,scenario:url.includes('scenario_id=shop') ? shopScenario : scenario}));
     vi.stubGlobal('fetch',fetch);const {getUserMedia}=fakeMedia();render(<LiveConversation />);
     await chooseCafe();
-    fireEvent.click(screen.getByRole('switch',{name:'Step-through',exact:true}));
+    fireEvent.click(screen.getByRole('radio',{name:'Step-through',exact:true}));
     await screen.findByRole('button',{name:'Start step-through'});
     fireEvent.click(screen.getByRole('button',{name:'← All scenarios'}));
-    expect(screen.queryByRole('switch',{name:'Step-through',exact:true})).toBeNull();
+    expect(screen.queryByRole('group',{name:'Conversation mode'})).toBeNull();
+    expect(screen.queryByRole('radio',{name:'Fluent conversation',exact:true})).toBeNull();
+    expect(screen.queryByRole('radio',{name:'Step-through',exact:true})).toBeNull();
     fireEvent.click(await scenarioButton('At the shop'));
     await screen.findByRole('heading',{name:'A notebook for class'});
-    expect(screen.getByRole('switch',{name:'Step-through',exact:true}).getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByRole('radio',{name:'Fluent conversation',exact:true,checked:true})).toBeTruthy();
+    expect(screen.getByRole('radio',{name:'Step-through',exact:true,checked:false})).toBeTruthy();
     expect(screen.getByRole('button',{name:/Start talking/})).toBeTruthy();
     expect(screen.queryByRole('button',{name:'Start step-through'})).toBeNull();
     expect(fetch.mock.calls.filter(([url])=>url.includes('/options')).map(([url])=>url)).toEqual([
@@ -166,8 +176,9 @@ describe('Speaking activity',()=>{
     expect(within(screen.getByRole('region',{name:'A1'})).getByRole('button',{name:'Meet someone new'})).toBeTruthy();
     expect(screen.queryByRole('button',{name:/Start talking/})).toBeNull();
     expect(screen.getByRole('heading',{name:'Speaking'})).toBeTruthy();
-    expect(screen.queryByRole('switch',{name:'Step-through',exact:true})).toBeNull();
-    expect(screen.queryByRole('button',{name:'Fluent conversation'})).toBeNull();
+    expect(screen.queryByRole('group',{name:'Conversation mode'})).toBeNull();
+    expect(screen.queryByRole('radio',{name:'Step-through',exact:true})).toBeNull();
+    expect(screen.queryByRole('radio',{name:'Fluent conversation',exact:true})).toBeNull();
     expect(screen.queryByRole('heading',{name:'Live conversation'})).toBeNull();
     expect(screen.getByText('Previous conversations')).toBeTruthy();
     expect(screen.getByText('Developer tools').closest('details')?.open).toBe(false);

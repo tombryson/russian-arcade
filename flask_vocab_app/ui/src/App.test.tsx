@@ -67,7 +67,9 @@ describe('Russian Arcade activity home', () => {
     render(<App />);
     expect(await screen.findByRole('heading', {name:'Speaking'})).toBeTruthy();
     expect(window.location.hash).toBe('#speaking');
-    expect(screen.queryByRole('switch',{name:'Step-through'})).toBeNull();
+    expect(screen.queryByRole('group',{name:'Conversation mode'})).toBeNull();
+    expect(screen.queryByRole('radio',{name:'Step-through',exact:true})).toBeNull();
+    expect(screen.queryByRole('radio',{name:'Fluent conversation',exact:true})).toBeNull();
     expect(screen.getByLabelText('Activities').getAttribute('data-active')).toBe('true');
     expect(fetch.mock.calls.some(([url]) => url.endsWith('/connect') || url === '/api/v1/conversations')).toBe(false);
   });
