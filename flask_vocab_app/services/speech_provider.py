@@ -1,6 +1,7 @@
 """Explicit speech providers. Recognition hypotheses are never grammar-corrected here."""
 import base64
 import json
+import logging
 import subprocess
 import time
 import tempfile
@@ -11,6 +12,8 @@ import requests
 from .trial_provider import config_snapshot, openai_client, elevenlabs_call, mai_call, trial_enabled
 from .ai_trial_budget import TrialDenied
 
+logger = logging.getLogger(__name__)
+
 
 class SpeechError(ValueError):
     """A safe message without provider response bodies or credentials."""
@@ -18,7 +21,8 @@ class SpeechError(ValueError):
 
 def _response(response, label):
     if not response.ok:
-        raise SpeechError(f'{label} returned HTTP {response.status_code}. Check provider access or credit and retry.')
+        logger.warning('%s request failed: HTTP %s', label, response.status_code)
+        raise SpeechError('Audio processing is currently unavailable. Please try again later.')
     return response
 
 
@@ -85,7 +89,8 @@ class SpeechProvider:
             if provider == 'mai':
                 key = self.config.get('OPENROUTER_API_KEY')
                 if not key:
-                    raise SpeechError('Add OPENROUTER_API_KEY to your existing .env file to use MAI transcription.')
+                    logger.warning('MAI transcription unavailable: OPENROUTER_API_KEY is not configured')
+                    raise SpeechError('Speech recognition is currently unavailable. Your recording is saved.')
                 model = self.config.get('CONVERSATION_TRANSCRIPTION_MODEL', 'microsoft/mai-transcribe-2')
                 options = {'response_format': 'verbose_json', 'timestamp_granularities': ['word'],
                            'provider': {'options': {'azure': {'enhancedMode': {'modelOptions': {'transcribeStyle': style}}}}}}
@@ -101,7 +106,8 @@ class SpeechProvider:
                 import openai
                 key = self.config.get('OPENAI_API_KEY')
                 if not key:
-                    raise SpeechError('OpenAI transcription needs OPENAI_API_KEY in your existing .env file.')
+                    logger.warning('OpenAI transcription unavailable: OPENAI_API_KEY is not configured')
+                    raise SpeechError('Speech recognition is currently unavailable. Your recording is saved.')
                 model = self.config.get('CONVERSATION_COMPARISON_MODEL', 'gpt-transcribe')
                 options = {'prompt': 'Transcribe the Russian speech literally. Preserve incorrect endings, conjugations, repetitions and self-corrections. Do not improve grammar.'}
                 client = openai_client(config=self.config, api_key=key, timeout=60, max_retries=0)
@@ -120,7 +126,8 @@ class SpeechProvider:
     def speak(self, text, voice_id):
         key = self.config.get('ELEVENLABS_API_KEY')
         if not key:
-            raise SpeechError('Speech playback needs ELEVENLABS_API_KEY in your existing .env file.')
+            logger.warning('Speech playback unavailable: ELEVENLABS_API_KEY is not configured')
+            raise SpeechError('Audio playback is currently unavailable. You can still read the dialogue.')
         try:
             model = self.config.get('ELEVENLABS_MODEL', 'eleven_multilingual_v2')
             response = elevenlabs_call(self.config, text, model, voice_id,

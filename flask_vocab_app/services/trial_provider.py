@@ -21,6 +21,7 @@ import base64
 import hashlib
 import io
 import json
+import logging
 import math
 from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
@@ -28,6 +29,8 @@ import uuid
 import wave
 
 from .ai_trial_budget import AITrialBudget, TrialDenied
+
+logger = logging.getLogger(__name__)
 
 # USD per million tokens. Decimal strings avoid binary floating-point money.
 TEXT_RATES = {
@@ -220,7 +223,8 @@ def _text_request(operation, kwargs):
     values = deepcopy(kwargs)
     model = values.get('model')
     if model not in TEXT_RATES:
-        raise TrialDenied('This model is not configured for the AI trial budget.')
+        logger.warning('AI trial text request denied: model has no configured budget rate')
+        raise TrialDenied('AI generation is currently unavailable. Please try again later.')
     # Forbid indirect paid tools, hidden conversation history and alternate HTTP
     # bodies/headers which could bypass the checked model, caps or endpoint.
     forbidden = ('tools', 'functions', 'previous_response_id', 'conversation',
@@ -359,7 +363,8 @@ def elevenlabs_call(config, text, model, voice_id, invoke):
     if not trial_enabled(config):
         return invoke()
     if model not in ('eleven_multilingual_v2', 'eleven_v3', 'eleven_turbo_v2_5', 'eleven_flash_v2_5'):
-        raise TrialDenied('This voice model is not configured for the AI trial.')
+        logger.warning('AI trial audio request denied: voice model is not supported')
+        raise TrialDenied('Audio playback is currently unavailable. Please try again later.')
     if not isinstance(text, str) or not 1 <= len(text) <= 3000:
         raise TrialDenied('Use at most 3,000 characters for one recording.')
     # $0.20/1K chars conservatively covers current $0.10 v2/v3 pricing.

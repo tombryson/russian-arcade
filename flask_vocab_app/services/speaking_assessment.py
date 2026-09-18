@@ -8,11 +8,14 @@ from .trial_provider import config_snapshot, openai_client
 from .ai_trial_budget import TrialDenied
 import base64
 import json
+import logging
 from pathlib import Path
 import re
 import wave
 
 from services.speech_provider import SpeechError
+
+logger = logging.getLogger(__name__)
 
 
 RUBRIC_VERSION = 'speaking-audio-v1'
@@ -292,7 +295,8 @@ class SpeakingAssessment:
 
     def assess(self, audio_path, scenario, dialogue, language='en'):
         if not self.config.get('OPENAI_API_KEY'):
-            raise SpeechError('Speaking feedback needs OPENAI_API_KEY in your existing configuration.')
+            logger.warning('Speaking feedback unavailable: OPENAI_API_KEY is not configured')
+            raise SpeechError('Speaking feedback is currently unavailable. Your recording is saved.')
         if language not in ('en', 'ru'):
             raise SpeechError('Unsupported feedback language.')
         model = self.config.get('SPEAKING_ASSESSMENT_MODEL', 'gpt-audio-1.5')

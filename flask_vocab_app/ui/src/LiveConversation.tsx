@@ -363,7 +363,7 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
               {(saved?.connected || saved?.needs_recovery) && <button class="live-end" onClick={finishSaved}>{saved.needs_recovery ? t('Recover saved audio','Восстановить запись') : t('End conversation','Завершить разговор')}</button>}</div>
           </div>}
           {playbackBlocked && active && <button class="cta" onClick={enablePlayback}>{t('Turn on sound','Включить звук')}</button>}
-          {practiceMode==='fluent' && options && !options.configured && <p role="alert">{t('Add the OpenAI key to the existing app .env file to use Speaking.','Для разговорной практики нужен ключ OpenAI в существующем файле .env приложения.')}</p>}
+          {practiceMode==='fluent' && options && !options.configured && <p role="status" class="quiet">{t('Fluent conversation is currently unavailable.','Свободный разговор сейчас недоступен.')}</p>}
           {state==='idle' && practiceMode==='fluent' && <p class="quiet">{(options?.max_seconds ?? 300) <= 60
             ? t('Up to one minute in the demo. Your microphone audio is saved for speaking feedback.','В демоверсии — до одной минуты. Запись микрофона сохраняется для разбора речи.')
             : t('Up to five minutes. Your microphone audio is saved for speaking feedback.','До пяти минут. Запись микрофона сохраняется для разбора речи.')}</p>}

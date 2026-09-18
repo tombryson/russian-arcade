@@ -1,5 +1,6 @@
 """GPT-Live transport. Keys stay on the server; no provider/model fallback."""
 from urllib.parse import quote
+import logging
 
 import requests
 from websockets.sync.client import connect
@@ -7,6 +8,8 @@ from websockets.sync.client import connect
 from services.speech_provider import SpeechError
 from services.conversation_policy import scenario_instructions
 from services.speaking_lifecycle import FINISH_TOOL, ending_instructions
+
+logger = logging.getLogger(__name__)
 
 
 def session_config(session, scenario):
@@ -39,7 +42,8 @@ class LiveVoiceProvider:
     def _headers(self):
         key = self.config.get('OPENAI_API_KEY')
         if not key:
-            raise SpeechError('Live conversation needs OPENAI_API_KEY in your existing .env file.')
+            logger.warning('Live voice unavailable: OPENAI_API_KEY is not configured')
+            raise SpeechError('Fluent conversation is currently unavailable.')
         return {'Authorization': 'Bearer ' + key}
 
     def create(self, session, scenario, sdp):
@@ -59,7 +63,8 @@ class LiveVoiceProvider:
                 headers=self._headers(), json={'session': configuration,
                     'transport': {'type': 'webrtc', 'sdp': sdp}}, timeout=(10, 25))
             if not response.ok:
-                raise SpeechError(f'Live voice returned HTTP {response.status_code}. Check model access or credit and try again.')
+                logger.warning('Live voice request failed: HTTP %s', response.status_code)
+                raise SpeechError('The conversation could not connect. Please try again later.')
             result = response.json()
             provider_id, answer = result['session']['id'], result['transport']['sdp']
             if not isinstance(provider_id, str) or not provider_id or not isinstance(answer, str) or not answer.startswith('v=0'):
