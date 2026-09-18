@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { api } from './learning-api';
-import { CardTags, CardMedia, cardLabel } from './CardDetails';
+import { cardLabel } from './CardDetails';
+import { CardLibrary } from './CardLibrary';
 import { Sheet } from './components';
 import { ActivityHeader } from './ActivityHeader';
-import { nextTime, ratingLabel, words, type CardOverview, type CardScope, type CardHistory, type Language, type LibraryCard, type ReviewSession } from './review-types';
+import { nextTime, words, type CardOverview, type CardScope, type CardHistory, type Language, type LibraryCard, type ReviewSession } from './review-types';
 
 export function Flashcards({ profileId, language = 'en', personal = false, wordId, lessonId, topic }: { profileId: string; language?: Language; personal?: boolean; wordId?: number; lessonId?: string; topic?: string }) {
   const t = words(language);
@@ -16,10 +17,13 @@ export function Flashcards({ profileId, language = 'en', personal = false, wordI
   const [mediaProgress,setMediaProgress] = useState('');
   const [size, setSize] = useState(10);
   const [history, setHistory] = useState<CardHistory>();
+  const [libraryOpen, setLibraryOpen] = useState(!!wordId || !!lessonId);
   const pending = useRef<object>();
   const working = useRef(false);
   const controller = useRef<AbortController>();
   const heading = useRef<HTMLHeadingElement>(null);
+  const library = useRef<HTMLDetailsElement>(null);
+  const returnToCard = useRef<{ id: string; index: number; profileId: string; query: string }>();
   const query = new URLSearchParams(Object.entries(scope).filter(([,value]) => !!value)).toString();
   useEffect(() => {
     const request = new AbortController(); controller.current = request;
@@ -32,6 +36,24 @@ export function Flashcards({ profileId, language = 'en', personal = false, wordI
     return () => request.abort();
   }, [profileId, query, revision]);
   useEffect(() => { heading.current?.focus(); }, []);
+  useEffect(() => {
+    const target = returnToCard.current;
+    if (!target) return;
+    if (target.profileId !== profileId || target.query !== query) {
+      returnToCard.current = undefined;
+      return;
+    }
+    if (!data || !library.current) return;
+    returnToCard.current = undefined;
+    const rows = Array.from(library.current.querySelectorAll<HTMLButtonElement>('button[data-card-id]'));
+    const row = rows.find(button => button.dataset.cardId === target.id) ?? rows[Math.min(target.index, rows.length - 1)];
+    (row ?? library.current.querySelector('summary'))?.focus({ preventScroll: true });
+  }, [data, profileId, query]);
+
+  function refreshAfterCardChange(card: LibraryCard) {
+    returnToCard.current = { id: card.id, index: Math.max(0, data?.cards.findIndex(value => value.id === card.id) ?? 0), profileId, query };
+    setRevision(value => value + 1);
+  }
 
   async function start() {
     if (!data || working.current) return;
@@ -54,18 +76,19 @@ export function Flashcards({ profileId, language = 'en', personal = false, wordI
     working.current = true; setBusy(true); setError('');
     try {
       await api(`/api/v1/flashcards/${card.id}/suspension`, { profile_id: profileId, suspended: card.status !== 'suspended', expected_revision: card.revision }, request?.signal);
-      if (!request?.signal.aborted) setRevision(v => v + 1);
+      if (!request?.signal.aborted) refreshAfterCardChange(card);
     } catch (reason) { if (!request?.signal.aborted) setError(reason instanceof Error ? reason.message : t('Reload the library to check this card.', 'Обновите коллекцию и проверьте карточку.')); }
     finally { working.current = false; if (!request?.signal.aborted) setBusy(false); }
   }
   async function deleteCard(card: LibraryCard) {
     if (working.current || pending.current) return;
+    const request = controller.current;
     working.current=true;setBusy(true);setError('');
     try {
-      await api(`/api/v1/cards/${card.id}/delete`,{},controller.current?.signal);
-      if (!controller.current?.signal.aborted) setRevision(v => v+1);
-    } catch (reason) { if (!controller.current?.signal.aborted) setError(reason instanceof Error ? reason.message : 'Could not delete the card.'); }
-    finally { working.current=false;setBusy(false); }
+      await api(`/api/v1/cards/${card.id}/delete`,{},request?.signal);
+      if (!request?.signal.aborted) refreshAfterCardChange(card);
+    } catch (reason) { if (!request?.signal.aborted) setError(reason instanceof Error ? reason.message : 'Could not delete the card.'); }
+    finally { working.current=false; if (!request?.signal.aborted) setBusy(false); }
   }
   async function addMedia(card: LibraryCard) {
     if (working.current) return;
@@ -127,14 +150,12 @@ export function Flashcards({ profileId, language = 'en', personal = false, wordI
         <div class="action-row"><button class="cta" disabled={busy || !!pending.current}>{t('Apply selection', 'Применить')}</button><button type="button" class="text-link" disabled={busy || !!pending.current} onClick={() => setScope(lessonId ? {lesson_id:lessonId} : {})}>{t('Reset selection', 'Сбросить выбор')}</button></div></form>
         <label class="session-size">{t('Cards per short session', 'Карточек за занятие')}<select value={size} disabled={busy || !!pending.current} onChange={e => setSize(Number(e.currentTarget.value))}>{[5,10,20].map(n => <option value={n} key={n}>{n}</option>)}</select></label><p class="quiet">{t('Up to five new cards each day. Related cards are spaced apart; your session may contain fewer cards. Changing this selection does not move due dates.', 'До пяти новых карточек в день. Связанные карточки разнесены по времени, поэтому занятие может быть короче. Изменение выбора не меняет сроки повторения.')}</p>
       </details>
-      <details class="native-library" open={!!scope.word_id || !!scope.lesson_id}><summary>{t('Browse your cards', 'Посмотреть карточки')} <span class="quiet">· {data.counts.cards}</span></summary><p>{t('Browsing does not record an answer or change a schedule.', 'Просмотр не записывает ответ и не меняет расписание.')}</p>
-        <div class="native-library-grid">{data.cards.map(card => <article class="native-library-card" key={card.id}><div class="card-type-line"><span>{card.media_ready===false ? t('Media needed','Нужны картинка и аудио') : card.buried ? t('Spaced for later', 'На потом') : card.due ? t('Ready now', 'Пора повторить') : label(card.status)}</span><span>{card.direction === 'ru-cloze' ? t('Missing word', 'Пропуск') : card.direction === 'en-ru' ? t('Russian recall', 'По-русски') : t('Meaning', 'Значение')}</span></div><h3>{language === 'ru' && card.title_ru ? card.title_ru : card.title}</h3><p class="library-prompt" lang={card.direction === 'en-ru' ? 'en' : 'ru'}>{card.prompt.replace('[[blank]]','[...]')}</p>{card.direction==='ru-cloze' && card.cue_en && <p class="recall-word-meaning" lang="en">{card.cue_en}</p>}<details><summary>{t('Look at the answer', 'Посмотреть ответ')}</summary><p class="prepared-answer">{card.dictionary_url && card.direction!=='ru-en' ? <a href={card.dictionary_url} target="_blank" rel="noopener noreferrer">{card.answer}</a> : card.answer}</p>{card.assets?.map(asset => <CardMedia key={`${asset.kind ?? "asset"}:${asset.id}`} asset={asset} language={language} />)}<p lang="ru">{card.context}</p>{card.context_meaning && <p>{card.context_meaning}</p>}<p>{language === 'ru' && card.explanation_ru ? card.explanation_ru : card.explanation}</p></details>
-          {card.sources?.map(source => <a class="text-link" href={source.url}>{source.origin==='example' ? t("New example · ","Новый пример · ") : ""}{source.title} · {t("Page","Страница")} {source.page}</a>)}
-          <CardTags metadata={card.metadata} language={language} /><div class="library-actions"><button class="text-link" disabled={busy || !!pending.current} onClick={() => void suspend(card)}>{card.status === 'suspended' ? t('Return to practice', 'Вернуть в практику') : t('Set aside', 'Отложить')}</button><button class="text-link" onClick={() => void inspectHistory(card)}>{t('History', 'История')}</button></div>
-          {personal && card.media_supported!==false && !['image','word_audio','sentence_audio'].every(kind => card.assets?.some(a => a.kind===kind)) && <div class="library-actions"><button class="text-link" disabled={busy} onClick={() => void addMedia(card)}>{mediaCard===card.id ? mediaProgress : card.media_jobs?.some(j => j.status==='failed') ? t('Retry media','Повторить создание файлов') : card.media_jobs?.length ? t('Resume media','Продолжить создание файлов') : t('Add audio & picture','Добавить аудио и картинку')}</button></div>}
-          {personal && <div class="library-actions"><a class="text-link" href={`/post/flashcards/manage?edit=${card.version_id}`}>{t('Edit card','Изменить')}</a><button class="text-link" disabled={busy} onClick={() => void deleteCard(card)}>{t('Delete card','Удалить')}</button></div>}
-          {history?.card_id === card.id && <div class="card-history" aria-live="polite">{history.events.length ? <ol>{history.events.map((event,index) => <li key={index}><time>{new Date(event.at*1000).toLocaleString(language)}</time> · {ratingLabel(event.rating,language)}{event.assisted ? t(' · with help', ' · с помощью') : ''}{event.undone ? t(' · undone', ' · отменено') : ''}</li>)}</ol> : <p>{t('No reviews yet.', 'Повторений пока нет.')}</p>}</div>}
-        </article>)}</div>{!data.cards.length && <p>{t('No cards match this selection.', 'Нет карточек с такими условиями.')}</p>}
+      <details ref={library} class="native-library" open={libraryOpen} onToggle={event => setLibraryOpen(event.currentTarget.open)}><summary>{t('Browse your cards', 'Посмотреть карточки')} <span class="quiet">· {data.counts.cards}</span></summary>
+        <CardLibrary cards={data.cards} language={language} personal={personal} busy={busy}
+          suspensionDisabled={busy || !!pending.current} history={history} mediaCard={mediaCard} mediaProgress={mediaProgress} error={error}
+          onSuspend={card => void suspend(card)} onDelete={card => void deleteCard(card)}
+          onMedia={card => void addMedia(card)} onHistory={card => void inspectHistory(card)} />
+        {!data.cards.length && <p>{t('No cards match this selection.', 'Нет карточек с такими условиями.')}</p>}
       </details>
     </>}
   </div></section>;

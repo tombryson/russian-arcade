@@ -1,9 +1,27 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/preact';
 import { NativeReview } from './NativeReview';
 import { Flashcards } from './Flashcards';
 import { api } from './learning-api';
 import type { CardOverview, ReviewSession } from './review-types';
+
+// jsdom does not implement the native dialog methods used by the browser.
+const nativeShowModal = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal');
+const nativeClose = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close');
+beforeAll(() => {
+  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {configurable: true, value: function(this: HTMLDialogElement) {this.open = true;}});
+  Object.defineProperty(HTMLDialogElement.prototype, 'close', {configurable: true, value: function(this: HTMLDialogElement) {
+    if (!this.open) return;
+    this.open = false;
+    this.dispatchEvent(new Event('close'));
+  }});
+});
+afterAll(() => {
+  if (nativeShowModal) Object.defineProperty(HTMLDialogElement.prototype, 'showModal', nativeShowModal);
+  else delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).showModal;
+  if (nativeClose) Object.defineProperty(HTMLDialogElement.prototype, 'close', nativeClose);
+  else delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).close;
+});
 
 const response=(value:unknown,ok=true)=>Promise.resolve({ok,json:async()=>value});
 const front:ReviewSession={id:'session',profile_id:'learner',revision:0,status:'active',phase:'front',total_cards:3,practised_cards:0,skipped_cards:0,server_now:1000,feedback:null,can_undo:false,
@@ -112,7 +130,7 @@ describe('Flashcard overview',()=>{
   });
   it('browses card history without a review or scheduling write',async()=>{
     const fetch=vi.fn((url:string,_options?:RequestInit)=>response(url.endsWith('/history')?{profile_id:'learner',card_id:'card',events:[]}:overview));vi.stubGlobal('fetch',fetch);render(<Flashcards profileId="learner" />);
-    await screen.findByRole('button',{name:/Start practice/});fireEvent.click(screen.getByText('Browse your cards'));fireEvent.click(screen.getByRole('button',{name:'History'}));await screen.findByText('No reviews yet.');
+    await screen.findByRole('button',{name:/Start practice/});fireEvent.click(screen.getByText('Browse your cards'));fireEvent.click(screen.getByRole('button',{name:'Open card: давать'}));fireEvent.click(screen.getByRole('button',{name:'History'}));await screen.findByText('No reviews yet.');
     expect(fetch.mock.calls.every((call)=>(call[1] as RequestInit)?.method==='GET')).toBe(true);
   });
 });
@@ -200,6 +218,7 @@ describe('Anki cloze recall',()=>{
     vi.stubGlobal('fetch',vi.fn((url:string)=>response(url.endsWith('/history')?{profile_id:'learner',card_id:'card',events}:overview)));
     render(<Flashcards profileId="learner" />);
     await screen.findByRole('button',{name:/Start practice/});fireEvent.click(screen.getByText('Browse your cards'));
+    fireEvent.click(screen.getByRole('button',{name:'Open card: давать'}));
     fireEvent.click(screen.getByRole('button',{name:'History'}));await screen.findByText(/· Hard/);
     for(const label of ['Again','Hard','Good','Easy']) expect(screen.getByText(new RegExp('· '+label))).toBeTruthy();
   });
