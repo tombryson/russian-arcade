@@ -277,26 +277,34 @@ export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targe
         : <a class="text-link" href="#speaking/step">← {t('Speaking','Разговорная практика')}</a>}
     </nav>
     <p class="step-mode">{t('Step-through','По шагам')} · {saved?.target_level ?? targetLevel}</p></div>
-    <ActivityHeader title={title} headingRef={heading} headingTabIndex={-1}/>
+    <div class="step-session-heading">
+      <ActivityHeader title={title} headingRef={heading} headingTabIndex={-1}/>
+      {!loading && saved?.state==='active' && turn && <div class="step-progress"><span>{t(`Step ${turn.ordinal} of ${saved.turn_count}`,`Шаг ${turn.ordinal} из ${saved.turn_count}`)}</span><progress value={saved.completed_turns} max={saved.turn_count} aria-label={t('Conversation progress','Прогресс разговора')}/></div>}
+    </div>
     {messages}{setupContent}
-    {!loading && saved?.state==='active' && turn && <>
-      <div class="step-progress"><span>{t(`Step ${turn.ordinal} of ${saved.turn_count}`,`Шаг ${turn.ordinal} из ${saved.turn_count}`)}</span><progress value={saved.completed_turns} max={saved.turn_count} aria-label={t('Conversation progress','Прогресс разговора')}/></div>
-      <div class="step-npc"><span class="step-speaker">{role || t('Other speaker','Собеседник')}</span><p ref={prompt} tabIndex={-1} lang="ru">{turn.npc.russian}</p>{audio('npc')}</div>
-      {!accepted && <form onSubmit={event=>{event.preventDefault();if (selected && !disabled) command('answer',{submission_id:crypto.randomUUID(),option_id:selected});}}>
-        <fieldset disabled={disabled} class="step-choices"><legend>{local(turn.intent)}</legend>
+    {!loading && saved?.state==='active' && turn && <div class="step-turn">
+      <div class="step-npc">
+        <div class="step-npc-toolbar"><span class="step-speaker">{role || t('Other speaker','Собеседник')}</span>{audio('npc')}</div>
+        <p ref={prompt} tabIndex={-1} lang="ru">{turn.npc.russian}</p>
+        {(audioNotice || turn.npc_audio_error) && <div class="step-audio-notice" role="status">{audioNotice || turn.npc_audio_error}</div>}
+      </div>
+      {!accepted && <form class="step-response" onSubmit={event=>{event.preventDefault();if (selected && !disabled) command('answer',{submission_id:crypto.randomUUID(),option_id:selected});}}>
+        <fieldset disabled={disabled} class="step-choices"><legend><span class="step-turn-label" aria-hidden="true">{t('Your turn','Ваша очередь')}</span><span class="step-task">{local(turn.intent)}</span></legend>
           {turn.options.map(option=><label key={option.id} class={`step-choice${selected===option.id ? ' is-selected' : ''}`}><input type="radio" name={`reply-${turn.id}`} value={option.id} checked={selected===option.id} onChange={()=>{setSelected(option.id);setError('');}}/><span lang="ru">{option.russian}</span></label>)}
         </fieldset>
-        <div class="step-hint">{turn.hint ? <p>{local(turn.hint)}</p> : <button type="button" class="step-text-button" disabled={disabled} onClick={()=>command('hint')}>{busy==='hint' ? t('Opening hint…','Открываем подсказку…') : t('Show a hint','Показать подсказку')}</button>}</div>
+        {turn.hint && <div class="step-hint"><p>{local(turn.hint)}</p></div>}
         {showFeedback && <div class="step-feedback" role="status" ref={feedback} tabIndex={-1}><strong>{t('Try another reply.','Попробуйте другой ответ.')}</strong><p>{local(turn.feedback!.explanation)}</p></div>}
-        <button type="submit" class="cta" disabled={!selected || disabled}>{busy==='answer' ? t('Checking…','Проверяем…') : t('Check reply','Проверить ответ')}</button>
+        <div class="step-reply-actions">
+          {!turn.hint && <button type="button" class="step-text-button" disabled={disabled} onClick={()=>command('hint')}>{busy==='hint' ? t('Opening hint…','Открываем подсказку…') : t('Show a hint','Показать подсказку')}</button>}
+          <button type="submit" class="cta step-check" disabled={!selected || disabled}>{busy==='answer' ? t('Checking…','Проверяем…') : t('Check reply','Проверить ответ')}<span aria-hidden="true">→</span></button>
+        </div>
       </form>}
       {accepted && <div class="step-feedback is-accepted" role="status" ref={feedback} tabIndex={-1}>
         <span class="step-speaker">{t('Your reply','Ваш ответ')}</span><p class="step-accepted-russian" lang="ru">{turn.options.find(option=>option.id===turn.feedback!.option_id)?.russian}</p><p class="step-translation" lang="en">{turn.feedback!.english}</p>
         <p>{local(turn.feedback!.explanation)}</p>{audio('reply')}
         {busy==='next' && <p>{t('Waiting for the next reply…','Ждём следующую реплику…')}</p>}
       </div>}
-      {(audioNotice || turn.npc_audio_error) && <p class="step-muted" role="status">{audioNotice || turn.npc_audio_error}</p>}
-    </>}
+    </div>}
     {!loading && saved?.state==='completed' && <div class="step-complete">
       {saved.ending && <><p class="step-ending" lang="ru">{saved.ending.russian}</p><p class="step-translation" lang="en">{saved.ending.english}</p></>}
       {saved.ending && audio('ending')}
