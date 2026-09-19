@@ -68,6 +68,12 @@ Each later NPC line follows the preceding CORRECT learner reply. Finish the scen
 KEEP THE TWO ROLES SEPARATE. The NPC owns its worker/reference facts; the learner has the stated learner intent.
 The NPC must answer the learner's previous request, then pause naturally. A statement or acknowledgment is a complete NPC turn:
 do NOT append a question just to make every NPC line end in a question. The separate intent tells the learner what to do next.
+Preserve a real reason for every learner reply. If the learner is about to ask a factual question,
+do not volunteer that answer in the preceding NPC line. For example, acknowledge a ticket request with
+'Хорошо, два билета.'; let the learner ask the departure time BEFORE saying 'В одиннадцать'.
+If a fact has already been given and needs clarification, make both the intent and reply explicitly confirm it,
+rather than asking as if it were unknown. Avoid asking the learner to repeat a whole timetable or menu;
+use the short, natural reply someone would actually say to make the choice.
 Never make the NPC ask the learner for the NPC's own facts, such as a ticket clerk asking the passenger when the train leaves or what tickets cost.
 Never put the learner's intended question into the preceding NPC line, even with different word order. Never make the learner parrot an NPC question.
 Role-correct station example (only adapt its structure; use the SELECTED scenario's facts):
