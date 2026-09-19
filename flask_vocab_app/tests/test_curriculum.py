@@ -111,6 +111,27 @@ class CurriculumPageTests(unittest.TestCase):
         self.assertNotIn('<!DOCTYPE', response.text)
         self.assertIn(get_topic('greetings')['title_ru'], response.text)
 
+    def test_speaking_links_open_implemented_topics_at_the_curriculum_level(self):
+        html = self.client.get('/curriculum').text
+        expected = {
+            'greetings': ('meet-someone', 'A1'),
+            'food': ('cafe', 'A1'),
+            'clothing': ('shop', 'A1'),
+            'places': ('directions', 'A1'),
+            'shopping': ('shop', 'A2'),
+            'travel': ('station', 'A2'),
+            'restaurant': ('cafe', 'A2'),
+            'hobbies': ('meet-someone', 'A2'),
+        }
+        for topic in curriculum()['topics']:
+            section = html.split(f'id="topic-{topic["id"]}"', 1)[1].split('class="curriculum-topic"', 1)[0]
+            with self.subTest(topic=topic['id']):
+                if topic['id'] in expected:
+                    scenario, level = expected[topic['id']]
+                    self.assertIn(f'/post/#speaking/scenario/{scenario}?level={level}', section)
+                else:
+                    self.assertNotIn('/post/#speaking/scenario/', section)
+
 
 if __name__ == '__main__':
     unittest.main()

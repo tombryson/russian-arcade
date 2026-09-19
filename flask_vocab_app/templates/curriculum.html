@@ -42,6 +42,8 @@
                 <a href="/writing?topic={{ topic.id }}&amp;level={{ level }}" hx-boost="false">{{ 'Письмо' if russian else 'Writing' }}</a>
                 <a href="/sentences?topic={{ topic.id }}&amp;level={{ level }}" hx-boost="false">{{ 'Перевод' if russian else 'Translation' }}</a>
                 <a href="/word_jumble?topic={{ topic.id }}&amp;level={{ level }}" hx-boost="false">{{ 'Составь предложение' if russian else 'Word Jumble' }}</a>
+                {% set scenario = speaking_scenario(topic.id, level) %}
+                {% if scenario %}<a href="/post/#speaking/scenario/{{ scenario }}?level={{ level }}" hx-boost="false">{{ 'Разговорная практика' if russian else 'Speaking' }}</a>{% endif %}
               </div>
               {% endfor %}
             </div>

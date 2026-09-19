@@ -177,9 +177,9 @@ English request, or a normally closed connection does not establish success.
 ## Scenario seeds
 
 Seeds identify complete situations, not random first lines. Speaking now contains
-five selectable games and 16 curated variants: eight café situations and two each
-for shops, directions, station and meeting people. The full list is in the
-[scenario catalogue](speaking-scenarios.md#current-catalogue).
+five settings and 30 active situations, with three variations per setting at
+each of A1 and A2. Each saves its curriculum context and selected requirements.
+See the [scenario catalogue](speaking-scenarios.md#catalogue-and-curriculum).
 
 The session snapshots its seed/version, English and Russian title, description,
 opening, character, menu or reference panel, aligned goal IDs, completion criteria,
@@ -188,7 +188,8 @@ instruction. The interface, voice agent and reviewer all use that same snapshot.
 Changing the catalogue later does not rewrite the task for a saved conversation.
 
 Runtime selection reads enabled variants from SQLite within the learner's chosen
-scenario. It prefers unplayed variants in that scenario's recent history, then
+scenario and level. Fluent and Step-through share repeat history for that
+learner. Selection prefers unplayed variants in that history, then
 the least recently played one. Playing a different game does not reset the first
 game's history. Historical calls without a recognised variant are ignored by the chooser.
 Retrying the same start submission returns the same session and situation rather

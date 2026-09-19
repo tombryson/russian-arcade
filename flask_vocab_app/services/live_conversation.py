@@ -19,6 +19,7 @@ from repositories.learning_repository import LearningError, encoded, identifier,
 from services.conversation_service import valid_key
 from services.speech_provider import SpeechError
 from repositories.speaking_repository import catalogue, choose_variant, validate_level
+from repositories.speaking_history import recent_variants
 from services.speaking_review import SpeakingReviewService
 from services.speaking_lifecycle import NaturalEnding
 from services.trial_live_budget import LiveTrialBudget, TRIAL_SECONDS
@@ -54,16 +55,14 @@ class LiveConversationService:
         with transaction(self.db_path) as conn:
             profile = require_access(conn, access, timestamp())
             recent = [dict(r) for r in conn.execute('SELECT id,state,created_at,scenario_json,scenario_id FROM live_conversation_sessions WHERE profile_id=? ORDER BY created_at DESC,rowid DESC LIMIT 12', (profile['id'],))]
-            # Repeat avoidance is scoped to the chosen scenario, even after
-            # playing other scenarios between two café visits.
-            seeds = conn.execute('SELECT variant_id FROM live_conversation_sessions WHERE profile_id=? AND scenario_id=? ORDER BY created_at DESC,rowid DESC LIMIT 100', (profile['id'],scenario_id)).fetchall()
+            seeds = recent_variants(conn, profile['id'], scenario_id, level)
             listing = catalogue(conn, level)
             selected = next((item for item in listing['scenarios'] if item['id'] == scenario_id), None)
             available_count = selected['variant_count'] if selected else 0
             if level is not None and selected is not None and not available_count:
                 snapshot = None
             else:
-                snapshot = choose_variant(conn, scenario_id, level=level, previous_seeds=([exclude_seed] if exclude_seed else [])+[r[0] for r in seeds])
+                snapshot = choose_variant(conn, scenario_id, level=level, previous_seeds=([exclude_seed] if exclude_seed else [])+seeds)
         for item in recent:
             scenario = json.loads(item.pop('scenario_json'))
             item.update(title=scenario.get('title'), title_ru=scenario.get('title_ru'))
@@ -97,8 +96,8 @@ class LiveConversationService:
                 scenario_id = body.get('scenario_id','cafe')
                 if not isinstance(scenario_id,str):
                     raise LearningError('invalid_input', 'Choose an available speaking scenario.')
-                recent = conn.execute('SELECT variant_id FROM live_conversation_sessions WHERE profile_id=? AND scenario_id=? ORDER BY created_at DESC,rowid DESC LIMIT 100', (profile['id'],scenario_id)).fetchall()
-                scenario = choose_variant(conn, scenario_id, level=level, seed=body.get('scenario_seed'),previous_seeds=[row[0] for row in recent])
+                recent = recent_variants(conn, profile['id'], scenario_id, level)
+                scenario = choose_variant(conn, scenario_id, level=level, seed=body.get('scenario_seed'),previous_seeds=recent)
                 conn.execute('INSERT INTO live_conversation_sessions(id,profile_id,start_key,scenario_json,language,model,backend_model,voice,created_at,heartbeat_at,scenario_id,variant_id,target_level) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
                     (sid, profile['id'], key, encoded(scenario), language, self.config['LIVE_CONVERSATION_MODEL'],
                      self.config['CONVERSATION_MODEL'], random.choice(self.config['LIVE_CONVERSATION_VOICES']), timestamp(), timestamp(),scenario_id,scenario['seed'],scenario.get('target_level')))

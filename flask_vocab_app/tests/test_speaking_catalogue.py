@@ -73,7 +73,7 @@ class SpeakingCatalogueTests(unittest.TestCase):
             return conn.execute('SELECT COUNT(*) FROM live_conversation_sessions').fetchone()[0]
 
     def test_catalogue_has_five_scenarios_with_variant_counts_and_reads_are_free(self):
-        expected = {'cafe': 8, 'shop': 2, 'directions': 3, 'station': 3, 'meet-someone': 2}
+        expected = dict.fromkeys(('cafe','shop','directions','station','meet-someone'),6)
         for _ in range(3):
             response = self.client.get('/api/v1/live-conversations/scenarios')
             self.assertEqual(response.status_code, 200, response.json)
@@ -95,9 +95,9 @@ class SpeakingCatalogueTests(unittest.TestCase):
         self.review_request.assert_not_called()
 
     def test_each_category_starts_the_exact_selected_variant_with_foreign_keys(self):
-        seeds = {'cafe': 'cafe-for-two-v1', 'shop': 'shop-tshirt-v1',
-                 'directions': 'directions-library-v1', 'station': 'station-return-v1',
-                 'meet-someone': 'meet-neighbour-v1'}
+        seeds = {'cafe': 'cafe-a1-takeaway-v2', 'shop': 'shop-a1-tshirt-v2',
+                 'directions': 'directions-a2-library-v2', 'station': 'station-a2-connection-v2',
+                 'meet-someone': 'meet-someone-a1-neighbour-v2'}
         for category, seed in seeds.items():
             with self.subTest(category=category):
                 saved = self.start('selected-' + category, category, seed)
@@ -115,7 +115,7 @@ class SpeakingCatalogueTests(unittest.TestCase):
         self.assertEqual(self.provider.creates, [])
 
     def test_fake_connection_receives_the_selected_role_and_snapshot(self):
-        saved = self.start('connected-directions', 'directions', 'directions-library-v1')
+        saved = self.start('connected-directions', 'directions', 'directions-a2-library-v2')
         response = self.post('/' + saved['id'] + '/connect', {'sdp': 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n'})
         self.assertEqual(response.status_code, 200, response.json)
         self.assertEqual(len(self.provider.creates), 1)
@@ -127,10 +127,10 @@ class SpeakingCatalogueTests(unittest.TestCase):
 
     def test_cross_category_seed_unknown_category_and_invalid_ids_are_rejected_without_sessions(self):
         for body, status in (
-            ({'scenario_id': 'directions', 'scenario_seed': 'cafe-for-two-v1'}, 400),
+            ({'scenario_id': 'directions', 'scenario_seed': 'cafe-a1-takeaway-v2'}, 400),
             ({'scenario_id': 'missing'}, 404),
             ({'scenario_id': ['cafe']}, 400),
-            ({'scenario_id': 'shop', 'scenario_seed': ['shop-tshirt-v1']}, 400),
+            ({'scenario_id': 'shop', 'scenario_seed': ['shop-a1-tshirt-v2']}, 400),
         ):
             with self.subTest(body=body):
                 response = self.post(body={'submission_id': 'invalid', **body})
@@ -140,14 +140,14 @@ class SpeakingCatalogueTests(unittest.TestCase):
         self.assertEqual(self.provider.creates, [])
 
     def test_disabled_scenarios_and_variants_are_unselectable_but_saved_history_is_readable(self):
-        saved = self.start('before-disable', 'shop', 'shop-tshirt-v1')
+        saved = self.start('before-disable', 'shop', 'shop-a1-tshirt-v2')
         with transaction(self.db, write=True) as conn:
-            conn.execute("UPDATE speaking_scenario_variants SET enabled=0 WHERE id='shop-tshirt-v1'")
-        response = self.post(body={'submission_id': 'disabled-variant', 'scenario_id': 'shop', 'scenario_seed': 'shop-tshirt-v1'})
+            conn.execute("UPDATE speaking_scenario_variants SET enabled=0 WHERE id='shop-a1-tshirt-v2'")
+        response = self.post(body={'submission_id': 'disabled-variant', 'scenario_id': 'shop', 'scenario_seed': 'shop-a1-tshirt-v2'})
         self.assertEqual(response.status_code, 400, response.json)
-        self.assertEqual(self.options('shop').json['scenario']['seed'], 'shop-groceries-v1')
+        self.assertNotEqual(self.options('shop').json['scenario']['seed'], 'shop-a1-tshirt-v2')
         counts = {row['id']: row['variant_count'] for row in self.client.get('/api/v1/live-conversations/scenarios').json['scenarios']}
-        self.assertEqual(counts['shop'], 1)
+        self.assertEqual(counts['shop'], 5)
         with transaction(self.db, write=True) as conn:
             conn.execute("UPDATE speaking_scenarios SET enabled=0 WHERE id='shop'")
         self.assertEqual(self.options('shop').status_code, 404)
@@ -166,32 +166,33 @@ class SpeakingCatalogueTests(unittest.TestCase):
         self.assertEqual(self.session_count(), 0)
 
     def test_repeat_avoidance_uses_category_history_beyond_the_recent_list(self):
-        first = self.start('directions-first', 'directions', 'directions-library-v1')
+        first = self.start('directions-first', 'directions', 'directions-a2-library-v2')
         for number in range(13):
             self.start('intervening-cafe-' + str(number))
         preview = self.options('directions').json
         self.assertNotIn(first['id'], [item['id'] for item in preview['sessions']])
-        remaining = {'directions-station-v1','directions-park-a1-v1'}
-        self.assertIn(preview['scenario']['seed'], remaining)
-        second = self.start('directions-second', 'directions', preview['scenario']['seed'])
-        remaining.remove(second['scenario']['seed'])
-        third = self.start('directions-third', 'directions')
-        self.assertIn(third['scenario']['seed'], remaining)
-        self.assertEqual(self.options('directions').json['scenario']['seed'], 'directions-library-v1')
-        self.assertEqual(self.start('directions-fourth', 'directions')['scenario']['seed'], 'directions-library-v1')
+        with transaction(self.db) as conn:
+            remaining = {row[0] for row in conn.execute("SELECT id FROM speaking_scenario_variants WHERE scenario_id='directions' AND enabled=1")}
+        remaining.remove(first['scenario']['seed'])
+        for index in range(len(remaining)):
+            selected = self.start('directions-other-' + str(index), 'directions')
+            self.assertIn(selected['scenario']['seed'], remaining)
+            remaining.remove(selected['scenario']['seed'])
+        self.assertFalse(remaining)
+        self.assertEqual(self.options('directions').json['scenario']['seed'], first['scenario']['seed'])
 
     def test_another_situation_excludes_the_preview_without_creating_a_session(self):
-        self.assertEqual(self.options('meet-someone', 'meet-neighbour-v1').json['scenario']['seed'], 'meet-weekend-v1')
-        self.assertEqual(self.options('meet-someone', 'meet-weekend-v1').json['scenario']['seed'], 'meet-neighbour-v1')
+        self.assertNotEqual(self.options('meet-someone', 'meet-someone-a1-neighbour-v2').json['scenario']['seed'], 'meet-someone-a1-neighbour-v2')
+        self.assertNotEqual(self.options('meet-someone', 'meet-someone-a2-cycling-v2').json['scenario']['seed'], 'meet-someone-a2-cycling-v2')
         self.assertEqual(self.session_count(), 0)
 
     def test_idempotent_retry_preserves_selected_snapshot_and_rejects_conflicting_scenario(self):
-        first = self.start('same-key', 'directions', 'directions-library-v1')
-        again = self.start('same-key', 'directions', 'directions-library-v1')
+        first = self.start('same-key', 'directions', 'directions-a2-library-v2')
+        again = self.start('same-key', 'directions', 'directions-a2-library-v2')
         self.assertEqual(again, first)
         for body in (
-            {'scenario_id': 'shop', 'scenario_seed': 'shop-groceries-v1'},
-            {'scenario_id': 'directions', 'scenario_seed': 'directions-station-v1'},
+            {'scenario_id': 'shop', 'scenario_seed': 'shop-a1-trousers-v2'},
+            {'scenario_id': 'directions', 'scenario_seed': 'directions-a2-museum-v2'},
             {'scenario_id': 'directions', 'language': 'ru'},
         ):
             response = self.post(body={'submission_id': 'same-key', **body})
@@ -201,32 +202,33 @@ class SpeakingCatalogueTests(unittest.TestCase):
         self.assertEqual(self.provider.creates, [])
 
     def test_catalogue_edits_change_new_previews_without_rewriting_saved_snapshots(self):
-        saved = self.start('before-edit', 'directions', 'directions-library-v1')
+        saved = self.start('before-edit', 'directions', 'directions-a2-library-v2')
         with transaction(self.db, write=True) as conn:
             original = conn.execute('SELECT scenario_json FROM live_conversation_sessions WHERE id=?', (saved['id'],)).fetchone()[0]
-            payload = json.loads(conn.execute("SELECT payload_json FROM speaking_scenario_variants WHERE id='directions-library-v1'").fetchone()[0])
+            payload = json.loads(conn.execute("SELECT payload_json FROM speaking_scenario_variants WHERE id='directions-a2-library-v2'").fetchone()[0])
             payload.update(title='A new route', worker_brief='Библиотека теперь рядом с театром.')
-            conn.execute("UPDATE speaking_scenario_variants SET payload_json=? WHERE id='directions-library-v1'", (json.dumps(payload, ensure_ascii=False),))
-            conn.execute("UPDATE speaking_scenarios SET title='Around town' WHERE id='directions'")
-        preview = self.options('directions', 'directions-station-v1', 'A2').json['scenario']
-        self.assertEqual(preview['seed'], 'directions-library-v1')
+            conn.execute("UPDATE speaking_scenario_variants SET payload_json=? WHERE id='directions-a2-library-v2'", (json.dumps(payload, ensure_ascii=False),))
+            conn.execute("UPDATE speaking_scenario_levels SET title='Around town' WHERE scenario_id='directions' AND target_level='A2'")
+            conn.execute("UPDATE speaking_scenario_variants SET enabled=0 WHERE scenario_id='directions' AND id!='directions-a2-library-v2'")
+        preview = self.options('directions', 'directions-a2-museum-v2', 'A2').json['scenario']
+        self.assertEqual(preview['seed'], 'directions-a2-library-v2')
         self.assertEqual(preview['title'], 'A new route')
         self.assertEqual(preview['worker_brief'], 'Библиотека теперь рядом с театром.')
         self.assertEqual(preview['category_title'], 'Around town')
         self.assertEqual(self.read(saved['id'])['scenario'], saved['scenario'])
         with transaction(self.db) as conn:
             self.assertEqual(conn.execute('SELECT scenario_json FROM live_conversation_sessions WHERE id=?', (saved['id'],)).fetchone()[0], original)
-        new = self.start('after-edit', 'directions', 'directions-library-v1')
+        new = self.start('after-edit', 'directions', 'directions-a2-library-v2')
         self.assertEqual(new['scenario'], preview)
         # Up-to-date migrations do not reseed over curriculum edits.
         self.assertEqual(upgrade_database(self.db, backup=False)[0], latest_schema_version())
-        self.assertEqual(self.options('directions', 'directions-station-v1', 'A2').json['scenario']['title'], 'A new route')
+        self.assertEqual(self.options('directions', 'directions-a2-museum-v2', 'A2').json['scenario']['title'], 'A new route')
 
     def test_foreign_keys_reject_orphaned_activity_scenario_variant_and_session_references(self):
-        saved = self.start('relations', 'directions', 'directions-library-v1')
+        saved = self.start('relations', 'directions', 'directions-a2-library-v2')
         for statement, args in (
             ("UPDATE speaking_scenarios SET activity_type_id='missing' WHERE id='directions'", ()),
-            ("UPDATE speaking_scenario_variants SET scenario_id='missing' WHERE id='directions-library-v1'", ()),
+            ("UPDATE speaking_scenario_variants SET scenario_id='missing' WHERE id='directions-a2-library-v2'", ()),
             ("UPDATE live_conversation_sessions SET scenario_id='missing' WHERE id=?", (saved['id'],)),
             ("UPDATE live_conversation_sessions SET variant_id='missing' WHERE id=?", (saved['id'],)),
         ):

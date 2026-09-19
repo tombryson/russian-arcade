@@ -97,6 +97,12 @@ describe('Speaking activity',()=>{
     await act(async()=>{resolveOptions(await response({...options,max_seconds:60,scenario}));});
     expect(await screen.findByText(/Up to one minute in the demo/)).toBeTruthy();
   });
+  it('shows the café menu when a compiled situation has an empty reference object',async()=>{
+    vi.stubGlobal('fetch',vi.fn((url:string)=>response(url.includes('/scenarios') ? catalogue : {...options,scenario:{...scenario,reference:{}}})));
+    render(<LiveConversation/>);await chooseCafe();
+    expect(screen.getByLabelText('Café menu').textContent).toContain('чай');
+    expect(screen.getByLabelText('Café menu').textContent).toContain('90 ₽');
+  });
   it('offers step-through inside the selected scenario without starting audio or generation',async()=>{
     const fetch=setup();const {getUserMedia}=fakeMedia();render(<LiveConversation />);
     await scenarioButton('At the café');
@@ -187,12 +193,61 @@ describe('Speaking activity',()=>{
     ]);
     expect(getUserMedia).not.toHaveBeenCalled();
   });
+  it.each(['invalid_input','not_found','unavailable'])('unlocks setup and refreshes the parent preview after a rejected Step start (%s)',async code=>{
+    let retired=true;
+    const replacement={...scenario,seed:'cafe-a2-replacement-v2',title:'A fresh situation',target_level:'A2'};
+    const fetch=vi.fn((url:string,_init?:RequestInit)=>{
+      if(url==='/api/v1/step-conversations') {retired=false;return Promise.resolve({ok:false,json:async()=>({error:{code,message:'Choose a current situation.'}})});}
+      return response(url.includes('/scenarios') ? catalogue : {...options,scenario:retired ? {...scenario,target_level:'A2'} : replacement});
+    });
+    vi.stubGlobal('fetch',fetch);const {getUserMedia}=fakeMedia();
+    render(<LiveConversation initialScenarioId="cafe" initialLevel="A2"/>);
+    await screen.findByRole('heading',{name:'Time to warm up'});
+    fireEvent.click(screen.getByRole('radio',{name:'Step-through',exact:true}));
+    fireEvent.click(await screen.findByRole('button',{name:'Start step-through'}));
+    await screen.findByRole('alert');
+    expect(screen.getByRole('radio',{name:'Fluent conversation',exact:true}).matches(':disabled')).toBe(false);
+    expect(screen.getByRole('button',{name:'Another situation'}).hasAttribute('disabled')).toBe(false);
+    expect(screen.getByRole('button',{name:'← All scenarios'}).hasAttribute('disabled')).toBe(false);
+    expect(screen.queryByRole('button',{name:'Start step-through'})).toBeNull();
+    expect(screen.queryByRole('button',{name:'Try again'})).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'Reload scenario'}));
+    await screen.findByRole('heading',{name:'A fresh situation'});
+    expect(await screen.findByRole('button',{name:'Start step-through'})).toBeTruthy();
+    expect(screen.getByRole('radio',{name:'Step-through',exact:true,checked:true})).toBeTruthy();
+    expect(fetch.mock.calls.filter(([url])=>url.includes('/live-conversations/options')).map(([url])=>url)).toEqual([
+      '/api/v1/live-conversations/options?scenario_id=cafe&level=A2',
+      `/api/v1/live-conversations/options?scenario_id=cafe&level=A2&exclude_seed=${scenario.seed}`,
+    ]);
+    expect(fetch.mock.calls.filter(([url])=>url==='/api/v1/step-conversations')).toHaveLength(1);
+    expect(getUserMedia).not.toHaveBeenCalled();
+  });
   it('opens a suggested directions scenario without starting the microphone',async()=>{
     const fetch=setup();const {getUserMedia}=fakeMedia();
     render(<LiveConversation initialScenarioId="directions" />);
     await vi.waitFor(()=>expect(fetch.mock.calls.some(([url])=>url==='/api/v1/live-conversations/options?scenario_id=directions&level=A1')).toBe(true));
     expect(getUserMedia).not.toHaveBeenCalled();
     expect(fetch.mock.calls.some(([url])=>url==='/api/v1/live-conversations')).toBe(false);
+  });
+  it('keeps an A2 curriculum link at A2 and passes its exact preview to step-through',async()=>{
+    const task={...shopScenario,seed:'shop-tshirt-v2:blue-medium',target_level:'A2'};
+    const fetch=vi.fn((url:string,_init?:RequestInit)=>response(url.includes('/scenarios') ? catalogue : url.includes('/options') ? {...options,scenario:task} : {...saved,id:'step-linked',state:'preparing',scenario:task,target_level:'A2',language:'en',created_at:1,turn_count:0,completed_turns:0,current_turn:null,transcript:[]}));
+    vi.stubGlobal('fetch',fetch);const {getUserMedia}=fakeMedia();
+    render(<LiveConversation initialScenarioId="shop" initialLevel="A2" />);
+    await screen.findByRole('heading',{name:'A notebook for class'});
+    expect(fetch.mock.calls.filter(([url])=>url.includes('/live-conversations/options')).map(([url])=>url)).toEqual(['/api/v1/live-conversations/options?scenario_id=shop&level=A2']);
+    expect(screen.getByRole('radio',{name:'Fluent conversation',exact:true,checked:true})).toBeTruthy();
+    fireEvent.click(screen.getByRole('radio',{name:'Step-through',exact:true}));
+    fireEvent.click(await screen.findByRole('button',{name:'Start step-through'}));
+    await vi.waitFor(()=>expect(fetch.mock.calls.some(([url])=>url==='/api/v1/step-conversations')).toBe(true));
+    expect(JSON.parse(fetch.mock.calls.find(([url])=>url==='/api/v1/step-conversations')![1]?.body as string)).toMatchObject({scenario_id:'shop',scenario_seed:task.seed,target_level:'A2'});
+    expect(getUserMedia).not.toHaveBeenCalled();
+  });
+  it('does not replace an unsupported curriculum level with an A1 task',async()=>{
+    const fetch=setup();render(<LiveConversation initialScenarioId="shop" initialLevel="B1" />);
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent','This scenario is not available at that level. Choose another scenario.');
+    expect(screen.getByRole('heading',{name:'Speaking'})).toBeTruthy();
+    expect(fetch.mock.calls.some(([url])=>url.includes('/options'))).toBe(false);
   });
   it('omits English from saved captions and recording transcripts',async()=>{
     setup({...saved,state:'completed',captions:[
@@ -322,6 +377,18 @@ describe('Speaking activity',()=>{
     expect(await scenarioButton('At the shop','A2')).toBeTruthy();
     expect(within(screen.getByRole('region',{name:'A1'})).queryByRole('button',{name:'At the shop'})).toBeNull();
     expect(within(screen.getByRole('region',{name:'A2'})).queryByRole('button',{name:'At the café'})).toBeNull();
+  });
+  it.each(['en','ru'] as const)('shows the learning task for each band in %s',async language=>{
+    const a1={title:'Order at the café',title_ru:'Заказ в кафе',description:'Order a drink and ask the price.',description_ru:'Закажите напиток и спросите цену.',topic_id:'food'};
+    const a2={title:'Adjust your order',title_ru:'Измените заказ',description:'Check ingredients, choose an alternative and stay within your budget.',description_ru:'Уточните состав, выберите замену и уложитесь в бюджет.',topic_id:'restaurant'};
+    vi.stubGlobal('fetch',vi.fn(()=>response({...catalogue,scenarios:[{...catalogue.scenarios[0],level_details:{A1:a1,A2:a2}}]})));
+    render(<LiveConversation language={language}/>);
+    const a1Card=await scenarioButton(language==='ru'?a1.title_ru:a1.title);
+    const a2Card=await scenarioButton(language==='ru'?a2.title_ru:a2.title,'A2');
+    expect(a1Card.textContent).toContain(language==='ru'?a1.description_ru:a1.description);
+    expect(a2Card.textContent).toContain(language==='ru'?a2.description_ru:a2.description);
+    expect(a2Card.textContent).not.toContain(language==='ru'?a1.description_ru:a1.description);
+    expect(screen.queryByText('restaurant')).toBeNull();
   });
   it('opens a grey A2 activity and starts its A2 task without changing a preference',async()=>{
     const task={...shopScenario,target_level:'A2'};

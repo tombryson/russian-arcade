@@ -25,10 +25,10 @@ export type StepConversation = {
 type Options = {configured:boolean;audio_configured:boolean;scenario:Scenario|null;sessions:{id:string;state:string;created_at:number;title:string;title_ru?:string;target_level:PracticeLevel}[]};
 type AudioKind = 'npc'|'reply'|'ending';
 type Command = {kind:'start'|'answer'|'hint'|'next'|'retry'|AudioKind;url:string;body:Record<string,unknown>};
-type Props = {sessionId?:string;scenarioId?:string;scenarioSeed?:string;targetLevel?:PracticeLevel;language?:Language;onBack?:()=>void;embeddedSetup?:boolean;onPreparingChange?:(busy:boolean)=>void};
+type Props = {sessionId?:string;scenarioId?:string;scenarioSeed?:string;targetLevel?:PracticeLevel;language?:Language;onBack?:()=>void;embeddedSetup?:boolean;onPreparingChange?:(busy:boolean)=>void;onReloadScenario?:()=>void};
 const endpoint='/api/v1/step-conversations';
 
-export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targetLevel='A1',language='en',onBack,embeddedSetup=false,onPreparingChange}:Props) {
+export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targetLevel='A1',language='en',onBack,embeddedSetup=false,onPreparingChange,onReloadScenario}:Props) {
   const t=(en:string,ru:string)=>language==='ru' ? ru : en;
   const local=(value:Localized)=>language==='ru' ? value.ru : value.en;
   const [options,setOptions]=useState<Options>();
@@ -206,7 +206,11 @@ export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targe
       if (version!==generation.current || controller.current?.signal.aborted) return;
       const blocked=report(reason);
       const stale=reason instanceof ApiError && ['stale_turn','conflict','answer_required'].includes(reason.code);
-      if (blocked || stale) setNeedsReload(true);
+      const rejectedStart=command.kind==='start' && reason instanceof ApiError && ['invalid_input','not_found','unavailable'].includes(reason.code);
+      // A rejected preview created no session. Unlock the scenario controls;
+      // only uncertain failures must retain the exact start request for retry.
+      if (rejectedStart) setOptions(undefined);
+      else if (blocked || stale) setNeedsReload(true);
       else setRetryCommand(command);
     } finally {if (version===generation.current) {inFlight.current=false;setBusy(null);}}
   }
@@ -247,7 +251,7 @@ export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targe
     {error && <div class="step-error" role="alert"><p>{error}</p><div class="step-actions">
       {accountChanged ? <button type="button" class="step-text-button" onClick={()=>window.location.reload()}>{t('Reload page','Обновить страницу')}</button>
         : <>{retryCommand && <button type="button" class="step-text-button" disabled={!!busy || loading} onClick={()=>void run(retryCommand)}>{t('Try again','Попробовать ещё раз')}</button>}
-          {retryCommand?.kind!=='start' && <button type="button" class="step-text-button" disabled={!!busy || loading} onClick={()=>void load()}>{saved || sessionId ? t('Reload conversation','Обновить разговор') : t('Reload scenario','Обновить ситуацию')}</button>}</>}
+          {retryCommand?.kind!=='start' && <button type="button" class="step-text-button" disabled={!!busy || loading} onClick={()=>{if (embedded && !options && onReloadScenario) onReloadScenario();else void load();}}>{saved || sessionId ? t('Reload conversation','Обновить разговор') : t('Reload scenario','Обновить ситуацию')}</button>}</>}
     </div></div>}
     {loading && <p role="status">{t('Opening your conversation…','Открываем разговор…')}</p>}
   </>;

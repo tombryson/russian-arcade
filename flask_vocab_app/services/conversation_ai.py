@@ -48,14 +48,16 @@ class ConversationAI:
             raise SpeechError('The conversation model could not finish. Your recording and transcript are kept.') from None
 
     def step_dialogue(self, scenario):
-        from services.step_conversation_ai import STEP_INSTRUCTIONS, STEP_SCHEMA, validate_dialogue
+        from services.step_conversation_ai import dialogue_instructions, dialogue_schema, validate_dialogue
         from services.conversation_policy import level_instructions
+        # Build the selected contract before purchasing a generation request.
+        schema = dialogue_schema(scenario)
         try:
-            result = self._call('step_conversation', STEP_INSTRUCTIONS + level_instructions(scenario),
-                                {'scenario': scenario}, STEP_SCHEMA, max_tokens=8192)
+            result = self._call('step_conversation', dialogue_instructions(scenario) + level_instructions(scenario),
+                                {'scenario': scenario}, schema, max_tokens=8192)
         except SpeechError:
             raise SpeechError('The step-through dialogue could not be prepared. Please retry.') from None
-        return validate_dialogue(result)
+        return validate_dialogue(result, scenario)
 
     def reply(self, scenario, history):
         started = time.monotonic()

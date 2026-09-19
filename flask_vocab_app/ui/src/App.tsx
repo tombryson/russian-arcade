@@ -13,7 +13,7 @@ import { GenerateCards } from './GenerateCards';
 import { NativeReview } from './NativeReview';
 import { Conversation } from './Conversation';
 import { LiveConversation } from './LiveConversation';
-import { Journey, ProgressionBadge, useProgression } from './Progression';
+import { Journey, ProgressionBadge, useProgression, type PracticeLevel } from './Progression';
 import { SkillProgress } from './SkillProgress';
 import { UserSessionLink, type UserProfile, type AccountMode } from './UserSessionLink';
 import {useOnboarding, type OnboardingState} from './Onboarding';
@@ -27,7 +27,7 @@ import sleepingBarsik from './assets/barsik-sleeping-v1.webp';
 import './styles/lesson-player.css';
 
 type Page = 'home' | 'activities' | 'words' | 'practice' | 'first-delivery' | 'first-steps' | 'flashcards' | 'review' | 'generate' | 'conversation' | 'speech-lab' | 'speaking' | 'journey' | 'game' | 'games' | 'shop';
-type Route = { page: Page; gameId?:string; sessionId?: string; worldId?:string; wordId?: number; lessonId?: string; topic?:string; scenarioId?:string; speakingMode?:'fluent'|'step'; canonicalHash?: string };
+type Route = { page: Page; gameId?:string; sessionId?: string; worldId?:string; wordId?: number; lessonId?: string; topic?:string; scenarioId?:string; speakingLevel?:PracticeLevel; speakingMode?:'fluent'|'step'; canonicalHash?: string };
 function route(): Route {
   const hash = window.location.hash.slice(1);
   const gameSession=/^games\/session\/([A-Za-z0-9_-]+)$/.exec(hash);
@@ -44,8 +44,12 @@ function route(): Route {
   if (hash === 'speech-lab' || hash === 'speaking/lab') return {page:'speech-lab',canonicalHash:'#speaking/lab'};
   const step=/^speaking\/step(?:\/([A-Za-z0-9_-]+))?$/.exec(hash);
   if(step)return step[1] ? {page:'speaking',speakingMode:'step',sessionId:step[1]} : {page:'speaking',canonicalHash:'#speaking'};
-  const scenario=/^speaking\/scenario\/([a-z-]+)$/.exec(hash);
-  if(scenario)return {page:'speaking',scenarioId:scenario[1]};
+  const scenario=/^speaking\/scenario\/([a-z-]+)(?:\?(.*))?$/.exec(hash);
+  if(scenario){
+    const level=new URLSearchParams(scenario[2] ?? '').get('level') ?? 'A1';
+    const speakingLevel=(['A1','A2','B1','B2'] as const).find(item=>item===level);
+    return speakingLevel ? {page:'speaking',scenarioId:scenario[1],speakingLevel} : {page:'speaking'};
+  }
   const live = /^(?:live-conversation|speaking)(?:\/([A-Za-z0-9_.:-]+))?$/.exec(hash);
   if (live) return {page:'speaking',sessionId:live[1],canonicalHash:`#speaking${live[1] ? '/' + live[1] : ''}`};
   if (hash === 'conversation') return {page:'speaking',canonicalHash:'#speaking'};
@@ -272,7 +276,7 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
         : location.page === 'journey' ? <Journey key={`${state.home?.profile.id ?? state.mode}:${location.worldId ?? 'map'}`} worldId={location.worldId} language={language} progression={progression} />
         : location.page === 'speaking' ? location.speakingMode==='step' && location.sessionId
           ? <StepThroughConversation key={`${state.home?.profile.id}:${location.sessionId}`} sessionId={location.sessionId} language={language} />
-          : <LiveConversation key={`${state.home?.profile.id}:${location.sessionId ?? location.scenarioId ?? 'new'}`} sessionId={location.sessionId} initialScenarioId={location.scenarioId} language={language} />
+          : <LiveConversation key={`${state.home?.profile.id}:${location.sessionId ?? location.scenarioId ?? 'new'}:${location.speakingLevel ?? 'A1'}`} sessionId={location.sessionId} initialScenarioId={location.scenarioId} initialLevel={location.speakingLevel} language={language} />
         : ['conversation','speech-lab'].includes(location.page) ? <Conversation key={`${state.home?.profile.id}:${location.sessionId ?? location.page}`} sessionId={location.sessionId} lab={location.page==='speech-lab'} language={language} />
         : location.page === 'generate' && nativeEnabled ? state.mode === 'personal' || state.mode === 'adult' ? <GenerateCards key={location.sessionId ?? `new:${location.wordId ?? ''}`} batchId={location.sessionId} wordId={location.wordId} language={language} /> : <FlashcardsSetup adult={false} language={language} />
         : ['flashcards','review'].includes(location.page) && !nativeEnabled ? <section class="page"><h1>Flashcard practice is paused.</h1><p>Your saved cards and reviews are kept. Enable native flashcards in the app configuration to continue.</p><a class="text-link" href="#activities">Back to activities</a></section>

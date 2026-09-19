@@ -6,6 +6,7 @@ import threading
 
 from repositories.learning_repository import LearningError, encoded, identifier, payload_hash, require_access, timestamp, transaction
 from repositories.speaking_repository import catalogue, choose_variant, validate_level
+from repositories.speaking_history import recent_variants
 from services.ai_trial_budget import TrialDenied
 from services.conversation_service import valid_key
 from services.progression import award
@@ -65,8 +66,7 @@ class StepConversationService:
             listing = catalogue(conn, level)
             selected = next((item for item in listing['scenarios'] if item['id'] == scenario_id), None)
             available = selected['variant_count'] if selected else 0
-            recent = [row[0] for row in conn.execute('SELECT variant_id FROM step_conversation_sessions '
-                'WHERE profile_id=? AND scenario_id=? ORDER BY created_at DESC,rowid DESC LIMIT 100', (profile['id'], scenario_id))]
+            recent = recent_variants(conn, profile['id'], scenario_id, level)
             scenario = None if level is not None and selected is not None and not available else choose_variant(
                 conn, scenario_id, level=level, previous_seeds=([exclude_seed] if exclude_seed else []) + recent)
             sessions = self._history(conn, profile['id'])
@@ -97,8 +97,7 @@ class StepConversationService:
             else:
                 self._require_provider()
                 scenario_id = body.get('scenario_id', 'cafe')
-                recent = [row[0] for row in conn.execute('SELECT variant_id FROM step_conversation_sessions '
-                    'WHERE profile_id=? AND scenario_id=? ORDER BY created_at DESC,rowid DESC LIMIT 100', (profile['id'], scenario_id))]
+                recent = recent_variants(conn, profile['id'], scenario_id, level)
                 scenario = choose_variant(conn, scenario_id, seed=body.get('scenario_seed'), level=level, previous_seeds=recent)
                 sid, created = identifier(), True
                 voices = self.config.get('ELEVENLABS_VOICE_IDS') or ['']
@@ -139,7 +138,8 @@ class StepConversationService:
             conn.execute("UPDATE step_conversation_sessions SET state='preparing',lease_until=?,preparation_id=?,error=NULL WHERE id=?",
                          (timestamp() + 180, attempt, sid))
         try:
-            dialogue = validate_dialogue(self.ai.step_dialogue(json.loads(saved['scenario_json'])))
+            scenario = json.loads(saved['scenario_json'])
+            dialogue = validate_dialogue(self.ai.step_dialogue(scenario), scenario)
             for turn in dialogue['turns']:
                 turn['id'] = identifier()
                 options = [{'id': identifier(), 'correct': True, **turn.pop('correct')},

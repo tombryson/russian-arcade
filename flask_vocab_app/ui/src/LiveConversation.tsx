@@ -16,7 +16,8 @@ type Scenario = {title:string;title_ru?:string;description:string;description_ru
   scenario_id?:string;target_level?:PracticeLevel;category_title?:string;category_title_ru?:string;role?:string;role_ru?:string;icon?:string;sign?:string;
   goals:string[];goals_ru?:string[];goal_ids?:string[];menu?:Record<string,number>;
   reference?:{title:string;title_ru?:string;items:{label:string;label_ru?:string;value:string;value_ru?:string}[]}};
-type ScenarioChoice = {id:string;title:string;title_ru:string;description:string;description_ru:string;role:string;role_ru:string;icon:string;sign:string;variant_count:number;available?:boolean;levels?:PracticeLevel[]};
+type LevelDetail = {title:string;title_ru:string;description:string;description_ru:string;topic_id:string};
+type ScenarioChoice = {id:string;title:string;title_ru:string;description:string;description_ru:string;role:string;role_ru:string;icon:string;sign:string;variant_count:number;available?:boolean;levels?:PracticeLevel[];level_details?:Partial<Record<PracticeLevel,LevelDetail>>};
 type Catalogue = {activity:{id:string;title:string;title_ru:string};scenarios:ScenarioChoice[]};
 type Score = {score:number|null;reason:string;evidence:string[]};
 type SpeakingReport = {basis:string;rubric_version:string;model:string;transcript:string;speech_status:'russian'|'mixed'|'no_russian'|'insufficient'|'unclear';
@@ -28,7 +29,7 @@ type Saved = {id:string;scenario_id?:string;state:string;connected:boolean;needs
 type Options = {configured:boolean;notes_configured:boolean;max_seconds:number;sessions:{id:string;state:string;created_at:number}[];scenario?:Scenario};
 const practiceLevels:readonly PracticeLevel[]=['A1','A2','B1','B2'];
 
-export function LiveConversation({sessionId,language='en',initialScenarioId}:{sessionId?:string;language?:Language;initialScenarioId?:string}) {
+export function LiveConversation({sessionId,language='en',initialScenarioId,initialLevel='A1'}:{sessionId?:string;language?:Language;initialScenarioId?:string;initialLevel?:PracticeLevel}) {
   const t = (en:string,ru:string) => language === 'ru' ? ru : en;
   const [practiceMode,setPracticeMode] = useState<'fluent'|'step'>('fluent');
   const [preparingStep,setPreparingStep] = useState(false);
@@ -36,7 +37,7 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
   const [catalogue,setCatalogue] = useState<Catalogue>();
   const [catalogueError,setCatalogueError] = useState('');
   const [catalogueRefresh,setCatalogueRefresh] = useState(0);
-  const [level,setLevel]=useState<PracticeLevel>('A1');
+  const [level,setLevel]=useState<PracticeLevel>(initialLevel);
   const [selectedScenarioId,setSelectedScenarioId] = useState<string>();
   const initialScenarioOpened=useRef(false);
   const [saved,setSaved] = useState<Saved>();
@@ -91,9 +92,10 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
   useEffect(()=>{
     if(!initialScenarioId || !catalogue || sessionId || initialScenarioOpened.current)return;
     initialScenarioOpened.current=true;
-    const scenario=catalogue.scenarios.find(item=>item.id===initialScenarioId && item.available!==false && item.variant_count>0 && (item.levels ?? ['A1']).includes('A1'));
-    if(scenario)chooseScenario(scenario.id,'A1');
-  },[catalogue,initialScenarioId,sessionId]);
+    const scenario=catalogue.scenarios.find(item=>item.id===initialScenarioId && item.available!==false && item.variant_count>0 && (item.levels ?? ['A1']).includes(initialLevel));
+    if(scenario)chooseScenario(scenario.id,initialLevel);
+    else setError(t('This scenario is not available at that level. Choose another scenario.','Эта ситуация недоступна на выбранном уровне. Выберите другую.'));
+  },[catalogue,initialScenarioId,initialLevel,sessionId]);
 
   useEffect(() => {
     if (!saved || !active) return;
@@ -319,15 +321,15 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
         if (!choices.length) return null;
         return <section class={`speaking-level-group${band==='A1' ? '' : ' speaking-level-group-muted'}`} key={band} aria-labelledby={`speaking-level-${band}`}>
           <h2 id={`speaking-level-${band}`}>{band}</h2>
-          <ul class="speaking-scenario-grid">{choices.map(item=><li key={item.id}>
+          <ul class="speaking-scenario-grid">{choices.map(item=>{const detail=item.level_details?.[band] ?? item;return <li key={item.id}>
             <button class="speaking-scenario-card" onClick={()=>chooseScenario(item.id,band)} aria-labelledby={`speaking-scenario-${band}-${item.id}`}>
               <span class="speaking-scenario-icon" aria-hidden="true">{item.icon}</span>
-              <span class="speaking-scenario-copy"><span class="speaking-scenario-title" id={`speaking-scenario-${band}-${item.id}`}>{language==='ru' ? item.title_ru : item.title}</span>
-                <span class="speaking-scenario-description">{language==='ru' ? item.description_ru : item.description}</span>
+              <span class="speaking-scenario-copy"><span class="speaking-scenario-title" id={`speaking-scenario-${band}-${item.id}`}>{language==='ru' ? detail.title_ru : detail.title}</span>
+                <span class="speaking-scenario-description">{language==='ru' ? detail.description_ru : detail.description}</span>
                 <span class="speaking-scenario-role">{language==='ru' ? item.role_ru : item.role}</span>
               </span><span class="speaking-scenario-arrow" aria-hidden="true">↗</span>
             </button>
-          </li>)}</ul>
+          </li>;})}</ul>
         </section>;
       }) : catalogueError ? <div class="speaking-catalogue-error"><p class="error-note" role="alert">{catalogueError}</p><button class="live-mute" onClick={()=>setCatalogueRefresh(value=>value+1)}>{t('Try loading scenarios again','Загрузить ситуации ещё раз')}</button></div> : <p role="status">{t('Loading scenarios…','Загружаем ситуации…')}</p>}
       {practiceMode==='fluent' && <p class="quiet">{t('Speak in Russian, then get feedback on your grammar and fluency. The microphone stays off until you start.','Говорите по-русски и получайте обратную связь по грамматике и беглости речи. Микрофон включится, только когда вы начнёте разговор.')}</p>}
@@ -346,7 +348,7 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
         {state === 'idle' && practiceMode==='fluent' && <p class="quiet">{t('Your conversation partner is an AI. You can pause, change your mind or ask them to repeat.','Ваш собеседник — ИИ. Можно подумать, передумать или попросить повторить.')}</p>}
         <div class="live-controls">
           {state==='idle' && modeChoices}
-          {state==='idle' && practiceMode==='step' && scenario?.seed && !changingScenario && <StepThroughConversation key={`${selectedScenarioId}:${scenario.seed}:${level}`} embeddedSetup scenarioId={selectedScenarioId} scenarioSeed={scenario.seed} targetLevel={level} language={language} onPreparingChange={setPreparingStep} />}
+          {state==='idle' && practiceMode==='step' && scenario?.seed && !changingScenario && <StepThroughConversation key={`${selectedScenarioId}:${scenario.seed}:${level}`} embeddedSetup scenarioId={selectedScenarioId} scenarioSeed={scenario.seed} targetLevel={level} language={language} onPreparingChange={setPreparingStep} onReloadScenario={()=>void refreshScenario(true)} />}
           {state === 'idle' && <div class={`action-row${practiceMode==='step' ? ' speaking-step-secondary' : ''}`}>
             {practiceMode==='fluent' && <button class="cta" disabled={!fluentReady || starting.current} onClick={start}>{t('Start talking','Начать разговор')} <span aria-hidden="true">↗</span></button>}
             <button class="text-link" disabled={changingScenario || preparingStep} onClick={()=>void refreshScenario(!!options)}>{changingScenario ? t('Finding a situation…','Выбираем ситуацию…') : options ? t('Another situation','Другая ситуация') : t('Try loading the situation again','Загрузить ситуацию ещё раз')}</button>
@@ -430,7 +432,7 @@ export function LiveConversation({sessionId,language='en',initialScenarioId}:{se
 const menuGlosses:Record<string,string>={чай:'Tea',кофе:'Coffee',какао:'Cocoa',сок:'Juice',булочка:'Bun',бутерброд:'Sandwich',пирог:'Pie',печенье:'Biscuits','яблочный пирог':'Apple pie'};
 function ScenarioReference({scenario,language}:{scenario?:Scenario;language:Language}) {
   const t=(en:string,ru:string)=>language==='ru' ? ru : en;
-  const reference=scenario?.reference;
+  const reference=Array.isArray(scenario?.reference?.items) ? scenario.reference : undefined;
   const menu=Object.entries(scenario?.menu ?? {});
   const cafe=!scenario?.scenario_id || scenario.scenario_id==='cafe';
   const title=reference ? language==='ru' ? reference.title_ru ?? reference.title : reference.title : menu.length ? cafe ? t('On the menu','Меню') : t('Price list','Цены') : t('A little help','Небольшая подсказка');

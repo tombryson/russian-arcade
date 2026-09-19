@@ -11,15 +11,15 @@ from repositories.learning_repository import transaction, timestamp
 from services.ai_trial_budget import TrialDenied
 from services.speech_provider import SpeechError
 from services.step_conversation import StepConversationService
-from tests.support import isolated_app
+from tests.support import isolated_app, latest_schema_version
 from tests.test_conversation import FakeSpeech
-from tests.test_step_conversation_ai import dialogue
+from tests.test_step_conversation_ai import dialogue, dialogue_for_scenario
 
 
 class StepConversationTests(unittest.TestCase):
     def setUp(self):
         self.ai = Mock()
-        self.ai.step_dialogue.side_effect = lambda _: dialogue()
+        self.ai.step_dialogue.side_effect = dialogue_for_scenario
         self.speech = FakeSpeech()
         self.app = isolated_app(self, {'ConversationAI': self.ai, 'SpeechProvider': self.speech})
         self.app.config.update(OPENAI_API_KEY='synthetic', ELEVENLABS_API_KEY='synthetic')
@@ -258,7 +258,7 @@ class StepConversationTests(unittest.TestCase):
             self.client.get(self.base + '/' + sid)
             self.client.get(self.base + '/history')
         self.ai.step_dialogue.assert_called_once()
-        self.ai.step_dialogue.side_effect = lambda _: dialogue()
+        self.ai.step_dialogue.side_effect = dialogue_for_scenario
         ready = self.post('/' + sid + '/retry').json
         self.assertEqual(ready['state'], 'active')
         self.assertEqual(self.ai.step_dialogue.call_count, 2)
@@ -337,9 +337,10 @@ class StepConversationTests(unittest.TestCase):
             profiles = conn.execute('SELECT * FROM learning_profiles ORDER BY id').fetchall()
             conn.execute('DROP TABLE step_conversation_answers')
             conn.execute('DROP TABLE step_conversation_sessions')
-            conn.execute('DELETE FROM schema_migrations WHERE version=41')
+            conn.execute('DROP TABLE IF EXISTS speaking_scenario_levels')
+            conn.execute('DELETE FROM schema_migrations WHERE version>=41')
         version, backup = upgrade_database(self.db)
-        self.assertEqual(version, 41)
+        self.assertEqual(version, latest_schema_version())
         self.assertTrue(backup)
         with sqlite3.connect(self.db) as conn:
             self.assertEqual(conn.execute('SELECT * FROM words ORDER BY id').fetchall(), before)
@@ -375,6 +376,30 @@ class StepConversationTests(unittest.TestCase):
         self.assertEqual(result.json['state'], 'failed')
         self.assertIsNone(result.json['current_turn'])
         self.assertIsNone(self.saved(result.json['id'])['dialogue_json'])
+
+    def test_curriculum_evidence_is_saved_but_never_sent_to_the_player(self):
+        state = self.start()
+        raw = json.loads(self.saved(state['id'])['dialogue_json'])
+        self.assertTrue(raw['coverage'])
+        for response in (state, self.client.get(self.base + '/' + state['id']).json,
+                         self.client.get(self.base + '/history').json):
+            self.assertNotIn('"coverage"', json.dumps(response))
+            self.assertNotIn('"requirement_id"', json.dumps(response))
+        answer = self.post('/' + state['id'] + '/answer', {
+            'submission_id': 'coverage-answer', 'turn_id': state['current_turn']['id'],
+            'option_id': self.choice(state)})
+        self.assertEqual(answer.status_code, 200)
+        self.assertNotIn('"coverage"', json.dumps(answer.json))
+
+    def test_missing_curriculum_evidence_cannot_publish_or_prepare_audio(self):
+        self.ai.step_dialogue.side_effect = lambda _: dialogue()
+        result = self.post(body={'submission_id': 'missing-coverage', 'scenario_id': 'shop', 'target_level': 'A2'})
+        self.assertEqual(result.status_code, 201, result.json)
+        self.assertEqual(result.json['state'], 'failed')
+        self.assertIsNone(result.json['current_turn'])
+        self.assertIsNone(self.saved(result.json['id'])['dialogue_json'])
+        self.assertEqual(self.speech.voices, [])
+        self.ai.step_dialogue.assert_called_once()
 
 
 if __name__ == '__main__':

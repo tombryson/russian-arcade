@@ -41,6 +41,28 @@ def introduction():
 
 
 class SpeakingScenarioPromptTests(unittest.TestCase):
+    def test_live_and_delegated_roles_receive_scoped_curriculum_without_forcing_a_script(self):
+        scenario = directions()
+        scenario['learning_contract'] = {
+            'target_level': 'A2',
+            'requirements': [{'id': 'confirm-turn', 'kind': 'communicative',
+                              'description': 'Confirm the turning beside the park.',
+                              'evidence_hint': 'A learner question checks the turning.'}],
+        }
+        scenario['curriculum_context'] = {
+            'topic_id': 'places', 'target_level': 'A2',
+            'activity_brief': 'Ask for directions and clarify a detail.',
+            'grammar_focus': ['Movement and destination'],
+        }
+        config = session_config({'model': 'chosen-live', 'voice': 'cedar', 'backend_model': 'chosen-backend'}, scenario)
+        for prompt in (config['instructions'], config['delegation']['responses']['instructions']):
+            self.assertIn('Ask for directions and clarify a detail.', prompt)
+            self.assertIn('confirm-turn', prompt)
+            self.assertIn('Весь учебный раздел не нужно проходить за один разговор', prompt)
+            self.assertIn('Короткий понятный ответ и допустимые варианты остаются успешными', prompt)
+            self.assertIn('не заставляй повторять заранее выбранную грамматическую конструкцию', prompt)
+            self.assertIn('Не проговаривай цели, их идентификаторы', prompt)
+
     def assert_not_a_cafe(self, prompt):
         for phrase in ('кафе', 'заказ', 'посетител', 'café', 'customer', 'order', 'payment'):
             self.assertNotIn(phrase, prompt.casefold())

@@ -10,13 +10,13 @@ from services.speech_provider import SpeechError
 from services.step_conversation import StepConversationService
 from tests.support import isolated_app
 from tests.test_conversation import FakeSpeech
-from tests.test_step_conversation_ai import dialogue
+from tests.test_step_conversation_ai import dialogue_for_scenario
 
 
 class StepConversationConcurrencyTests(unittest.TestCase):
     def setUp(self):
         self.ai = Mock()
-        self.ai.step_dialogue.side_effect = lambda _: dialogue()
+        self.ai.step_dialogue.side_effect = dialogue_for_scenario
         self.speech = FakeSpeech()
         self.app = isolated_app(self, {'ConversationAI': self.ai, 'SpeechProvider': self.speech})
         self.app.config.update(OPENAI_API_KEY='synthetic', ELEVENLABS_API_KEY='synthetic')
@@ -55,11 +55,11 @@ class StepConversationConcurrencyTests(unittest.TestCase):
         sid = self.start('expired', prepare=False)['id']
         entered, release = threading.Event(), threading.Event()
 
-        def generate(_):
+        def generate(scenario):
             entered.set()
             if not release.wait(5):
                 raise AssertionError('The test did not release its fake provider.')
-            return dialogue()
+            return dialogue_for_scenario(scenario)
 
         self.ai.step_dialogue.side_effect = generate
         with patch('services.step_conversation.timestamp', return_value=timestamp()) as clock:
@@ -85,21 +85,21 @@ class StepConversationConcurrencyTests(unittest.TestCase):
         new_entered, new_release = threading.Event(), threading.Event()
         current_ai = Mock()
 
-        def older(_):
+        def older(scenario):
             old_entered.set()
             if not old_release.wait(5):
                 raise AssertionError('The test did not release the older provider.')
             if fail:
                 raise SpeechError('Older preparation failed.')
-            result = dialogue()
+            result = dialogue_for_scenario(scenario)
             result['turns'][0]['npc']['russian'] = 'Старая подготовка: куда вы идёте?'
             return result
 
-        def newer(_):
+        def newer(scenario):
             new_entered.set()
             if not new_release.wait(5):
                 raise AssertionError('The test did not release the newer provider.')
-            result = dialogue()
+            result = dialogue_for_scenario(scenario)
             result['turns'][0]['npc']['russian'] = 'Новая подготовка: куда вы идёте?'
             return result
 
@@ -146,14 +146,14 @@ class StepConversationConcurrencyTests(unittest.TestCase):
         entered, release, guard = threading.Event(), threading.Event(), threading.Lock()
         calls = []
 
-        def generate(_):
+        def generate(scenario):
             with guard:
                 calls.append(True)
                 if len(calls) == 2:
                     entered.set()
             if not release.wait(5):
                 raise AssertionError('The test did not release its fake providers.')
-            return dialogue()
+            return dialogue_for_scenario(scenario)
 
         self.ai.step_dialogue.side_effect = generate
         with ThreadPoolExecutor(max_workers=3) as pool:
@@ -171,7 +171,7 @@ class StepConversationConcurrencyTests(unittest.TestCase):
                 release.set()
             for future in first:
                 self.assertEqual(future.result(timeout=2)['state'], 'active')
-        self.ai.step_dialogue.side_effect = lambda _: dialogue()
+        self.ai.step_dialogue.side_effect = dialogue_for_scenario
         self.assertEqual(self.service.retry(self.access, sessions[2])['state'], 'active')
 
     def test_audio_busy_returns_409_promptly_and_saved_reads_remain_available(self):

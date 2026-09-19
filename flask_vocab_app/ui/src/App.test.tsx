@@ -73,6 +73,23 @@ describe('Russian Arcade activity home', () => {
     expect(screen.getByLabelText('Activities').getAttribute('data-active')).toBe('true');
     expect(fetch.mock.calls.some(([url]) => url.endsWith('/connect') || url === '/api/v1/conversations')).toBe(false);
   });
+  it('preserves the curriculum level when opening and changing a scenario link',async()=>{
+    window.history.replaceState(null,'','/post/#speaking/scenario/shop?level=A2');
+    const fetch=vi.fn((url:string)=>response(url.endsWith('/household')
+      ? {adult:false,profile:{id:'personal',display_name:'Learner'},csrf_token:'csrf'}
+      : url.endsWith('/scenarios')
+        ? {activity:{id:'speaking'},scenarios:[{id:'shop',title:'At the shops',title_ru:'В магазине',description:'Ask for what you need.',description_ru:'Попросите нужный товар.',role:'Shop assistant',role_ru:'Продавец',icon:'🛍️',sign:'МАГАЗИН',variant_count:2,levels:['A1','A2']}]}
+        : {configured:true,notes_configured:true,max_seconds:300,sessions:[],scenario:{seed:'shop-link',scenario_id:'shop',title:'Find your size',description:'Ask for another size.',opening:'Какой размер вам нужен?',goals:[],target_level:url.includes('level=A2')?'A2':'A1'}}));
+    vi.stubGlobal('fetch',fetch);render(<App/>);
+    await screen.findByRole('heading',{name:'Find your size'});
+    expect(fetch.mock.calls.filter(([url])=>url.includes('/options')).map(([url])=>url)).toEqual(['/api/v1/live-conversations/options?scenario_id=shop&level=A2']);
+    await navigate('speaking/scenario/shop?level=A1');
+    await vi.waitFor(()=>expect(fetch.mock.calls.filter(([url])=>url.includes('/options')).map(([url])=>url)).toEqual([
+      '/api/v1/live-conversations/options?scenario_id=shop&level=A2',
+      '/api/v1/live-conversations/options?scenario_id=shop&level=A1',
+    ]));
+    expect(fetch.mock.calls.some(([url])=>url==='/api/v1/live-conversations' || url==='/api/v1/step-conversations')).toBe(false);
+  });
   it.each(['live-conversation/live-one','speaking/live-one'])('keeps saved live links working: %s', async hash => {
     window.history.replaceState(null, '', `/post/#${hash}`);
     vi.stubGlobal('fetch',vi.fn((url: string) => response(url.endsWith('/household')

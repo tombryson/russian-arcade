@@ -37,7 +37,7 @@ Reading, Writing, Translation and Word Jumble use the shared topic catalogue and
 
 The catalogue is available even when the vocabulary database is empty. Target vocabulary is a resource for generation, not a closed word list. Activities should combine relevant saved words with useful new words. They should not force every target word into one passage.
 
-Speaking has a task brief for every curriculum topic. These are not fifty new live scenarios. The existing live catalogue still contains five scenarios and eighteen A1/A2 variations. Its saved session contracts remain authoritative for those conversations. Further live scenarios can use these briefs when they are authored.
+Speaking has a task brief for every curriculum topic. The implemented catalogue has five settings and 30 A1/A2 situations. Each setting and level maps to a curriculum topic, and generated conversations receive a saved copy of its curriculum context plus the selected task requirements. Supported topics have a Speaking launch link. The remaining briefs are not playable scenarios yet. See [Speaking scenarios](word-post/speaking-scenarios.md) for coverage and variation.
 
 Historical attempts keep their saved content and difficulty. Legacy difficulty values remain accepted by the activity adapters. Reading an updated curriculum does not change old feedback, reviews or scores.
 

@@ -36,7 +36,7 @@ class SpeakingLevelTests(unittest.TestCase):
                                query_string={'scenario_id':scenario,'level':level,**query})
 
     def test_every_scenario_has_a1_and_a2_content_without_fabricated_higher_levels(self):
-        expected_counts = {'A1':10,'A2':8,'B1':0,'B2':0}
+        expected_counts = {'A1':15,'A2':15,'B1':0,'B2':0}
         for level in expected_counts:
             response = self.client.get('/api/v1/live-conversations/scenarios',query_string={'level':level})
             self.assertEqual(response.status_code, 200, response.json)
@@ -84,8 +84,8 @@ class SpeakingLevelTests(unittest.TestCase):
 
     def test_cross_level_and_invalid_level_requests_are_rejected(self):
         for body in (
-            {'target_level':'A2','scenario_seed':'cafe-warm-drink-v1'},
-            {'target_level':'A1','scenario_seed':'cafe-budget-v1'},
+            {'target_level':'A2','scenario_seed':'cafe-a1-warm-lunch-v2'},
+            {'target_level':'A1','scenario_seed':'cafe-a2-milk-v2'},
             {'target_level':'C2'}, {'target_level':['A1']},
             {'target_level':'A1','level':'A2'},
         ):
@@ -95,15 +95,15 @@ class SpeakingLevelTests(unittest.TestCase):
         self.assertEqual(self.client.get('/api/v1/live-conversations/scenarios?level=expert').status_code,400)
 
     def test_level_is_stable_on_idempotent_retry_and_catalogue_changes(self):
-        body={'submission_id':'same','scenario_id':'cafe','scenario_seed':'cafe-warm-drink-v1','target_level':'A1'}
+        body={'submission_id':'same','scenario_id':'cafe','scenario_seed':'cafe-a1-warm-lunch-v2','target_level':'A1'}
         saved=self.post(**body).json
         self.assertEqual(self.post(**body).json,saved)
         self.assertEqual(self.post(**{**body,'target_level':'A2'}).status_code,409)
         with transaction(self.db,write=True) as conn:
             raw=conn.execute('SELECT scenario_json FROM live_conversation_sessions WHERE id=?',(saved['id'],)).fetchone()[0]
-            payload=json.loads(conn.execute("SELECT payload_json FROM speaking_scenario_variants WHERE id='cafe-warm-drink-v1'").fetchone()[0])
+            payload=json.loads(conn.execute("SELECT payload_json FROM speaking_scenario_variants WHERE id='cafe-a1-warm-lunch-v2'").fetchone()[0])
             payload['learning_contract']['grammar_focus']=['Changed later']
-            conn.execute("UPDATE speaking_scenario_variants SET payload_json=? WHERE id='cafe-warm-drink-v1'",(json.dumps(payload),))
+            conn.execute("UPDATE speaking_scenario_variants SET payload_json=? WHERE id='cafe-a1-warm-lunch-v2'",(json.dumps(payload),))
         again=self.client.get('/api/v1/live-conversations/'+saved['id']).json
         self.assertEqual(again['scenario'],saved['scenario'])
         with transaction(self.db) as conn:
@@ -112,15 +112,15 @@ class SpeakingLevelTests(unittest.TestCase):
     def test_repeat_avoidance_stays_inside_the_selected_level(self):
         with transaction(self.db) as conn:
             a2=catalogue(conn,'A2')
-            self.assertEqual(next(s for s in a2['scenarios'] if s['id']=='cafe')['variant_count'],2)
-            next_variant=choose_variant(conn,'cafe',level='A2',previous_seeds=['cafe-budget-v1','cafe-warm-drink-v1'])
-            self.assertEqual(next_variant['seed'],'cafe-sold-out-v1')
-            self.assertEqual(choose_variant(conn,'cafe',level='A2',previous_seeds=['cafe-sold-out-v1','cafe-budget-v1'])['seed'],'cafe-budget-v1')
+            self.assertEqual(next(s for s in a2['scenarios'] if s['id']=='cafe')['variant_count'],3)
+            next_variant=choose_variant(conn,'cafe',level='A2',previous_seeds=['cafe-a2-milk-v2','cafe-a2-sugar-v2','cafe-a1-warm-lunch-v2'])
+            self.assertEqual(next_variant['seed'],'cafe-a2-onion-v2')
+            self.assertEqual(choose_variant(conn,'cafe',level='A2',previous_seeds=['cafe-a2-onion-v2','cafe-a2-sugar-v2','cafe-a2-milk-v2'])['seed'],'cafe-a2-milk-v2')
 
     def test_level_prompts_differ_and_assessment_never_converts_scores_to_proficiency(self):
         with transaction(self.db) as conn:
             a1=choose_variant(conn,'station',level='A1')
-            a2=choose_variant(conn,'station',level='A2',seed='station-one-way-v1')
+            a2=choose_variant(conn,'station',level='A2',seed='station-a2-connection-v2')
         easy=scenario_instructions(a1)
         harder=scenario_instructions(a2)
         self.assertIn('Не требуй объяснять причины',easy)
@@ -133,7 +133,7 @@ class SpeakingLevelTests(unittest.TestCase):
 
     def test_simplified_directions_does_not_show_the_route_in_reference(self):
         with transaction(self.db) as conn:
-            scenario=choose_variant(conn,'directions',level='A1')
+            scenario=choose_variant(conn,'directions',level='A1',seed='directions-a1-park-v2')
         reference=json.dumps(scenario['reference'],ensure_ascii=False).lower()
         self.assertNotIn('прямо',reference)
         self.assertNotIn('справа',reference)
@@ -143,9 +143,11 @@ class SpeakingLevelTests(unittest.TestCase):
     def test_database_rejects_unknown_target_levels(self):
         with self.assertRaises(sqlite3.IntegrityError):
             with transaction(self.db,write=True) as conn:
-                conn.execute("UPDATE speaking_scenario_variants SET target_level='expert' WHERE id='cafe-warm-drink-v1'")
+                conn.execute("UPDATE speaking_scenario_variants SET target_level='expert' WHERE id='cafe-a1-warm-lunch-v2'")
 
     def test_migration24_does_not_relabel_or_rewrite_historical_session(self):
+        with transaction(self.db,write=True) as conn:
+            conn.execute("UPDATE speaking_scenario_variants SET enabled=1 WHERE id='cafe-for-two-v1'")
         saved=self.post(submission_id='historical',scenario_id='cafe',scenario_seed='cafe-for-two-v1').json
         original='{"seed": "cafe-for-two-v1", "title": "My original lesson", "menu": {"чай": 17}}'
         with transaction(self.db,write=True) as conn:
@@ -166,7 +168,7 @@ class SpeakingLevelTests(unittest.TestCase):
             self.assertEqual({key:after[key] for key in before},before)
             self.assertIsNone(after['target_level'])
             self.assertEqual(after['scenario_json'],original)
-            self.assertEqual(conn.execute('SELECT COUNT(*) FROM speaking_scenario_variants WHERE target_level IS NOT NULL').fetchone()[0],18)
+            self.assertEqual(conn.execute('SELECT COUNT(*) FROM speaking_scenario_variants WHERE target_level IS NOT NULL').fetchone()[0],48)
 
 
 if __name__=='__main__':

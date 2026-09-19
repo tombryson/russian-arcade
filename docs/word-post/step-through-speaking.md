@@ -51,11 +51,14 @@ line follows the previous correct reply. Wrong answers are teaching attempts;
 they do not silently change the situation or make the character continue from
 something the learner has not yet understood.
 
-The prompt uses the selected scenario's facts, role, goals and level. It does not
-replace them with a separate café-only curriculum. Validation rejects malformed
-output and repeated choices. It cannot prove that every model-generated
-distinction is linguistically sound, so representative generated dialogues need
-content review as well as automated tests.
+The prompt uses the selected scenario's facts, role, level and saved curriculum
+context. Each task has selected learning requirements. Generation must cite a
+correct Russian learner reply for every requirement; validation checks the IDs,
+turns and exact quoted evidence before publication. Character-only evidence does
+not count. These internal records are not displayed to the learner. Validation
+also rejects malformed output and repeated choices. It cannot prove semantic
+coverage or that every distinction is linguistically sound, so representative
+generated dialogues need content review as well as automated tests.
 
 The character must stay in role. A ticket clerk answers questions about departure
 times and prices; they must not ask the learner those questions first. A factual

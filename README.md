@@ -151,6 +151,8 @@ Cards use the source sentence where possible. New examples are labelled when a f
 
 WebRTC carries live audio between the browser and the conversation provider. Scenarios have variations, goals and instructions for their practice level. Those details are saved with each attempt. The agent can end the conversation when the task is complete.
 
+The bundled Speaking catalogue has 30 situations across five settings at A1 and A2. Each task links to the curriculum and varies concrete details such as an order, a clothing size or a train connection. Both modes share repeat tracking, and saved conversations keep their original facts and objectives.
+
 [Step-through mode](docs/word-post/step-through-speaking.md) uses the same scenarios to teach what to say next. Each paused exchange offers three Russian replies and an optional hint. The server checks the answer and saves the learner's place. Completion earns participation coins; choosing a written reply does not change speaking fluency scores.
 
 A separate review assesses the learner’s recording for grammar, fluency and task completion. It does not use the live learner transcript as evidence: transcription can silently correct the endings being assessed. Audio review can still miss errors or mishear speech.

@@ -69,6 +69,31 @@ def seed_catalogue(conn):
             (SELECT id FROM speaking_scenario_variants WHERE scenario_id=live_conversation_sessions.scenario_id)""")
 
 
+def seed_curriculum(conn):
+    """Migration 042 publishes new tasks; historical attempts and rows survive."""
+    from services.speaking_curriculum import compiled_situations, level_details
+    original = json.loads(CATALOGUE_FILE.read_text())
+    metadata = {s['id']:{**s, 'conversation_role':s['variants'][0]['conversation_role']}
+                for s in original['scenarios']}
+    snapshots = compiled_situations(metadata)
+    for details in level_details():
+        columns = tuple(details)
+        conn.execute('INSERT OR REPLACE INTO speaking_scenario_levels (' + ','.join(columns)
+                     + ') VALUES (' + ','.join('?' for _ in columns) + ')', tuple(details.values()))
+    # Retain old IDs for session foreign keys and historic snapshots. Only
+    # supplied v1 catalogue IDs are retired; user-authored additions survive.
+    old_ids = {v['seed'] for s in original['scenarios'] for v in s['variants']}
+    old_ids.update(v['seed'] for v in json.loads(LEVELS_FILE.read_text())['variants'])
+    conn.executemany('UPDATE speaking_scenario_variants SET enabled=0 WHERE id=?',
+                     ((seed,) for seed in old_ids))
+    for snapshot in snapshots:
+        conn.execute('INSERT INTO speaking_scenario_variants '
+                     '(id,scenario_id,payload_json,target_level) VALUES (?,?,?,?) '
+                     'ON CONFLICT(id) DO UPDATE SET scenario_id=excluded.scenario_id, '
+                     'payload_json=excluded.payload_json,target_level=excluded.target_level,enabled=1',
+                     (snapshot['seed'],snapshot['scenario_id'],encoded(snapshot),snapshot['target_level']))
+
+
 def catalogue(conn, level=None):
     validate_level(level)
     activity = conn.execute("SELECT * FROM learning_activity_types WHERE id='speaking'").fetchone()
@@ -80,6 +105,9 @@ def catalogue(conn, level=None):
         item = dict(row)
         counts = dict(conn.execute('SELECT target_level,COUNT(*) FROM speaking_scenario_variants WHERE scenario_id=? AND enabled=1 GROUP BY target_level', (row['id'],)).fetchall())
         item['levels'] = [band for band in LEVELS if counts.get(band, 0)]
+        item['level_details'] = {details['target_level']: {
+            key:details[key] for key in ('title','title_ru','description','description_ru','topic_id')}
+            for details in conn.execute('SELECT * FROM speaking_scenario_levels WHERE scenario_id=?', (row['id'],))}
         if level is not None:
             item['variant_count'] = counts.get(level, 0)
         item['available'] = item['variant_count'] > 0
@@ -109,10 +137,13 @@ def choose_variant(conn, scenario_id='cafe', *, previous_seeds=(), seed=None, le
         available = [key for key in variants if key not in recent]
         seed = random.choice(available) if available else recent[-1]
     snapshot = json.loads(variants[seed]['payload_json'])
+    level_metadata = conn.execute('SELECT title,title_ru FROM speaking_scenario_levels WHERE scenario_id=? AND target_level=?',
+                                  (scenario_id,variants[seed]['target_level'])).fetchone()
     # Metadata is copied into the immutable session snapshot, so future
     # catalogue edits cannot rename or change a saved learner's conversation.
     return {**snapshot,'id':seed,'seed':seed,'scenario_id':scenario_id,
-            'category_title':scenario['title'],'category_title_ru':scenario['title_ru'],
+            'category_title':level_metadata['title'] if level_metadata else scenario['title'],
+            'category_title_ru':level_metadata['title_ru'] if level_metadata else scenario['title_ru'],
             'role':snapshot.get('role') or scenario['role'],'role_ru':snapshot.get('role_ru') or scenario['role_ru'],
             'icon':scenario['icon'],'sign':scenario['sign'],
             'target_level':variants[seed]['target_level']}
