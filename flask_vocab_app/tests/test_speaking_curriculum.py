@@ -119,7 +119,7 @@ class SpeakingCurriculumTests(unittest.TestCase):
         self.conn.execute('DELETE FROM speaking_scenario_variants WHERE id LIKE ? ',('%-v2',))
         self.conn.execute('UPDATE speaking_scenario_variants SET enabled=1')
         self.conn.execute('DELETE FROM speaking_scenario_levels')
-        self.conn.execute('DELETE FROM schema_migrations WHERE version=42')
+        self.conn.execute('DELETE FROM schema_migrations WHERE version>=42')
         old='{"seed":"cafe-for-two-v1","title":"Original task","menu":{"чай":17}}'
         self.conn.execute("""INSERT INTO live_conversation_sessions
             (id,profile_id,start_key,scenario_json,language,model,backend_model,voice,state,
