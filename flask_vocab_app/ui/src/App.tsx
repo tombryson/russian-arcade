@@ -73,7 +73,7 @@ function route(): Route {
 }
 
 const activities = [
-  { title: 'Read a story', description: 'Read or listen, then answer questions about the story.', href: '/comprehension', mark: 'Аа', detail: 'Reading & listening' },
+  { title: 'Comprehension', description: 'Read or listen, then answer questions about the story.', href: '/comprehension', mark: 'Аа', detail: 'Reading & listening' },
   { title: 'Word Jumble', description: 'Use the given words to write a sentence of your own.', href: '/word_jumble', mark: 'Я…', detail: 'Creative word game' },
   { title: 'Translate a sentence', description: 'Translate an English sentence into Russian and get feedback.', href: '/sentences', mark: 'А↔A', detail: 'Translation' },
   { title: 'Writing', description: 'Write about a topic using the words in your task.', href: '/writing', mark: 'абв', detail: 'Longer practice' },
@@ -209,7 +209,7 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
   const wordsHref = householdEnabled && !legacy ? '#words' : '/vocab';
   const menuActivities = (navigation?.activities ?? [
     {page:'native_flashcards', href:'#flashcards', label:language === 'ru' ? 'Карточки' : 'Flashcards', boost:false},
-    {page:'comprehension', href:'/comprehension', label:language === 'ru' ? 'Читать историю' : 'Read a story', boost:false},
+    {page:'comprehension', href:'/comprehension', label:language === 'ru' ? 'Понимание текста' : 'Comprehension', boost:false},
     {page:'speaking', href:'#speaking', label:language === 'ru' ? 'Разговорная практика' : 'Speaking', boost:false},
     {page:'writing', href:'/writing', label:language === 'ru' ? 'Письменная практика' : 'Writing', boost:false},
     {page:'lessons', href:'/lessons', label:language === 'ru' ? 'Уроки' : 'Lessons', boost:false},

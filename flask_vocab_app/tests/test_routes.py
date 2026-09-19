@@ -116,7 +116,7 @@ class RouteSmokeTests(unittest.TestCase):
 
     def test_system_ui_language_can_switch_between_english_and_russian(self):
         english = self.client.get("/comprehension").get_data(as_text=True)
-        self.assertIn("Read a story", english)
+        self.assertIn("Comprehension", english)
         self.assertIn("Create Story", english)
         self.assertIn('value="en"', english)
         self.assertIn('aria-pressed="true"', english)
@@ -142,7 +142,7 @@ class RouteSmokeTests(unittest.TestCase):
         english_again = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Read a story", english_again)
+        self.assertIn("Comprehension", english_again)
         self.assertIn("Create Story", english_again)
 
     def test_sidebar_navigation_sequence_preserves_main_content_contract(self):

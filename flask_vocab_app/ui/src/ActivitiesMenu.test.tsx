@@ -4,7 +4,7 @@ import { ActivitiesMenu } from './ActivitiesMenu';
 
 const items = [
   {page:'native_flashcards', href:'/post/#flashcards', label:'Flashcards', boost:false},
-  {page:'comprehension', href:'/comprehension', label:'Read a story', boost:true},
+  {page:'comprehension', href:'/comprehension', label:'Comprehension', boost:true},
   {page:'speaking', href:'/post/#speaking', label:'Speaking', boost:false},
   {page:'writing', href:'/writing', label:'Writing', boost:true},
   {page:'lessons', href:'/lessons', label:'Lessons', boost:true},

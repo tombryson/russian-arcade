@@ -42,7 +42,7 @@
             <summary>{{ ui_t('comprehension.create') }}</summary>
             <p>{{ ui_t('comprehension.create_help') }}</p>
                 <form
-                    id="comprehension-form" data-curriculum-setup data-level-explicit="{{ 'true' if level_explicit else 'false' }}"
+                    id="comprehension-form" data-curriculum-setup data-level-explicit="{{ 'true' if level_explicit else 'false' }}" data-preparing="{{ ui_t('comprehension.creating') }}"
                     action="/comprehension" method="post"
                     hx-post="/comprehension"
                     hx-target="#comprehension-content"
@@ -77,9 +77,11 @@
                             placeholder="{{ ui_t('comprehension.custom_placeholder') }}"
                         ></textarea>
                     </div>
-                    <button type="submit" class="btn btn-primary">
-                        {{ ui_t('comprehension.create') }}
+                    <button type="submit" class="btn btn-primary reading-create-button">
+                        <span class="reading-generation-spinner" data-reading-spinner aria-hidden="true" hidden></span>
+                        <span data-reading-button-label>{{ ui_t('comprehension.create') }}</span>
                     </button>
+                    <span class="visually-hidden" data-reading-generation-status role="status"></span>
                 </form>
         </details>
         <div id="reading-action-feedback" role="status"></div>

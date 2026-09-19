@@ -16,7 +16,7 @@ it('replaces the server loading fallback when the application mounts', async () 
     await import('./main');
     expect(screen.queryByRole('heading', { name: 'Opening your activities…' })).toBeNull();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    expect(within(screen.getByRole('main')).getByRole('link', { name: /^Read a story/ })).toBeTruthy();
+    expect(within(screen.getByRole('main')).getByRole('link', { name: /^Comprehension/ })).toBeTruthy();
     const account=screen.getByRole('link',{name:'Sign in'});
     expect(account.getAttribute('href')).toBe('/trial/account');
     expect(account.textContent).toBe('Sign in');

@@ -57,6 +57,74 @@ describe('reading draft guard', () => {
     return document.querySelector('.reading-workspace');
   }
 
+  function storyGeneration() {
+    const root = workspace();
+    root.dataset.dirty = 'false';
+    root.insertAdjacentHTML('afterbegin', `<form id="comprehension-form" data-preparing="Creating story…">
+      <select name="topic"><option value="family">Family</option></select>
+      <textarea name="custom_story">Моя история.</textarea>
+      <button type="submit"><span data-reading-spinner hidden></span><span data-reading-button-label>Create Story</span></button>
+      <span data-reading-generation-status role="status"></span></form>`);
+    const form = document.getElementById('comprehension-form');
+    const detail = { elt: form, target: document.getElementById('comprehension-content') };
+    return { root, form, detail, button: form.querySelector('button'), spinner: form.querySelector('[data-reading-spinner]') };
+  }
+
+  it('shows generation feedback immediately when sending and restores the button after success', () => {
+    const { form, detail, button, spinner } = storyGeneration();
+    document.body.dispatchEvent(new CustomEvent('htmx:beforeSend', { detail }));
+    expect(button.disabled).toBe(true);
+    expect(button.textContent).toBe('Creating story…');
+    expect(spinner.hidden).toBe(false);
+    expect(form.getAttribute('aria-busy')).toBe('true');
+    expect(form.querySelector('[role="status"]').textContent).toBe('Creating story…');
+    expect(new FormData(form).get('custom_story')).toBe('Моя история.');
+    // A duplicate event cannot lose the original button state.
+    document.body.dispatchEvent(new CustomEvent('htmx:beforeSend', { detail }));
+    document.body.dispatchEvent(new CustomEvent('htmx:afterRequest', { detail: { ...detail, successful: true } }));
+    expect(button.disabled).toBe(false);
+    expect(button.textContent).toBe('Create Story');
+    expect(spinner.hidden).toBe(true);
+    expect(form.hasAttribute('aria-busy')).toBe(false);
+    expect(form.querySelector('[role="status"]').textContent).toBe('');
+  });
+
+  it('does not enter a loading state when the learner cancels replacing an unsaved story', () => {
+    const { root, detail, button, spinner } = storyGeneration();
+    root.dataset.dirty = 'true';
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const request = new CustomEvent('htmx:beforeRequest', { detail, cancelable: true });
+    document.body.dispatchEvent(request);
+    expect(request.defaultPrevented).toBe(true);
+    expect(button.disabled).toBe(false);
+    expect(spinner.hidden).toBe(true);
+  });
+
+  it.each(['htmx:sendError', 'htmx:timeout', 'htmx:sendAbort'])('allows retry after %s without losing the text or answers', eventName => {
+    const { form, detail, button, spinner } = storyGeneration();
+    document.body.dispatchEvent(new CustomEvent('htmx:beforeSend', { detail }));
+    document.body.dispatchEvent(new CustomEvent(eventName, { detail }));
+    expect(button.disabled).toBe(false);
+    expect(button.textContent).toBe('Create Story');
+    expect(spinner.hidden).toBe(true);
+    expect(document.getElementById('reading-action-feedback').textContent).toContain('connection was interrupted');
+    expect(form.elements.custom_story.value).toBe('Моя история.');
+    expect(document.getElementById('draft').value).toBe('Мой ответ.');
+    document.body.dispatchEvent(new CustomEvent('htmx:beforeSend', { detail }));
+    expect(button.disabled).toBe(true);
+    expect(spinner.hidden).toBe(false);
+  });
+
+  it('clears pending generation before caching a page for Back navigation', () => {
+    const { detail, button, spinner } = storyGeneration();
+    document.body.dispatchEvent(new CustomEvent('htmx:beforeSend', { detail }));
+    document.body.dispatchEvent(new CustomEvent('htmx:beforeHistorySave'));
+    expect(button.disabled).toBe(false);
+    expect(button.textContent).toBe('Create Story');
+    expect(spinner.hidden).toBe(true);
+    expect(document.getElementById('draft').defaultValue).toBe('Мой ответ.');
+  });
+
   it('allows the library to open without discarding answers, and can cancel switching stories', () => {
     const root = workspace();
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);

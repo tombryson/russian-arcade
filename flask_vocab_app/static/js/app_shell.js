@@ -5,6 +5,7 @@
     const loadedScripts = new Map();
     const storyMounts = new WeakSet();
     const submittingButtons = new WeakMap();
+    const generatingStories = new WeakMap();
     let posChart = null;
     let initFrame = null;
     let initializedMainContent = null;
@@ -27,6 +28,7 @@
             select_topic_difficulty: 'Choose a topic and difficulty.',
             sentence_table_error: 'Could not show the sentence table.',
             story_text_error: 'Could not show the story text.',
+            story_connection_error: 'The connection was interrupted. Your current work is still here. Try again.',
             sync_complete: 'Sync complete.',
             sync_imported: 'Imported', sync_exported: 'Exported', sync_pending: 'Awaiting enrichment', sync_failed: 'Failed',
             sync_empty: 'No words to sync.',
@@ -53,6 +55,7 @@
             select_topic_difficulty: 'Выберите тему и сложность.',
             sentence_table_error: 'Не удалось показать таблицу предложений.',
             story_text_error: 'Не удалось показать текст истории.',
+            story_connection_error: 'Соединение прервалось. Ваша работа осталась на странице. Попробуйте ещё раз.',
             sync_complete: 'Синхронизация завершена.',
             sync_imported: 'Импортировано', sync_exported: 'Экспортировано', sync_pending: 'Ожидают обогащения', sync_failed: 'Ошибки',
             sync_empty: 'Нет слов для синхронизации.',
@@ -115,7 +118,37 @@
         status.appendChild(alert);
     }
 
+    function setReadingGenerationState(form, isSubmitting) {
+        const button = form.querySelector('button[type="submit"]');
+        const label = form.querySelector('[data-reading-button-label]');
+        if (!button || !label) return;
+        if (isSubmitting) {
+            if (generatingStories.has(form)) return;
+            generatingStories.set(form, { label: label.textContent, disabled: button.disabled });
+            button.disabled = true;
+            label.textContent = form.dataset.preparing;
+            form.setAttribute('aria-busy', 'true');
+        } else {
+            const original = generatingStories.get(form);
+            if (original) {
+                label.textContent = original.label;
+                button.disabled = original.disabled;
+            }
+            generatingStories.delete(form);
+            form.removeAttribute('aria-busy');
+        }
+        const spinner = form.querySelector('[data-reading-spinner]');
+        if (spinner) spinner.hidden = !isSubmitting;
+        const status = form.querySelector('[data-reading-generation-status]');
+        if (status) status.textContent = isSubmitting ? form.dataset.preparing : '';
+    }
+
     function setSubmittingState(element, isSubmitting) {
+        const readingForm = element?.closest?.('#comprehension-form');
+        if (readingForm) {
+            setReadingGenerationState(readingForm, isSubmitting);
+            return;
+        }
         const button = element?.matches?.('button')
             ? element
             : element?.querySelector?.('button[type="submit"], button[hx-post]');
@@ -633,6 +666,11 @@
         if (event.target.id === 'sanitization-form') {
             handleSanitizationSubmit(event);
         }
+        // A normal form submission still acknowledges the wait if HTMX is unavailable.
+        if (event.target.id === 'comprehension-form' && !window.htmx) {
+            if (generatingStories.has(event.target)) event.preventDefault();
+            else if (!event.defaultPrevented) setReadingGenerationState(event.target, true);
+        }
     });
 
     const mainObserver = new MutationObserver(() => {
@@ -671,7 +709,12 @@
             document.getElementById('reading-action-feedback')?.replaceChildren();
         }
         if (isBoostedSidebarNavigation(event.detail.elt)) setMainLoading(true);
-        setSubmittingState(event.detail.elt, true);
+        if (!event.detail.elt?.closest?.('#comprehension-form')) setSubmittingState(event.detail.elt, true);
+    });
+    document.body.addEventListener('htmx:beforeSend', (event) => {
+        // Start only after request cancellation/validation and form serialization.
+        const form = event.detail.elt?.closest?.('#comprehension-form');
+        if (form) setReadingGenerationState(form, true);
     });
     document.body.addEventListener('htmx:beforeSwap', (event) => {
         const feedback = document.getElementById('reading-action-feedback');
@@ -780,6 +823,8 @@
         scheduleInitPage(document, true);
     });
     document.body.addEventListener('htmx:beforeHistorySave', () => {
+        const form = document.getElementById('comprehension-form');
+        if (form) setReadingGenerationState(form, false);
         // HTMX caches HTML, which otherwise contains the initial textarea value.
         document.querySelectorAll('#question-form textarea').forEach((answer) => {
             answer.defaultValue = answer.value;
@@ -787,4 +832,17 @@
     });
     document.body.addEventListener('htmx:responseError', () => setMainLoading(false));
     document.body.addEventListener('htmx:sendError', () => setMainLoading(false));
+    for (const eventName of ['htmx:sendError', 'htmx:timeout', 'htmx:sendAbort']) {
+        document.body.addEventListener(eventName, (event) => {
+            const form = event.detail?.elt?.closest?.('#comprehension-form');
+            if (!form) return;
+            setReadingGenerationState(form, false);
+            const feedback = document.getElementById('reading-action-feedback');
+            if (feedback) feedback.textContent = t('story_connection_error');
+        });
+    }
+    window.addEventListener('pageshow', () => {
+        const form = document.getElementById('comprehension-form');
+        if (form) setReadingGenerationState(form, false);
+    });
 })();

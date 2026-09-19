@@ -47,10 +47,10 @@ describe('Russian Arcade activity home', () => {
   it('keeps working activity routes discoverable without contacting household services in legacy mode', async () => {
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
     render(<App />);
-    expect(within(screen.getByRole('main')).getByRole('link', { name: /^Read a story/ }).getAttribute('href')).toBe('/comprehension');
+    expect(within(screen.getByRole('main')).getByRole('link', { name: /^Comprehension/ }).getAttribute('href')).toBe('/comprehension');
     expect(screen.getByText('Hello! I’m Barsik.')).toBeTruthy();
     await navigate('activities');
-    for (const [name, href] of [['Read a story', '/comprehension'], ['Word Jumble', '/word_jumble'], ['Translate a sentence', '/sentences'], ['Writing', '/writing'], ['Lessons', '/lessons'], ['^Speaking', '#speaking']]) {
+    for (const [name, href] of [['Comprehension', '/comprehension'], ['Word Jumble', '/word_jumble'], ['Translate a sentence', '/sentences'], ['Writing', '/writing'], ['Lessons', '/lessons'], ['^Speaking', '#speaking']]) {
       expect(within(screen.getByRole('main')).getByRole('link', { name: new RegExp(name) }).getAttribute('href')).toBe(href);
     }
     expect(screen.getByRole('link', { name: /Open existing Anki/ }).getAttribute('href')).toBe('/');
@@ -152,7 +152,7 @@ describe('Russian Arcade activity home', () => {
     render(<App />);
     await navigate('choose-practice');
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Choose what to practise' }));
-    expect(within(screen.getByRole('main')).getByRole('link', { name: /^Read a story/ }).getAttribute('href')).toBe('/comprehension');
+    expect(within(screen.getByRole('main')).getByRole('link', { name: /^Comprehension/ }).getAttribute('href')).toBe('/comprehension');
     expect(screen.getByRole('link', { name: /^My words Find/ }).getAttribute('href')).toBe('/vocab');
     expect(screen.getByRole('link', { name: 'Home' }).getAttribute('aria-current')).toBe('page');
     expect(fetch.mock.calls.every(([url])=>['/api/v1/progression','/api/v1/first-steps','/api/v1/games'].includes(url))).toBe(true);

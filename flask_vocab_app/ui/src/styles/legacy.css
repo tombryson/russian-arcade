@@ -70,6 +70,11 @@ html { scroll-padding-top: 116px; }
 .arcade-workspace .reading-disclosure > p, .arcade-workspace .reading-disclosure form { padding: 20px 22px; margin: 0; }
 .arcade-workspace .reading-disclosure form { padding-top: 0; max-width: 640px; }
 .arcade-workspace .reading-active:empty { display: none; }
+.arcade-workspace .reading-create-button { display:inline-flex; align-items:center; justify-content:center; gap:10px; }
+.reading-generation-spinner { width:18px; height:18px; flex:none; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:reading-generation-spin .8s linear infinite; }
+.reading-generation-spinner[hidden] { display:none; }
+@keyframes reading-generation-spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion:reduce) { .reading-generation-spinner { animation:none; } }
 .arcade-workspace .reading-story { margin-top: 32px; padding: clamp(20px, 4vw, 40px); border: 1px solid var(--wp-border-subtle); border-radius: 20px; background: var(--wp-surface-sheet); }
 .arcade-workspace .reading-story-heading { margin-bottom: 28px; }
 .arcade-workspace .reading-story-heading p { color: var(--wp-text-secondary); max-width: 65ch; }
