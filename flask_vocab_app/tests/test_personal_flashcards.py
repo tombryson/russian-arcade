@@ -94,6 +94,26 @@ class PersonalFlashcardTests(unittest.TestCase):
         response = self.client.post('/api/v1/card-generation/batches',json={},headers={'X-CSRF-Token':token,'Origin':'https://elsewhere.invalid'})
         self.assertEqual(response.status_code,403)
 
+    def test_hosted_batch_limit_is_advertised_and_enforced_before_saving_work(self):
+        self.app.config.update(HOSTED_AI_TRIAL=True, AI_TRIAL_IDENTITY='github:synthetic')
+        self.assertEqual(self.client.get('/api/v1/card-generation/options').json['max_quantity'], 5)
+        options = {'kind':'ru-cloze','quantity':6}
+        for url, body in (
+            ('/api/v1/card-generation/preview', options),
+            ('/api/v1/card-generation/batches', {'submission_id':'over-limit','options':options}),
+        ):
+            response = self.post(url, body)
+            self.assertEqual(response.status_code, 400, response.json)
+            self.assertIn('1 and 5 cards', response.json['error']['message'])
+        with transaction(self.db) as conn:
+            self.assertEqual(conn.execute('SELECT COUNT(*) FROM native_card_batches').fetchone()[0], 0)
+        self.assertEqual(self.provider.calls, [])
+        self.batch(quantity=5, word_id=None)
+
+    def test_local_generator_keeps_twenty_card_batches(self):
+        self.assertEqual(self.client.get('/api/v1/card-generation/options').json['max_quantity'], 20)
+        self.batch(quantity=20, word_id=None)
+
     def test_generate_saves_ready_cards_and_can_study_immediately_without_approval(self):
         result = self.generate()
         self.assertEqual((result['saved'],result['total'],result['complete']),(1,1,True))

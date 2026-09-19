@@ -189,7 +189,8 @@ class HostedTrialTests(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertIn('<h1>Your account</h1>', page.text)
         self.assertIn('Signed in as sample-user.', page.text)
-        self.assertIn('US$1 per day and US$20 per month', page.text)
+        self.assertIn('Your AI demo allowance is US$1 per day and US$2 in total.', page.text)
+        self.assertIn('All visitors share US$1 per day and US$10 in total.', page.text)
         self.assertIn('action="/trial/sign-out"', page.text)
         self.assertNotIn('href="/trial/sign-in"', page.text)
         token = re.search('name="csrf_token" value="([^"]+)"', page.text)[1]

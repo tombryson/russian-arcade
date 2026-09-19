@@ -436,7 +436,8 @@ class HostedTrialDispatcher:
                     'sign_in_url': '/trial/sign-in', 'account_url': '/trial/account'})
             elif request.path == '/trial/account' and request.method == 'GET':
                 if account:
-                    ai_message = ('The shared AI allowance is US$1 per day and US$20 per month across all visitors.'
+                    ai_message = ('Your AI demo allowance is US$1 per day and US$2 in total. '
+                                  'All visitors share US$1 per day and US$10 in total. Saved practice remains available when an allowance is used.'
                                   if self.ai_enabled else
                                   'AI generation is currently turned off. Your saved practice remains available.')
                     response = self._page('Your account',

@@ -11,6 +11,7 @@ import requests
 from services.elevenlabs_service import ElevenLabsService
 from services.learning_assets import import_asset
 from services.card_metadata import enrich_item
+from services.ai_trial_budget import TrialDenied
 from repositories.card_repository import load_card
 from repositories.learning_repository import LearningError, encoded, identifier, require_access, timestamp, transaction
 
@@ -39,7 +40,7 @@ class NativeMediaProvider:
             response.raise_for_status()
             return response.content
         with tempfile.TemporaryDirectory(prefix='native-audio-') as directory:
-            speech = ElevenLabsService(self.speech.api_key, directory, voice_ids=(spec['voice_id'],), model=spec['model'])
+            speech = ElevenLabsService(self.speech.api_key, directory, voice_ids=(spec['voice_id'],), model=spec['model'], config=self.speech.config)
             result = speech.generate_audio(spec['text'], 'audio.mp3')
             if not result:
                 raise ValueError('No audio returned')
@@ -125,9 +126,12 @@ class CardMediaService:
                     conn.execute("UPDATE native_card_media_jobs SET status='saved',lease_until=0,error=NULL WHERE id=? AND claim_id=?",(job['id'],claim))
             except Exception as error:
                 logger.warning('Native %s failed (%s)',job['kind'],type(error).__name__)
+                message = str(error) if isinstance(error, TrialDenied) else 'Could not create this media. Retry when the provider is available.'
                 with transaction(self.db_path,write=True) as conn:
                     conn.execute("UPDATE native_card_media_jobs SET status='failed',error=?,lease_until=0 WHERE id=? AND claim_id=?",
-                                 ('Could not create this media. Retry when the provider is available.',job['id'],claim))
+                                 (message,job['id'],claim))
+                if isinstance(error, TrialDenied):
+                    raise
         else:
             self.attach(credential,card_id)
         return self.status(credential,card_id)

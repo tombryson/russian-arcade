@@ -10,6 +10,8 @@ from PIL import Image
 from pydub import AudioSegment
 from repositories.learning_repository import LearningError, transaction
 from services.card_media import NativeMediaProvider
+from services.ai_trial_budget import TrialDenied
+from services.elevenlabs_service import ElevenLabsService
 from services.learning_assets import LocalAssetStore
 from tests.support import isolated_app
 from tests.test_personal_flashcards import Provider
@@ -90,6 +92,49 @@ class CardMediaTests(unittest.TestCase):
         self.assertFalse(retry['complete']);self.finish(retry)
         self.assertEqual(len(self.provider.calls),4);self.assertEqual(self.provider.calls[-1],failed);self.assertEqual(len(self.text.calls),1)
         self.assertEqual(self.library()['cards'][0]['id'],card['id'])
+
+    def test_allowance_denial_pauses_media_with_the_actual_limit_message(self):
+        self.generate()
+        card = self.library()['cards'][0]
+        message = 'Your daily AI allowance is used. Saved practice is still available.'
+        with patch.object(self.provider, 'generate', side_effect=TrialDenied(message)):
+            with self.assertRaisesRegex(TrialDenied, 'daily AI allowance'):
+                self.media.advance(self.access, card['id'])
+        jobs = self.media.status(self.access, card['id'])['jobs']
+        failed = [job for job in jobs if job['status'] == 'failed']
+        self.assertEqual(len(failed), 1)
+        self.assertEqual(failed[0]['error'], message)
+
+    def test_worker_audio_preserves_trial_configuration_without_flask_context(self):
+        speech = ElevenLabsService('synthetic-only', '/unused', voice_ids=('test-voice',),
+            config={'HOSTED_AI_TRIAL':True, 'AI_TRIAL_ENABLED':False})
+        provider = NativeMediaProvider(None, speech)
+        spec = {'voice_id':'test-voice', 'model':'eleven_multilingual_v2', 'text':'кофе'}
+        with patch('services.elevenlabs_service.requests.post') as post, ThreadPoolExecutor(max_workers=1) as pool:
+            with self.assertRaisesRegex(TrialDenied, 'paused'):
+                pool.submit(provider.generate, 'word_audio', spec).result()
+        post.assert_not_called()
+
+    def test_allowance_denial_returns_429_and_keeps_saved_text_and_image(self):
+        batch = self.generate()
+        card = self.library()['cards'][0]
+        self.post('/api/v1/card-generation/batches/'+batch['id']+'/next', {})
+        saved_image = self.library()['cards'][0]['assets'][0]['id']
+        message = 'Your daily AI allowance is used. Saved practice is still available.'
+        with patch.object(self.provider, 'generate', side_effect=TrialDenied(message)):
+            for url in ('/api/v1/flashcards/'+card['id']+'/media',
+                        '/api/v1/card-generation/batches/'+batch['id']+'/next'):
+                response = self.client.post(url, json={}, headers={'X-CSRF-Token':self.csrf})
+                self.assertEqual(response.status_code, 429, response.json)
+                self.assertEqual(response.json['error'], {'code':'trial_limit', 'message':message})
+        saved = self.client.get('/api/v1/card-generation/batches/'+batch['id']).json
+        self.assertEqual(saved['saved'], 1)
+        self.assertEqual(self.library()['cards'][0]['assets'][0]['id'], saved_image)
+        self.assertEqual(len(self.text.calls), 1)
+        retry = self.post('/api/v1/card-generation/batches/'+batch['id']+'/retry-media', {})
+        self.finish(retry)
+        self.assertEqual(len(self.text.calls), 1)
+        self.assertEqual(sum(kind=='image' for kind, _ in self.provider.calls), 1)
 
     def test_existing_ungraded_session_gains_media_and_metadata_without_reset(self):
         self.generate(media=False);session=self.start();card=self.library()['cards'][0]

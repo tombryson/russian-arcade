@@ -5,7 +5,7 @@ import { words, type Language, type MediaJob, type LessonSource } from './review
 type Options = { audio: boolean; image: boolean; kind: string; quantity: number; max_cards: number; difficulty?: number; pos?: string; case?: string; topic?: string; word_id?: number };
 type Batch = { first_steps?:{lesson_id?:string;title:string;url:string;study_url:string;reused:number}; id: string; complete: boolean; saved: number; total: number; household: boolean; source?: (LessonSource & {first_page:number; last_page:number; report: {added?:number; reused?:number; requested?:number; surface?:string; reason?:string; page?:number}[]}) | null;
   items: { id: string; word: string; status: string; origin?: string; english?: string; sentence?: string; notes?: string; error?: string; card_version_id?: string; media_jobs?: MediaJob[] }[] };
-type Settings = { topics: string[]; word?: { id: number; lemma: string }; configured: boolean; household: boolean };
+type Settings = { topics: string[]; word?: { id: number; lemma: string }; configured: boolean; household: boolean; max_quantity: number };
 
 export function GenerateCards({ batchId, wordId, language='en' }: { batchId?: string; wordId?: number; language?: Language }) {
   const t=words(language);
@@ -106,8 +106,9 @@ export function GenerateCards({ batchId, wordId, language='en' }: { batchId?: st
           <option value="ru-en">{t('Russian → English','Русский → Английский')}</option>
           <option value="en-ru">{t('English → Russian','Английский → Русский')}</option>
         </select></label>
-        <label>{t('Number of cards','Количество карточек')}<input type="number" min="1" max="20" value={options.quantity} onInput={e => choose('quantity',e.currentTarget.value)} disabled={busy} required /></label>
+        <label>{t('Number of cards','Количество карточек')}<input type="number" min="1" max={settings?.max_quantity ?? 5} value={options.quantity} onInput={e => choose('quantity',e.currentTarget.value)} disabled={busy || !settings} required /></label>
       </div>
+      {settings && settings.max_quantity < 20 && <p class="quiet">{t(`Up to ${settings.max_quantity} cards per demo batch.`, `В демоверсии — до ${settings.max_quantity} карточек за раз.`)}</p>}
       {settings?.word && options.word_id && <p class="selected-vocab"><strong lang="ru">{settings.word.lemma}</strong><button class="text-link" type="button" onClick={() => setOptions(({word_id,...rest}) => rest)}>{t('Use all vocabulary','Весь словарь')}</button></p>}
       <div class="generator-filters">
         <label>{t('Difficulty','Сложность')}<select value={options.difficulty ?? ''} onChange={e => choose('difficulty',e.currentTarget.value)} disabled={busy}><option value="">{t('Any','Любая')}</option>{[1,2,3,4,5,6,7,8].map(n => <option value={n}>{n}{n===1 ? t(' · easiest',' · простая') : ''}</option>)}</select></label>

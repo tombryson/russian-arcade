@@ -2,11 +2,13 @@
 import hashlib
 import json
 import unittest
+from unittest.mock import patch
 
 from repositories.learning_repository import LearningError, encoded, transaction
 from services.first_steps import chapter_content
 from services.journey_vocabulary import cache_source_available, select_examples
 from services.learning_assets import import_asset
+from services.ai_trial_budget import TrialDenied
 from tests import test_first_steps_practice as practice
 
 
@@ -16,6 +18,26 @@ class JourneyGamePracticeTests(unittest.TestCase):
     hello = practice.FirstStepsPracticeTests.hello
     chapter = practice.FirstStepsPracticeTests.chapter
     finish_batch = practice.FirstStepsPracticeTests.finish_batch
+
+    def test_game_media_allowance_denial_returns_429_and_keeps_saved_example(self):
+        candidate = chapter_content()['lessons'][0]['vocabulary'][0]
+        endpoint = self.game(candidates=[candidate])
+        batch = self.post(endpoint, status=201)
+        self.gen.next(self.access, batch['id'])
+        self.gen.next(self.access, batch['id'])
+        saved = self.gen.read(self.access, batch['id'])
+        media = self.app.extensions['learning']['card_media'].provider
+        message = 'Your daily AI allowance is used. Saved practice is still available.'
+        with patch.object(media, 'generate', side_effect=TrialDenied(message)):
+            result = self.post('/api/v1/card-generation/batches/'+batch['id']+'/next', status=429)
+        self.assertEqual(result['error'], {'code':'trial_limit', 'message':message})
+        current = self.gen.read(self.access, batch['id'])
+        self.assertEqual(current['saved'], 1)
+        self.assertEqual(current['items'][0]['sentence'], saved['items'][0]['sentence'])
+        self.assertEqual(current['items'][0]['card_id'], saved['items'][0]['card_id'])
+        self.assertEqual(sum(job['status']=='saved' for job in current['items'][0]['media_jobs']), 1)
+        self.assertEqual(self.post(endpoint, status=201)['id'], batch['id'])
+        self.assertEqual(self.text.calls, [])
 
     def test_delivery_contexts_keep_inflected_forms_in_native_cards(self):
         from services.route_content import build_mission, MISSION_IDS

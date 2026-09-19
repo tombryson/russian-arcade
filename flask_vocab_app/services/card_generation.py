@@ -17,18 +17,22 @@ CASES = {'instr':'ablt', 'prep':'loct'}
 
 
 class CardGenerationService:
-    def __init__(self, db_path, content, provider, *, household=False, media=None, clock=timestamp, vocabulary=None):
+    def __init__(self, db_path, content, provider, *, household=False, media=None, clock=timestamp, vocabulary=None, config=None):
         self.db_path, self.content, self.provider = db_path, content, provider
         self.household, self.clock = household, clock
         self.media = media
         self.vocabulary = vocabulary
+        self.config = config if config is not None else {}
+
+    @property
+    def max_quantity(self):
+        return 5 if self.config.get('HOSTED_AI_TRIAL') else 20
 
     def _owner(self, conn, credential):
         access = require_access(conn, credential, self.clock(), adult=True)
         return 'household' if self.household else access['profile_id']
 
-    @staticmethod
-    def options(data):
+    def options(self, data):
         fields(data, {'kind','quantity'}, {'difficulty','pos','case','topic','word_id','max_cards','audio','image'})
         result = dict(data)
         for name in ("audio", "image"):
@@ -36,9 +40,11 @@ class CardGenerationService:
                 reject("Choose whether to include audio and pictures.")
         if data['kind'] not in ('ru-en','en-ru','ru-cloze'):
             reject('Choose a flashcard type.')
-        for name, maximum, default in (('quantity',20,5),('max_cards',20,1)):
+        for name, maximum, default in (('quantity',self.max_quantity,5),('max_cards',20,1)):
             value = data.get(name,default)
             if type(value) is not int or not 1 <= value <= maximum:
+                if name == 'quantity' and self.config.get('HOSTED_AI_TRIAL'):
+                    reject('Choose between 1 and 5 cards per demo batch.')
                 reject(f'{name.replace("_"," ").capitalize()} must be between 1 and {maximum}.')
             result[name] = value
         for name in ('difficulty','word_id'):

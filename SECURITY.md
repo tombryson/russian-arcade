@@ -12,7 +12,11 @@ The hosted entry point supports these modes:
 
 The anonymous demo limits requests and writes in SQLite. Limits are shared across threads and browser sessions. New profiles have a separate admission limit and an atomic total cap. No IP addresses are stored. These controls bound application work; they do not replace an edge firewall or protect against every denial-of-service attack.
 
-Sample limits reset when its disposable database is recreated. They are not the spending ledger. The optional signed-in trial uses persistent identity and budget stores, with global admission budgets of US$1 per UTC day and US$20 per calendar month. Missing budget storage or unsupported provider operations block new paid work. Lingocoins do not increase this allowance. Live speaking also requires a provider-side spending limit: a server failure can leave a call running beyond its one-minute application timer. The timer and ledger cannot guarantee a daily invoice cap in that case. See the [trial runbook](docs/operations-fly.md#funded-ai-trial) and [initial security review](docs/public-release-and-ai-demo.md).
+Sample limits reset when its disposable database is recreated. They are not the spending ledger. The signed-in trial uses persistent identity and budget stores. Each account has US$1 per UTC day and US$2 total. Shared admission limits are US$1 per UTC day, US$20 per calendar month and US$10 total. Every unsettled reservation counts, including holds from earlier periods. Signing out or clearing cookies does not reset usage.
+
+Each account is limited to 30 provider calls per rolling minute and 120 per UTC day. All paid providers and live voice share these limits. Existing concurrency controls also apply. The standard flashcard generator allows at most five cards per hosted batch. Missing budget storage or unsupported provider operations block new paid work. Lingocoins do not increase the allowance.
+
+Live speaking also requires a provider-side spending limit: a server failure can leave a call running beyond its one-minute application timer. The timer and ledger cannot guarantee an invoice cap in that case. See the [trial runbook](docs/operations-fly.md#funded-ai-trial) and [initial security review](docs/public-release-and-ai-demo.md).
 
 ## Credentials and publication
 

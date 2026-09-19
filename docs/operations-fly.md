@@ -165,19 +165,37 @@ test. Report authentication and AI status separately if only one is activated.
 
 ### Budget and provider limits
 
-The shared admission budgets are **US$1 per UTC day** and **US$20 per UTC calendar month**.
-They apply across all verified accounts and providers. The application reserves
+| Scope | Admission limit |
+|---|---|
+| One verified account | US$1 per UTC day; US$2 for the lifetime of the demo |
+| All accounts and providers | US$1 per UTC day; US$20 per UTC calendar month; US$10 for the lifetime of the demo |
+| Provider calls per account | 30 in a rolling 60-second window; 120 per UTC day |
+| Standard flashcard generator | Five cards per hosted batch; local installations retain twenty |
+
+The tightest applicable limit wins. The US$10 total ceiling currently takes
+precedence over the US$20 monthly ceiling. Limits count historical usage already
+in the ledger; deployment, sign-out, new cookies and calendar changes do not
+replenish a lifetime allowance. Additional funding needs an explicit change to
+the approved total ceiling, not deletion or reinitialisation of spending records.
+
+The application reserves
 an operation's maximum cost before sending it. Reported usage settles that
 reservation; ambiguous failures or missing usage consume the reserved allowance.
 An interrupted process leaves its reservation held until reviewed. An actual
 charge above its reservation is recorded and stops further admission for review.
 
-The initial limits permit one ordinary paid operation per account at a time and
+Concurrency limits permit one ordinary paid operation per account at a time and
 two globally. A live voice reservation can coexist with that account's metered
-delegation call. There are at most 120 provider operations per account per UTC day. These are
-provider operations, not 120 complete activities: a card batch may request text,
+delegation call. Failed calls and zero-cost results also count towards the request
+limits. Exact retries of the same reserved request do not spend or count again.
+These are provider operations, not complete activities: a card batch may request text,
 pictures and several recordings. The shared money limit can stop work sooner.
 Lingocoins and game purchases never increase the AI allowance.
+
+The CLI `status` command reports configured ceilings, remaining shared allowance
+and outstanding reservations without listing account identities. `pause` stops
+new paid work without removing recorded usage. Saved and sample practice remain
+available after a spending or request limit is reached.
 
 `services/trial_provider.py` bounds text, image, translation, transcription and
 speech calls. It uses server-approved models and prices, disables automatic SDK

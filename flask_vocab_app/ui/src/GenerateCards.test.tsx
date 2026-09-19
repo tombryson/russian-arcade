@@ -4,17 +4,29 @@ import { GenerateCards } from './GenerateCards';
 import { App } from './App';
 
 const response=(value:unknown) => Promise.resolve({ok:true,json:async()=>value});
-const settings={configured:true,household:false,topics:['Food']};
+const settings={configured:true,household:false,topics:['Food'],max_quantity:20};
 const pending={id:'batch',saved:0,total:1,complete:false,household:false,items:[{id:'item',word:'кофе',status:'pending'}]};
 const complete={...pending,saved:1,complete:true,items:[{id:'item',word:'кофе',status:'saved',english:'coffee',sentence:'Это кофе.',card_version_id:'version'}]};
 afterEach(()=>vi.unstubAllGlobals());
 
 describe('Automatic flashcard generation',()=>{
+  it('uses the server batch limit for the hosted demo',async()=>{
+    vi.stubGlobal('fetch',vi.fn((url:string)=>response(url.includes('/options')?{...settings,max_quantity:5}:{words:[]})));
+    render(<GenerateCards />);
+    await screen.findByText('Up to 5 cards per demo batch.');
+    const quantity=screen.getByLabelText('Number of cards') as HTMLInputElement;
+    expect(quantity.max).toBe('5');
+    fireEvent.input(quantity,{target:{value:'6'}});
+    expect(quantity.validity.rangeOverflow).toBe(true);
+  });
+
   it('offers the original selection controls without asking the user to author the answer',async()=>{
     const fetch=vi.fn((url:string)=>response(url.includes('/options')?settings:url.endsWith('/batches')?pending:{words:[{word_id:1,form:'кофе'}]}));
     vi.stubGlobal('fetch',fetch);render(<GenerateCards />);
     expect(await screen.findByText('кофе')).toBeTruthy();
     for (const label of ['Card type','Number of cards','Difficulty','Word type','Case','Topic']) expect(screen.getByLabelText(label)).toBeTruthy();
+    expect((screen.getByLabelText('Number of cards') as HTMLInputElement).max).toBe('20');
+    expect(screen.queryByText(/per demo batch/)).toBeNull();
     expect(screen.queryByLabelText('Russian sentence')).toBeNull();
     expect(screen.queryByText(/approve|grown-up|PIN/)).toBeNull();
     fireEvent.click(screen.getByRole('button',{name:/Generate cards/}));

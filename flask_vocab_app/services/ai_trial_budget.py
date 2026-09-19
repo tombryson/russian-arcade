@@ -12,7 +12,11 @@ import time
 
 DAILY_LIMIT = 1_000_000
 MONTHLY_LIMIT = 20_000_000
+TOTAL_LIMIT = 10_000_000
+ACCOUNT_DAILY_LIMIT = 1_000_000
+ACCOUNT_TOTAL_LIMIT = 2_000_000
 ACCOUNT_OPERATIONS_PER_DAY = 120
+ACCOUNT_OPERATIONS_PER_MINUTE = 30
 
 
 class TrialDenied(ValueError):
@@ -44,6 +48,7 @@ class AITrialBudget:
             columns = {row[1] for row in conn.execute('PRAGMA table_info(trial_requests)')}
             if 'lane' not in columns:
                 conn.execute("ALTER TABLE trial_requests ADD COLUMN lane TEXT NOT NULL DEFAULT 'operation' CHECK(lane IN ('operation','voice'))")
+            conn.execute('CREATE INDEX IF NOT EXISTS trial_requests_account_created ON trial_requests(identity,created_at)')
 
     @contextmanager
     def _transaction(self):
@@ -102,9 +107,24 @@ class AITrialBudget:
             if len(pending) >= 2 or any(row['identity'] == identity and row['lane'] == lane for row in pending):
                 raise TrialDenied('Please wait for the current AI request to finish.')
             if conn.execute('SELECT COUNT(*) FROM trial_requests WHERE identity=? AND created_at>=?', (identity, day)).fetchone()[0] >= ACCOUNT_OPERATIONS_PER_DAY:
-                raise TrialDenied('Your daily trial allowance is used.')
+                raise TrialDenied('You have used today’s AI allowance. Your saved practice is still available.')
+            if conn.execute('SELECT COUNT(*) FROM trial_requests WHERE identity=? AND created_at>?', (identity, now - 60)).fetchone()[0] >= ACCOUNT_OPERATIONS_PER_MINUTE:
+                raise TrialDenied('Please wait a minute before requesting more AI help. Your saved practice is still available.')
             # Reservations from earlier periods still count until reconciled.
             held = sum(row['reserved'] for row in pending)
+            account_held = sum(row['reserved'] for row in pending if row['identity'] == identity)
+            account_spent = conn.execute("""
+                SELECT COALESCE(SUM(actual),0) AS total,
+                       COALESCE(SUM(CASE WHEN settled_at>=? THEN actual ELSE 0 END),0) AS today
+                FROM trial_requests WHERE identity=? AND state='settled'
+            """, (day, identity)).fetchone()
+            if account_spent['today'] + account_held + maximum_cost > ACCOUNT_DAILY_LIMIT:
+                raise TrialDenied('You have used today’s AI allowance. Your saved practice is still available.')
+            if account_spent['total'] + account_held + maximum_cost > ACCOUNT_TOTAL_LIMIT:
+                raise TrialDenied('You have used your AI demo allowance. Your saved practice is still available.')
+            total_spent = conn.execute("SELECT COALESCE(SUM(actual),0) FROM trial_requests WHERE state='settled'").fetchone()[0]
+            if total_spent + held + maximum_cost > TOTAL_LIMIT:
+                raise TrialDenied('The shared AI demo allowance is used. Your saved practice is still available.')
             for start, limit in ((day, DAILY_LIMIT), (month, MONTHLY_LIMIT)):
                 spent = conn.execute("SELECT COALESCE(SUM(actual),0) FROM trial_requests WHERE state='settled' AND settled_at>=?", (start,)).fetchone()[0]
                 if spent + held + maximum_cost > limit:

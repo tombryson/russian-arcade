@@ -52,7 +52,8 @@ def create_card_generation_blueprint(generator, authoring):
             topics = sorted({row[0] for row in conn.execute("SELECT DISTINCT j.value FROM words w, json_each(CASE WHEN json_valid(w.topic) THEN w.topic ELSE '[]' END) j WHERE j.type='text' AND json_type(CASE WHEN json_valid(w.topic) THEN w.topic ELSE '[]' END)='array'")})
             selected = conn.execute('SELECT id,lemma FROM words WHERE id=?',(request.args.get('word_id'),)).fetchone()
         return jsonify(topics=topics,word=dict(selected) if selected else None,
-                       configured=bool(current_app.config['OPENAI_API_KEY']),household=current_app.config['WORD_POST_HOUSEHOLD_ENABLED'])
+                       configured=bool(current_app.config['OPENAI_API_KEY']),household=current_app.config['WORD_POST_HOUSEHOLD_ENABLED'],
+                       max_quantity=generator.max_quantity)
 
     @bp.post('/api/v1/card-generation/preview')
     @access_policy('adult')

@@ -134,14 +134,18 @@ limits. Profile creation has an atomic cap. Hosted HTTPS responses include HSTS.
 These controls do not enable paid providers.
 
 `services/ai_trial_budget.py` provides the separate spending ledger. It defaults
-to disabled and uses integer microdollars. The US$1 daily and US$20 monthly
-admission budgets apply globally. Reservations are atomic and idempotent. The initial allowance is
-120 provider operations per account per day, with one ordinary operation per
+to disabled and uses integer microdollars. Shared admission budgets are US$1 daily,
+US$20 monthly and US$10 total. Each account has US$1 daily and US$2 total.
+Reservations are atomic and idempotent. The current allowance is 30 provider
+operations per rolling minute and 120 per account per day, with one ordinary operation per
 account and two in total. A voice reservation permits that account's metered
 delegation call alongside it. One activity can require several operations. Pending charges remain
 reserved across date changes and process restarts.
 Missing storage blocks admission. An underestimated charge is recorded and
 halts further admissions for review.
+The standard flashcard generator limits hosted batches to five cards, including
+their pictures and recordings. Local installations retain the existing batch size. The runbook
+documents current limits; earlier tables in this review record the initial proposal.
 
 The hosted trial adds GitHub OAuth with state and PKCE, an independent workspace
 for each verified identity, and provider adapters that reserve spend before

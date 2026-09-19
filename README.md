@@ -201,7 +201,11 @@ Sample mode uses synthetic data and makes no paid AI calls. Its cards demonstrat
 
 When the hosted AI trial is enabled, **GitHub sign-in** opens a separate, persistent workspace for that account. It supports the application's AI activities, including content generation, card media, lesson uploads and speaking, within provider and budget limits. Sign-in requests no repository access. A visitor cannot select another visitor's local learning profile.
 
-The funded trial shares a **US$1 daily and US$20 monthly** admission budget across all accounts. The server reserves costs before provider calls, limits simultaneous work and rejects unsupported operations. Pictures, speech, transcription and assessment all consume that allowance. A single activity may require several calls. Lingocoins buy games; they do not buy AI credits or increase this budget. Live calls close after one minute, but a server failure can prevent that close; a provider-side spending limit is also required. See [hosted trial operation](docs/operations-fly.md#funded-ai-trial) for prerequisites and limits.
+Each account can use **US$1 per day and US$2 in total** of funded AI. All visitors share a **US$1 daily and US$10 total** budget. The existing US$20 monthly ceiling also remains in place. Usage is tied to a verified account, so signing out or clearing cookies does not reset it.
+
+The server reserves costs before provider calls and limits each account to 30 calls per rolling minute and 120 per day. The standard flashcard generator allows at most five cards per hosted batch. Pictures, speech, transcription and assessment all count; one activity may need several calls. Saved practice remains available after the allowance runs out. Lingocoins do not buy AI credits.
+
+Live calls close after one minute, but a server failure can prevent that close; a provider-side spending limit is also required. See [hosted trial operation](docs/operations-fly.md#funded-ai-trial) for the controls and their limits.
 
 The application is under active development, with local individual and household use as its main deployment model. Current limits include:
 

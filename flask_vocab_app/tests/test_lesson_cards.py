@@ -7,6 +7,7 @@ from unittest.mock import patch
 from repositories.learning_repository import LearningError, transaction
 from services.card_metadata import GRAMMAR
 from services.lesson_ai import LessonClozes
+from services.ai_trial_budget import TrialDenied
 from tests.support import isolated_app
 from tests.test_lessons import FakeAI, picture
 from tests.test_card_media import MediaProvider
@@ -91,6 +92,26 @@ class LessonCardTests(unittest.TestCase):
         self.assertEqual(review['item']['cue_en'],'cities')
         self.assertEqual({a['kind'] for a in review['item']['assets']},{'image'})
         self.assertEqual(review['lesson']['lesson_id'],self.lid)
+
+    def test_lesson_media_allowance_denial_returns_429_without_losing_source_work(self):
+        prepared = self.prepare()
+        bid = prepared['batch_id']
+        self.gen.next(self.access, bid)
+        self.gen.next(self.access, bid)
+        card = self.library()['cards'][0]
+        message = 'Your daily AI allowance is used. Saved practice is still available.'
+        with patch.object(self.media, 'generate', side_effect=TrialDenied(message)):
+            response = self.client.post('/api/v1/card-generation/batches/'+bid+'/next', json={},
+                                        headers={'X-CSRF-Token':self.csrf})
+        self.assertEqual(response.status_code, 429, response.json)
+        self.assertEqual(response.json['error']['message'], message)
+        self.assertEqual(self.cards.read(self.access, prepared['id'], self.lid)['state'], 'ready')
+        saved = self.library()['cards'][0]
+        self.assertEqual(saved['id'], card['id'])
+        self.assertEqual(saved['assets'], card['assets'])
+        self.assertEqual(saved['sources'], card['sources'])
+        self.assertEqual(self.ai.card_calls, 1)
+        self.assertEqual(self.text.calls, [])
 
     def test_repeated_selection_and_revision_reuse_card_and_schedule(self):
         first=self.prepare(); self.finish(first['batch_id'])

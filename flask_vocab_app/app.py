@@ -236,7 +236,7 @@ def create_app(config_overrides=None, service_overrides=None):
     app.extensions['learning']['route_preparation'] = RoutePreparationService(db_path, asset_store, openai_service, speech, app.config)
     card_media.shared_audio = game_media
     app.register_blueprint(create_journey_game_media_blueprint(game_media))
-    generator = CardGenerationService(db_path, content, openai_service, media=card_media, household=app.config['WORD_POST_HOUSEHOLD_ENABLED'], vocabulary=sync_service)
+    generator = CardGenerationService(db_path, content, openai_service, media=card_media, household=app.config['WORD_POST_HOUSEHOLD_ENABLED'], vocabulary=sync_service, config=app.config)
     app.extensions['learning']['generator'] = generator
     app.register_blueprint(create_card_generation_blueprint(generator, authoring))
     app.register_blueprint(create_flashcards_blueprint(db_path, flashcard_service, user_service))
