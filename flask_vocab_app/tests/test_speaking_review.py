@@ -113,20 +113,20 @@ class SpeakingReviewTests(unittest.TestCase):
 
     def test_archiving_during_assessment_keeps_the_paid_report_without_awarding_or_retrying(self):
         value=self.post('',{'submission_id':'archive-during-review','scenario_id':'cafe',
-                           'scenario_seed':'cafe-warm-drink-v1','target_level':'A1'}).json
+                           'scenario_seed':'cafe-a1-warm-lunch-v2','target_level':'A1'}).json
         sid=value['id'];self.record(sid)
         report={
             'basis':'audio_review','rubric_version':'speaking-audio-v1','model':'test-audio',
-            'transcript':'Мне чай без сахара, пожалуйста. Сколько стоит мой чай? Спасибо, больше ничего.',
+            'transcript':'Можно суп и чай, пожалуйста? Я буду есть здесь. Сколько всего? Спасибо, больше ничего.',
             'speech_status':'russian','uncertain_phrases':[],
-            'grammar':{'score':5,'reason':'Your requests were clear and accurate.','evidence':['Мне чай без сахара, пожалуйста.']},
-            'fluency':{'score':4,'reason':'You kept your requests moving.','evidence':['Сколько стоит мой чай?']},
+            'grammar':{'score':5,'reason':'Your requests were clear and accurate.','evidence':['Можно суп и чай, пожалуйста?']},
+            'fluency':{'score':4,'reason':'You kept your requests moving.','evidence':['Сколько всего?']},
             'goals':[
-                {'id':'hot_drink','status':'completed','evidence':['Мне чай без сахара, пожалуйста.']},
-                {'id':'no_sugar','status':'completed','evidence':['без сахара']},
-                {'id':'price','status':'completed','evidence':['Сколько стоит мой чай?']},
+                {'id':'objective-1','status':'completed','evidence':['Можно суп и чай, пожалуйста?']},
+                {'id':'objective-2','status':'completed','evidence':['Я буду есть здесь.']},
+                {'id':'objective-3','status':'completed','evidence':['Сколько всего?']},
             ],
-            'summary':'You ordered tea without sugar and asked the price.',
+            'summary':'You ordered soup and tea, chose to eat inside and asked the total.',
             'next_step':'Try ordering for a friend next time.','corrections':[],'uncertainty':'',
         }
         def finish_after_archive(*args):

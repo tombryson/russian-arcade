@@ -17,6 +17,10 @@ from tests.test_hosted_trial import IdentityProvider
 
 class HostedTrialIntegrationTests(unittest.TestCase):
     def setUp(self):
+        # Account-isolation assertions must not depend on the developer's disk.
+        disk = patch('hosted_trial.shutil.disk_usage')
+        disk.start().return_value.free = 1024 * 1024 * 1024
+        self.addCleanup(disk.stop)
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name).resolve()

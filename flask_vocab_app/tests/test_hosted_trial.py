@@ -34,6 +34,11 @@ class IdentityProvider:
 
 class HostedTrialTests(unittest.TestCase):
     def setUp(self):
+        # Host free space is not the condition under test; the admission test
+        # below supplies its own low-space reading explicitly.
+        disk = patch('hosted_trial.shutil.disk_usage')
+        disk.start().return_value.free = 1024 * 1024 * 1024
+        self.addCleanup(disk.stop)
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name).resolve()
