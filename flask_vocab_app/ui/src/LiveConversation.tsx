@@ -310,6 +310,7 @@ export function LiveConversation({sessionId,language='en',initialScenarioId,init
       ? t('Speak naturally using your microphone.','Говорите свободно в микрофон.')
       : t('Pause after each line for reply choices and hints.','Пауза после каждой реплики: варианты ответа и подсказки.')}</p>
   </fieldset>;
+  const scenarioRefreshLabel = changingScenario ? t('Finding a situation…','Выбираем ситуацию…') : options ? t('Another situation','Другая ситуация') : t('Try loading the situation again','Загрузить ситуацию ещё раз');
   const content = <>
     {showCatalogue ? <ActivityHeader title={t('Speaking','Разговорная практика')} description={t('Choose a scenario and practise speaking Russian.','Выберите ситуацию и практикуйте разговорный русский.')} headingRef={heading} headingTabIndex={-1} /> : <nav class="speaking-task-nav" aria-label={t('Speaking','Разговорная практика')}>
       {state==='idle' ? <button class="text-link" disabled={preparingStep} onClick={()=>newConversation()}>{t('← All scenarios','← Все ситуации')}</button>
@@ -351,7 +352,11 @@ export function LiveConversation({sessionId,language='en',initialScenarioId,init
           {state==='idle' && practiceMode==='step' && scenario?.seed && !changingScenario && <StepThroughConversation key={`${selectedScenarioId}:${scenario.seed}:${level}`} embeddedSetup scenarioId={selectedScenarioId} scenarioSeed={scenario.seed} targetLevel={level} language={language} onPreparingChange={setPreparingStep} onReloadScenario={()=>void refreshScenario(true)} />}
           {state === 'idle' && <div class={`action-row${practiceMode==='step' ? ' speaking-step-secondary' : ''}`}>
             {practiceMode==='fluent' && <button class="cta" disabled={!fluentReady || starting.current} onClick={start}>{t('Start talking','Начать разговор')} <span aria-hidden="true">↗</span></button>}
-            <button class="text-link" disabled={changingScenario || preparingStep} onClick={()=>void refreshScenario(!!options)}>{changingScenario ? t('Finding a situation…','Выбираем ситуацию…') : options ? t('Another situation','Другая ситуация') : t('Try loading the situation again','Загрузить ситуацию ещё раз')}</button>
+            <button type="button" class="live-refresh" aria-label={scenarioRefreshLabel} title={scenarioRefreshLabel} aria-busy={changingScenario} disabled={changingScenario || preparingStep} onClick={()=>void refreshScenario(!!options)}>
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <path d="M16.023 9.348h4.992m0 0V4.356m0 4.992-3.181-3.182a8.25 8.25 0 0 0-13.803 3.7M7.977 14.652H2.985m0 0v4.992m0-4.992 3.181 3.182a8.25 8.25 0 0 0 13.803-3.7" />
+              </svg>
+            </button>
           </div>}
           {active && <>
             <p class="live-status" role="status"><span class={state==='listening' && !muted ? 'live-dot' : 'live-dot muted'} />{state==='connecting' ? t('Connecting…','Соединяем…') : state==='ending' ? t('Ending the call…','Завершаем разговор…') : muted ? t('Microphone muted','Микрофон выключен') : t('The conversation is live','Разговор начался')} <span>{Math.floor(seconds/60)}:{String(seconds%60).padStart(2,'0')}</span></p>

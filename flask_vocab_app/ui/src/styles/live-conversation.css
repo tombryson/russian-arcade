@@ -40,6 +40,11 @@
 .live-controls { margin-top:20px; }
 .live-controls>.quiet { margin-top:16px; }
 .live-controls .action-row { margin-top:0; display:flex; flex-wrap:wrap; gap:12px; }
+.live-refresh { display:inline-flex; align-items:center; justify-content:center; align-self:center; flex:0 0 44px; width:44px; height:44px; padding:0; border:0; border-radius:8px; background:transparent; color:var(--wp-text-primary); }
+.live-refresh:not(:disabled):hover { background:var(--wp-surface-sheet); }
+.live-refresh[aria-busy="true"] svg { animation:live-refresh-spin 1s linear infinite; }
+@keyframes live-refresh-spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion:reduce) { .live-refresh[aria-busy="true"] svg { animation:none; } }
 .live-status { display:flex; align-items:center; flex-wrap:wrap; gap:10px; font-size:14px; margin-bottom:20px; }
 .live-status>span:last-child { font-variant-numeric:tabular-nums; color:var(--wp-text-secondary); }
 .live-dot { width:9px; height:9px; border-radius:50%; background:#367456; box-shadow:0 0 0 5px #36745618; }
