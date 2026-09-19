@@ -158,7 +158,6 @@ UI_TRANSLATIONS = {
     "writing.word_count": {"en": "Words", "ru": "Слов"},
     "writing.original": {"en": "Read the task in Russian", "ru": "Прочитать задание на русском"},
     "writing.word_help": {"en": "Tap to insert a word. Change its ending to fit your sentence.", "ru": "Нажмите, чтобы вставить слово. Меняйте окончания, чтобы слова подходили друг к другу."},
-    "writing.target_help": {"en": "This is a guide, not a minimum. You can check a shorter draft.", "ru": "Это ориентир, а не минимум. Можно проверить и более короткий текст."},
     "writing.check": {"en": "Check writing", "ru": "Проверить текст"},
     "writing.check_help": {"en": "AI gives feedback and saves this version. Save draft works without a check.", "ru": "ИИ даст отзыв и сохранит эту версию. Черновик можно сохранить без проверки."},
     "writing.checking": {"en": "Reading your writing…", "ru": "Проверяем ваш текст…"},
