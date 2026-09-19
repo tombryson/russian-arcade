@@ -3,6 +3,8 @@ import { act, fireEvent, render, screen, within } from '@testing-library/preact'
 import { LiveConversation } from './LiveConversation';
 import { LiveConnection, captionRows, type Caption } from './live-connection';
 
+vi.mock('./step-audio-player',()=>({primeStepAudio:vi.fn(),playStepAudio:vi.fn().mockResolvedValue(undefined),stopStepAudio:vi.fn()}));
+
 const options={configured:true,notes_configured:true,max_seconds:300,sessions:[]};
 const catalogue={activity:{id:'speaking',title:'Speaking',title_ru:'Разговорная практика'},scenarios:[
   {id:'cafe',title:'At the café',title_ru:'В кафе',description:'Order something to eat and drink.',description_ru:'Закажите еду и напитки.',role:'Café worker',role_ru:'Сотрудник кафе',icon:'☕',sign:'КАФЕ',variant_count:8},

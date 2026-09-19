@@ -1,4 +1,4 @@
-"""Durable guided dialogues. Reads are free; explicit preparation/audio is metered."""
+"""Durable guided dialogues with cached speech prepared at each conversation step."""
 import json
 from pathlib import Path
 import random
@@ -107,7 +107,8 @@ class StepConversationService:
                     (sid, profile['id'], key, request_hash, scenario_id, scenario['seed'], encoded(scenario),
                      scenario.get('target_level'), language, random.choice(voices), 'preparing', timestamp()))
         if created:
-            self._prepare(access, sid)
+            if self._prepare(access, sid):
+                return self._prepare_current_audio(access, sid)
         return self.read(access, sid)
 
     def _prepare(self, access, sid):
@@ -120,7 +121,7 @@ class StepConversationService:
                 raise LearningError('busy', 'Other dialogues are being prepared. Please retry shortly.', 409)
             self.preparing.add(sid)
         try:
-            self._generate(access, sid)
+            return self._generate(access, sid)
         finally:
             with self.preparation_lock:
                 self.preparing.discard(sid)
@@ -146,8 +147,9 @@ class StepConversationService:
                 random.SystemRandom().shuffle(options)
                 turn['options'] = options
             with transaction(self.db_path, write=True) as conn:
-                conn.execute("UPDATE step_conversation_sessions SET dialogue_json=?,state='active',lease_until=0,preparation_id=NULL,error=NULL "
+                published = conn.execute("UPDATE step_conversation_sessions SET dialogue_json=?,state='active',lease_until=0,preparation_id=NULL,error=NULL "
                              'WHERE id=? AND preparation_id=? AND dialogue_json IS NULL', (encoded(dialogue), sid, attempt))
+                return published.rowcount == 1
         except Exception as error:
             message = str(error) if isinstance(error, (SpeechError, TrialDenied)) else 'The dialogue could not be prepared. Please retry.'
             with transaction(self.db_path, write=True) as conn:
@@ -161,7 +163,8 @@ class StepConversationService:
             saved = self._owned(conn, access, sid)
             if saved['state'] not in ('failed', 'preparing'):
                 return self._project(saved)
-        self._prepare(access, sid)
+        if self._prepare(access, sid):
+            return self._prepare_current_audio(access, sid)
         return self.read(access, sid)
 
     def read(self, access, sid):
@@ -195,9 +198,12 @@ class StepConversationService:
                     'options': [{key: item[key] for key in ('id', 'russian')} for item in turn['options']],
                     'hint': turn['hint'] if state.get('hint_used') else None, 'answered': bool(state.get('answered')),
                     'feedback': state.get('feedback'), 'npc_audio_url': self._url(saved['id'], turn['id'], 'npc'),
+                    'npc_audio_error': state.get('audio_errors', {}).get('npc'),
                     'reply_audio_url': self._url(saved['id'], turn['id'], 'reply') if state.get('answered') else None}
         if saved['state'] == 'completed':
             result['ending'] = dialogue['ending']
+            result['ending_audio_url'] = self._url(saved['id'], 'ending', 'ending')
+            result['ending_audio_error'] = progress.get('ending', {}).get('audio_errors', {}).get('ending')
         return result
 
     def _current(self, saved, turn_id):
@@ -261,13 +267,51 @@ class StepConversationService:
                     target_level=saved['target_level'], evidence={'basis': 'guided_step_completion', 'turn_count': len(dialogue['turns'])})
             conn.execute('UPDATE step_conversation_sessions SET current_index=?,state=?,reward_amount=?,completed_at=? WHERE id=?',
                          (saved['current_index'], saved['state'], saved['reward_amount'], timestamp() if saved['state'] == 'completed' else None, sid))
-            return self._project(saved)
+        # Commit the answer and advancement before requesting speech. A provider
+        # failure must never undo a learner's progress or completion reward.
+        return self._prepare_current_audio(access, sid)
+
+    def _prepare_current_audio(self, access, sid):
+        """Called only by a new explicit transition, never a read or replay."""
+        state = self.read(access, sid)
+        if not state['audio_configured']:
+            return state
+        if state['state'] == 'active':
+            tid, kind = state['current_turn']['id'], 'npc'
+        elif state['state'] == 'completed':
+            tid, kind = 'ending', 'ending'
+        else:
+            return state
+        try:
+            return self.prepare_audio(access, sid, {'turn_id': tid, 'kind': kind})
+        except Exception as error:
+            # Save a recoverable problem instead of making the client repeat a
+            # paid request automatically after receiving the dialogue.
+            message = str(error) if isinstance(error, (LearningError, SpeechError, TrialDenied)) else (
+                'Audio could not be prepared. Try Listen again.')
+            self._audio_error(access, sid, tid, kind, message)
+            return self.read(access, sid)
+
+    def _audio_error(self, access, sid, tid, kind, message):
+        with transaction(self.db_path, write=True) as conn:
+            saved = self._owned(conn, access, sid)
+            progress = json.loads(saved['progress_json'])
+            errors = progress.setdefault(tid, {}).setdefault('audio_errors', {})
+            if message:
+                errors[kind] = message
+            else:
+                errors.pop(kind, None)
+            conn.execute('UPDATE step_conversation_sessions SET progress_json=? WHERE id=?', (encoded(progress), sid))
 
     def _audio_turn(self, saved, tid, kind):
-        if kind not in ('npc', 'reply'):
-            raise LearningError('invalid_input', 'Choose NPC or reply playback.')
+        if kind not in ('npc', 'reply', 'ending'):
+            raise LearningError('invalid_input', 'Choose a line from this conversation.')
         dialogue = json.loads(saved['dialogue_json']) if saved['dialogue_json'] else None
         if dialogue:
+            if kind == 'ending':
+                if tid == 'ending' and saved['state'] == 'completed':
+                    return dialogue['ending']['russian']
+                raise LearningError('not_found', 'This line is not available for playback.', 404)
             progress = json.loads(saved['progress_json'])
             for index, turn in enumerate(dialogue['turns']):
                 if turn['id'] == tid and index <= saved['current_index']:
@@ -284,6 +328,8 @@ class StepConversationService:
             text = self._audio_turn(saved, tid, kind)
         target = self._path(saved['id'], tid, kind)
         if target.is_file():
+            if json.loads(saved['progress_json']).get(tid, {}).get('audio_errors', {}).get(kind):
+                self._audio_error(access, sid, tid, kind, None)
             return self.read(access, sid)
         if not self.audio_lock.acquire(blocking=False):
             raise LearningError('busy', 'Speech playback is being prepared. Please wait a moment and retry.', 409)
@@ -302,6 +348,7 @@ class StepConversationService:
                 temporary.replace(target)
         finally:
             self.audio_lock.release()
+        self._audio_error(access, sid, tid, kind, None)
         return self.read(access, sid)
 
     def audio(self, access, sid, tid, kind):

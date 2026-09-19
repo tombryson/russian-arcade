@@ -161,10 +161,12 @@ class StepConversationTests(unittest.TestCase):
                 self.assertEqual(json.loads(row['evidence_json'])['basis'], 'guided_step_completion')
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM progression_events WHERE activity='speaking'").fetchone()[0], 0)
 
-    def test_audio_only_explicit_owned_visible_and_cached(self):
+    def test_start_prepares_only_opening_audio_and_playback_is_owned_and_cached(self):
         state = self.start()
         sid, tid = state['id'], state['current_turn']['id']
-        self.assertEqual(self.speech.voices, [])
+        self.assertEqual(len(self.speech.voices), 1)
+        self.assertTrue(state['current_turn']['npc_audio_url'])
+        self.assertIsNone(state['current_turn']['npc_audio_error'])
         self.assertEqual(self.post('/' + sid + '/audio', {'turn_id': tid, 'kind': 'reply'}).status_code, 404)
         raw = json.loads(self.saved(sid)['dialogue_json'])
         self.assertEqual(self.post('/' + sid + '/audio', {'turn_id': raw['turns'][1]['id'], 'kind': 'npc'}).status_code, 404)
@@ -172,13 +174,79 @@ class StepConversationTests(unittest.TestCase):
         self.assertEqual(result.status_code, 200, result.text)
         url = result.json['current_turn']['npc_audio_url']
         self.assertTrue(url)
-        self.assertEqual(self.client.get(url).status_code, 200)
+        audio = self.client.get(url)
+        self.addCleanup(audio.close)
+        self.assertEqual(audio.status_code, 200)
         self.post('/' + sid + '/audio', {'turn_id': tid, 'kind': 'npc'})
         self.assertEqual(len(self.speech.voices), 1)
         self.post('/' + sid + '/answer', {'submission_id': 'correct', 'turn_id': tid, 'option_id': self.choice(state)})
         reply = self.post('/' + sid + '/audio', {'turn_id': tid, 'kind': 'reply'})
         self.assertTrue(reply.json['current_turn']['reply_audio_url'])
         self.assertEqual(len(self.speech.voices), 2)
+
+    def test_each_advance_prepares_only_new_speaker_line_and_final_farewell(self):
+        self.speech.speak = Mock(wraps=self.speech.speak)
+        state = self.start()
+        sid = state['id']
+        raw = json.loads(self.saved(sid)['dialogue_json'])
+        self.assertEqual(self.speech.speak.call_args.args[0], raw['turns'][0]['npc']['russian'])
+        self.assertEqual(self.post('/' + sid + '/audio', {'turn_id': 'ending', 'kind': 'ending'}).status_code, 404)
+        finished = self.complete(state)
+        self.assertEqual([call.args[0] for call in self.speech.speak.call_args_list],
+                         [turn['npc']['russian'] for turn in raw['turns']] + [raw['ending']['russian']])
+        self.assertTrue(finished['ending_audio_url'])
+        self.assertIsNone(finished['ending_audio_error'])
+        played = self.client.get(finished['ending_audio_url'])
+        self.addCleanup(played.close)
+        self.assertEqual(played.status_code, 200)
+        self.assertEqual(played.data, b'test-only-mp3')
+        for _ in range(2):
+            self.client.get(self.base + '/' + sid)
+            self.post('/' + sid + '/next', {'turn_id': finished['transcript'][-1]['id']})
+            self.post('/' + sid + '/audio', {'turn_id': 'ending', 'kind': 'ending'})
+        self.assertEqual(self.speech.speak.call_count, len(raw['turns']) + 1)
+
+    def test_automatic_audio_failure_keeps_dialogue_and_waits_for_explicit_retry(self):
+        self.speech.speak = Mock(side_effect=SpeechError('Playback is temporarily unavailable.'))
+        state = self.start()
+        sid, tid = state['id'], state['current_turn']['id']
+        self.assertIsNone(state['current_turn']['npc_audio_url'])
+        self.assertEqual(state['current_turn']['npc_audio_error'], 'Playback is temporarily unavailable.')
+        for _ in range(2):
+            self.client.get(self.base + '/' + sid)
+            self.client.get(self.base + '/history')
+            self.start()
+            self.post('/' + sid + '/retry')
+        self.speech.speak.assert_called_once()
+        self.speech.speak.side_effect = None
+        self.speech.speak.return_value = b'test-only-mp3'
+        ready = self.post('/' + sid + '/audio', {'turn_id': tid, 'kind': 'npc'}).json
+        self.assertTrue(ready['current_turn']['npc_audio_url'])
+        self.assertIsNone(ready['current_turn']['npc_audio_error'])
+        self.assertEqual(self.speech.speak.call_count, 2)
+
+    def test_audio_allowance_failure_does_not_lose_advance_or_completion_reward(self):
+        state = self.start()
+        sid = state['id']
+        self.speech.speak = Mock(side_effect=TrialDenied('Allowance used.'))
+        finished = self.complete(state)
+        self.assertEqual(finished['state'], 'completed')
+        self.assertEqual(finished['reward']['amount'], 3)
+        self.assertEqual(finished['ending_audio_error'], 'Allowance used.')
+        self.assertIsNone(finished['ending_audio_url'])
+        # One attempt per new line; completed GETs and request replays never retry.
+        self.assertEqual(self.speech.speak.call_count, finished['completed_turns'])
+        self.client.get(self.base + '/' + sid)
+        self.post('/' + sid + '/next', {'turn_id': finished['transcript'][-1]['id']})
+        self.assertEqual(self.speech.speak.call_count, finished['completed_turns'])
+
+    def test_text_dialogue_still_works_without_speech_configuration(self):
+        self.app.config['ELEVENLABS_API_KEY'] = ''
+        state = self.start()
+        self.assertFalse(state['audio_configured'])
+        self.assertIsNone(state['current_turn']['npc_audio_url'])
+        self.complete(state)
+        self.assertEqual(self.speech.voices, [])
 
     def test_failed_generation_retries_only_explicitly_and_trial_denials_remain_429(self):
         self.ai.step_dialogue.side_effect = SpeechError('The step-through dialogue could not be prepared.')

@@ -9,7 +9,7 @@ the situation and level. Saved conversations keep their original mode.
 | Mode | Learner action | Feedback |
 |---|---|---|
 | Fluent conversation | Speak freely through the microphone. | The existing audio review assesses grammar, fluency and task completion. |
-| Step-through | Read or listen to one line, then choose a Russian reply. | A short explanation shows how the reply fits the situation. Hints are optional. |
+| Step-through | Listen to the character, then choose a Russian reply. | A short explanation shows how the reply fits the situation. Hints are optional. |
 
 Step-through teaches what to say before asking the learner to produce it freely.
 Choosing a written reply is not evidence of spoken fluency or pronunciation.
@@ -19,16 +19,19 @@ The microphone is not required for this mode. Learners can say each reply aloud.
 
 1. Open Speaking, choose a scenario under its level, then select **Step-through** in its setup screen.
 2. Read the situation and start the conversation. Opening a preview does not generate content.
-3. Read the character's Russian line. Listen to it when audio is available.
+3. The character's Russian line plays automatically. Its text remains visible.
 4. Follow the short task and choose one of three Russian replies.
 5. Check the reply. A wrong choice gets a specific explanation and another attempt.
-6. After a correct reply, read the translation or listen to it, then continue.
-7. Finish with the character's farewell and a short result. Saved conversations remain available in history.
+6. A correct reply advances to the character's next spoken line. There is no separate Continue action.
+7. The character says goodbye after the last reply. A short result follows, and the conversation stays in history.
 
 The current exchange stays central. Earlier exchanges are secondary. The learner
 does not have to scroll through the whole transcript to reach each new question.
 Hints start closed and reset for every turn. An English interface gives English
 instructions and explanations; the dialogue and reply choices stay in Russian.
+Replay and pause remain available. Viewing a hint or checking a wrong answer does
+not restart the character's recording. A browser that blocks automatic playback
+gets a visible Listen action; playback failure does not discard the conversation.
 
 ## Reply design
 
@@ -81,8 +84,14 @@ Generation uses the configured conversation model through the existing provider
 wrapper. Audio uses the existing speech provider. Hosted requests remain subject
 to the AI switch and spending limits; account sign-in alone does not enable AI.
 
-Audio is generated on request and cached in `step-conversation-audio/` beside the
-database. Learning backups include these files and their checksums under
+Start, retry and advance requests prepare the current character's recording before
+returning the exchange. The last advance prepares the farewell. Future recordings
+are not generated in bulk. Existing sessions can prepare a missing recording when
+resumed. Failed audio preparation offers an explicit retry instead of repeatedly
+calling the provider. Reopening a completed conversation does not autoplay it.
+
+Audio is cached in `step-conversation-audio/` beside the database. Learning backups
+include these files and their checksums under
 `step_conversation_audio`. Restore the directory beside the restored database.
 
 ## Rewards

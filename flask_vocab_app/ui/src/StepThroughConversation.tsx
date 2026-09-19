@@ -3,6 +3,7 @@ import { api, ApiError } from './learning-api';
 import { ActivityHeader } from './ActivityHeader';
 import type { Language } from './review-types';
 import type { PracticeLevel } from './Progression';
+import { playStepAudio, primeStepAudio, stopStepAudio } from './step-audio-player';
 import './styles/step-through-conversation.css';
 
 type Localized = {en:string;ru:string};
@@ -12,16 +13,18 @@ type Step = {
   id:string;ordinal:number;npc:Line;intent:Localized;options:{id:string;russian:string}[];
   hint:Localized|null;answered:boolean;
   feedback:{option_id:string;correct:boolean;explanation:Localized;english:string}|null;
-  npc_audio_url:string|null;reply_audio_url:string|null;
+  npc_audio_url:string|null;reply_audio_url:string|null;npc_audio_error?:string|null;
 };
 export type StepConversation = {
   id:string;state:'preparing'|'active'|'completed'|'failed';scenario:Scenario;target_level:PracticeLevel;
   language:Language;created_at:number;error:string|null;retryable:boolean;turn_count:number;completed_turns:number;
   current_turn:Step|null;transcript:{id:string;ordinal:number;npc:Line;reply:Line}[];ending?:Line;
+  ending_audio_url?:string|null;ending_audio_error?:string|null;
   audio_configured?:boolean;reward?:{amount:number;basis:string}|null;
 };
 type Options = {configured:boolean;audio_configured:boolean;scenario:Scenario|null;sessions:{id:string;state:string;created_at:number;title:string;title_ru?:string;target_level:PracticeLevel}[]};
-type Command = {kind:'start'|'answer'|'hint'|'next'|'retry'|'npc'|'reply';url:string;body:Record<string,unknown>};
+type AudioKind = 'npc'|'reply'|'ending';
+type Command = {kind:'start'|'answer'|'hint'|'next'|'retry'|AudioKind;url:string;body:Record<string,unknown>};
 type Props = {sessionId?:string;scenarioId?:string;scenarioSeed?:string;targetLevel?:PracticeLevel;language?:Language;onBack?:()=>void;embeddedSetup?:boolean;onPreparingChange?:(busy:boolean)=>void};
 const endpoint='/api/v1/step-conversations';
 
@@ -38,7 +41,7 @@ export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targe
   const [needsReload,setNeedsReload]=useState(false);
   const [accountChanged,setAccountChanged]=useState(false);
   const [audioNotice,setAudioNotice]=useState('');
-  const [playing,setPlaying]=useState<'npc'|'reply'|null>(null);
+  const [playing,setPlaying]=useState<AudioKind|null>(null);
   const preparingCallback=useRef(onPreparingChange);
   preparingCallback.current=onPreparingChange;
   const playbackRequest=useRef(0);
@@ -51,12 +54,14 @@ export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targe
   const prompt=useRef<HTMLParagraphElement>(null);
   const feedback=useRef<HTMLDivElement>(null);
   const heading=useRef<HTMLHeadingElement>(null);
-  const npcAudio=useRef<HTMLAudioElement>(null);
-  const replyAudio=useRef<HTMLAudioElement>(null);
-  const playNext=useRef<'npc'|'reply'|null>(null);
+  const playNext=useRef<AudioKind|null>(null);
+  const automaticAudio=useRef<string>();
+  const automaticAdvance=useRef<string>();
+  const lastState=useRef<StepConversation['state']>();
+  const endingPending=useRef(false);
   const turn=saved?.current_turn;
   const accepted=!!turn?.answered && !!turn.feedback?.correct;
-  const blockingRetry=retryCommand && !['npc','reply'].includes(retryCommand.kind);
+  const blockingRetry=retryCommand && !['npc','reply','ending'].includes(retryCommand.kind);
   const disabled=loading || !!busy || !!blockingRetry || needsReload || accountChanged;
   const embedded=embeddedSetup && !sessionId;
   const preparing=busy==='start' || retryCommand?.kind==='start';
@@ -65,11 +70,14 @@ export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targe
   useEffect(()=>()=>preparingCallback.current?.(false),[]);
 
   function accept(value:StepConversation,restore=false) {
+    if (restore) {automaticAdvance.current=undefined;automaticAudio.current=undefined;}
+    if (!restore && lastState.current==='active' && value.state==='completed') endingPending.current=true;
+    lastState.current=value.state;
     if (restore || currentTurn.current!==value.current_turn?.id) {
       setSelected(value.current_turn?.feedback?.option_id ?? '');
       setAudioNotice('');
       playbackRequest.current++;setPlaying(null);
-      npcAudio.current?.pause();replyAudio.current?.pause();
+      stopStepAudio();playNext.current=null;
     }
     currentTurn.current=value.current_turn?.id;
     setSaved(value);
@@ -103,10 +111,11 @@ export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targe
   useEffect(()=>{
     controller.current=new AbortController();generation.current++;inFlight.current=false;
     currentTurn.current=undefined;startKey.current=crypto.randomUUID();
+    automaticAudio.current=undefined;automaticAdvance.current=undefined;lastState.current=undefined;endingPending.current=false;playNext.current=null;
     setSaved(undefined);setOptions(undefined);setSelected('');setBusy(null);setNeedsReload(false);setAccountChanged(false);
     playbackRequest.current++;setPlaying(null);
     void load(sessionId ?? null);
-    return ()=>{generation.current++;controller.current?.abort();npcAudio.current?.pause();replyAudio.current?.pause();};
+    return ()=>{generation.current++;playbackRequest.current++;controller.current?.abort();stopStepAudio();};
   },[sessionId,scenarioId,scenarioSeed,targetLevel]);
 
   useEffect(()=>{
@@ -126,14 +135,22 @@ export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targe
     focusTarget.current=null;
   },[saved]);
 
-  async function play(kind:'npc'|'reply') {
+  function audioUrl(kind:AudioKind) {
+    return kind==='ending' ? saved?.ending_audio_url : kind==='npc' ? turn?.npc_audio_url : turn?.reply_audio_url;
+  }
+
+  async function play(kind:AudioKind) {
     const version=generation.current;
     const request=++playbackRequest.current;
-    const audio=kind==='npc' ? npcAudio.current : replyAudio.current;
-    if (!audio) return;
-    (kind==='npc' ? replyAudio.current : npcAudio.current)?.pause();
+    const url=audioUrl(kind);
+    if (!url) return;
     setAudioNotice('');setPlaying(kind);
-    try {await audio.play();}
+    const finished=()=>{if(version===generation.current && request===playbackRequest.current) setPlaying(null);};
+    try {await playStepAudio(url,{onEnded:finished,onError:()=>{
+      if(version===generation.current && request===playbackRequest.current) {
+        setPlaying(null);setAudioNotice(t('Audio could not play. Try again.','Не удалось воспроизвести аудио. Попробуйте ещё раз.'));
+      }
+    }});}
     catch(reason) {
       if (version!==generation.current || request!==playbackRequest.current) return;
       setPlaying(null);
@@ -145,8 +162,34 @@ export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targe
 
   useEffect(()=>{
     const kind=playNext.current;
-    if (kind && (kind==='npc' ? turn?.npc_audio_url : turn?.reply_audio_url)) {playNext.current=null;void play(kind);}
-  },[turn?.npc_audio_url,turn?.reply_audio_url]);
+    if (kind && audioUrl(kind)) {
+      playNext.current=null;
+      if (kind!=='reply') automaticAudio.current=`${saved!.id}:${kind==='npc' ? turn!.id : 'ending'}`;
+      void play(kind);
+    }
+  },[turn?.npc_audio_url,turn?.reply_audio_url,saved?.ending_audio_url]);
+
+  // Each character line plays once. Hints, feedback and polling must not restart it.
+  useEffect(()=>{
+    if (embedded || disabled || error || !saved) return;
+    const kind=saved.state==='active' && turn && !accepted ? 'npc'
+      : saved.state==='completed' && endingPending.current ? 'ending' : null;
+    if (!kind) return;
+    const key=`${saved.id}:${kind==='npc' ? turn!.id : 'ending'}`;
+    if (automaticAudio.current===key) return;
+    automaticAudio.current=key;
+    if (audioUrl(kind)) void play(kind);
+    else if (saved.audio_configured && !(kind==='npc' ? turn?.npc_audio_error : saved.ending_audio_error)) command(kind);
+  },[saved,loading,busy,error,accountChanged,needsReload,embedded]);
+
+  // Checking a correct reply is the learner's turn; the character responds next.
+  useEffect(()=>{
+    if (embedded || disabled || error || !saved || saved.state!=='active' || !turn || !accepted) return;
+    const key=`${saved.id}:${turn.id}`;
+    if (automaticAdvance.current===key) return;
+    automaticAdvance.current=key;
+    command('next');
+  },[saved,loading,busy,error,accountChanged,needsReload,embedded]);
 
   async function run(command:Command) {
     if (inFlight.current || accountChanged) return;
@@ -156,8 +199,8 @@ export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targe
       const value=await api<StepConversation>(command.url,command.body,controller.current?.signal);
       if (version!==generation.current || controller.current?.signal.aborted) return;
       focusTarget.current=command.kind==='answer' ? 'feedback' : ['next','start','retry'].includes(command.kind) ? 'turn' : null;
-      if (command.kind==='npc' || command.kind==='reply') playNext.current=command.kind;
       accept(value);setNeedsReload(false);
+      if (['npc','reply','ending'].includes(command.kind)) playNext.current=command.kind as AudioKind;
       if (command.kind==='start') window.location.hash=`speaking/step/${encodeURIComponent(value.id)}`;
     } catch(reason) {
       if (version!==generation.current || controller.current?.signal.aborted) return;
@@ -170,17 +213,19 @@ export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targe
 
   function command(kind:Command['kind'],body:Record<string,unknown>={}) {
     if (!saved || disabled) return;
-    const path=kind==='npc' || kind==='reply' ? 'audio' : kind;
-    void run({kind,url:`${endpoint}/${encodeURIComponent(saved.id)}/${path}`,body:{...body,...(kind==='retry' ? {} : {turn_id:turn?.id}),...(path==='audio' ? {kind} : {})}});
+    const path=['npc','reply','ending'].includes(kind) ? 'audio' : kind;
+    if (kind==='answer' || kind==='next') {playbackRequest.current++;stopStepAudio();setPlaying(null);}
+    void run({kind,url:`${endpoint}/${encodeURIComponent(saved.id)}/${path}`,body:{...body,...(kind==='retry' ? {} : {turn_id:kind==='ending' ? 'ending' : turn?.id}),...(path==='audio' ? {kind} : {})}});
   }
-  function listen(kind:'npc'|'reply') {
+  function listen(kind:AudioKind) {
     if (playing===kind) {
       playbackRequest.current++;
-      (kind==='npc' ? npcAudio.current : replyAudio.current)?.pause();
+      stopStepAudio();
       setPlaying(null);return;
     }
     if (disabled) return;
-    if (kind==='npc' ? turn?.npc_audio_url : turn?.reply_audio_url) void play(kind);
+    primeStepAudio();
+    if (audioUrl(kind)) void play(kind);
     else command(kind);
   }
   const scenario=saved?.scenario ?? options?.scenario;
@@ -189,15 +234,12 @@ export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targe
   const role=scenario ? (language==='ru' ? scenario.role_ru || scenario.role : scenario.role) : undefined;
   const previous=(saved?.transcript ?? []).filter(line=>saved?.state==='completed' || line.id!==turn?.id);
   const showFeedback=turn?.feedback && (accepted || selected===turn.feedback.option_id);
-  const audio=(kind:'npc'|'reply')=>saved?.audio_configured===false && !(kind==='npc' ? turn?.npc_audio_url : turn?.reply_audio_url) ? null : <div class="step-audio">
+  const audio=(kind:AudioKind)=>saved?.audio_configured===false && !audioUrl(kind) ? null : <div class="step-audio">
     <button type="button" class="step-text-button" disabled={disabled && playing!==kind} onClick={()=>listen(kind)} aria-label={playing===kind
-      ? kind==='npc' ? t('Pause the other speaker','Приостановить запись собеседника') : t('Pause your reply','Приостановить запись своего ответа')
-      : kind==='npc' ? t('Listen to the other speaker','Послушать собеседника') : t('Listen to your reply','Послушать свой ответ')}>
+      ? kind!=='reply' ? t('Pause the other speaker','Приостановить запись собеседника') : t('Pause your reply','Приостановить запись своего ответа')
+      : kind!=='reply' ? t('Listen to the other speaker','Послушать собеседника') : t('Listen to your reply','Послушать свой ответ')}>
       <span aria-hidden="true">{playing===kind ? 'Ⅱ' : '▷'}</span> {busy===kind ? t('Preparing audio…','Готовим аудио…') : playing===kind ? t('Pause','Пауза') : t('Listen','Послушать')}
     </button>
-    {(kind==='npc' ? turn?.npc_audio_url : turn?.reply_audio_url) && <audio key={`${turn?.id}-${kind}`} ref={kind==='npc' ? npcAudio : replyAudio} hidden aria-hidden="true" preload="none" src={(kind==='npc' ? turn?.npc_audio_url : turn?.reply_audio_url) ?? undefined}
-      onPause={()=>setPlaying(current=>current===kind ? null : current)} onEnded={()=>setPlaying(current=>current===kind ? null : current)}
-      onError={()=>{setPlaying(current=>current===kind ? null : current);setAudioNotice(t('Audio could not play. Try again.','Не удалось воспроизвести аудио. Попробуйте ещё раз.'));}}/>}
   </div>;
 
   const startSeed=embedded ? scenarioSeed : scenarioSeed ?? options?.scenario?.seed;
@@ -212,8 +254,8 @@ export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targe
   const setupContent=<>
     {!loading && !saved && options && <div class="step-preview">
       {!embedded && <p>{language==='ru' ? scenario?.description_ru || scenario?.description : scenario?.description}</p>}
-      <p class="step-muted">{t('Choose a reply, check it, then continue. You can say the lines aloud; recording is not needed.','Выберите ответ, проверьте его и продолжайте. Реплики можно произносить вслух — запись не нужна.')}</p>
-      {options.configured && options.scenario && startSeed ? <button type="button" class="cta" disabled={disabled} onClick={()=>void run({kind:'start',url:endpoint,body:{submission_id:startKey.current,scenario_id:scenarioId ?? 'cafe',scenario_seed:startSeed,target_level:targetLevel,language}})}>
+      <p class="step-muted">{t('Listen, choose a reply and check it. The conversation continues when your reply fits. You can say it aloud; recording is not needed.','Слушайте, выбирайте ответ и проверяйте его. Когда ответ подходит, разговор продолжается. Можно произносить реплики вслух — запись не нужна.')}</p>
+      {options.configured && options.scenario && startSeed ? <button type="button" class="cta" disabled={disabled} onClick={()=>{primeStepAudio();void run({kind:'start',url:endpoint,body:{submission_id:startKey.current,scenario_id:scenarioId ?? 'cafe',scenario_seed:startSeed,target_level:targetLevel,language}});}}>
         {busy==='start' ? t('Preparing your conversation…','Готовим разговор…') : t('Start step-through','Начать пошаговый разговор')}
       </button> : <p role="status" class="step-muted">{options.configured ? t('No conversation is available for this level yet.','Для этого уровня пока нет подходящего разговора.') : t('Step-through conversations are not available right now.','Пошаговые разговоры сейчас недоступны.')}</p>}
       {!embedded && !!options.sessions?.length && <details class="step-history"><summary>{t('Previous conversations','Предыдущие разговоры')}</summary><ul class="step-history-links">
@@ -251,12 +293,14 @@ export function StepThroughConversation({sessionId,scenarioId,scenarioSeed,targe
       {accepted && <div class="step-feedback is-accepted" role="status" ref={feedback} tabIndex={-1}>
         <span class="step-speaker">{t('Your reply','Ваш ответ')}</span><p class="step-accepted-russian" lang="ru">{turn.options.find(option=>option.id===turn.feedback!.option_id)?.russian}</p><p class="step-translation" lang="en">{turn.feedback!.english}</p>
         <p>{local(turn.feedback!.explanation)}</p>{audio('reply')}
-        <button type="button" class="cta" disabled={disabled} onClick={()=>command('next')}>{busy==='next' ? t('Continuing…','Продолжаем…') : t('Continue','Продолжить')}</button>
+        {busy==='next' && <p>{t('Waiting for the next reply…','Ждём следующую реплику…')}</p>}
       </div>}
-      {audioNotice && <p class="step-muted" role="status">{audioNotice}</p>}
+      {(audioNotice || turn.npc_audio_error) && <p class="step-muted" role="status">{audioNotice || turn.npc_audio_error}</p>}
     </>}
     {!loading && saved?.state==='completed' && <div class="step-complete">
       {saved.ending && <><p class="step-ending" lang="ru">{saved.ending.russian}</p><p class="step-translation" lang="en">{saved.ending.english}</p></>}
+      {saved.ending && audio('ending')}
+      {(audioNotice || saved.ending_audio_error) && <p class="step-muted" role="status">{audioNotice || saved.ending_audio_error}</p>}
       <p>{t(`You worked through ${saved.completed_turns} replies. Your conversation is saved.`,'Вы разобрали все реплики. Разговор сохранён.')}</p>
       {saved.reward && saved.reward.amount>0 && <p class="step-reward">{t(`Lingocoins earned: ${saved.reward.amount}`,`Получено лингокоинов: ${saved.reward.amount}`)}</p>}
       <a class="cta" href="#speaking/step">{t('Choose another conversation','Выбрать другой разговор')}</a>

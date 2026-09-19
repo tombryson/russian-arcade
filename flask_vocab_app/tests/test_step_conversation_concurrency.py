@@ -175,7 +175,9 @@ class StepConversationConcurrencyTests(unittest.TestCase):
         self.assertEqual(self.service.retry(self.access, sessions[2])['state'], 'active')
 
     def test_audio_busy_returns_409_promptly_and_saved_reads_remain_available(self):
-        state = self.start('audio-busy')
+        # A conversation saved before automatic speaker preparation has no MP3.
+        with patch.object(self.service, '_prepare_current_audio', side_effect=self.service.read):
+            state = self.start('audio-busy')
         self.service.audio_lock.acquire()
         with ThreadPoolExecutor(max_workers=1) as pool:
             request = pool.submit(self.post_audio, state)
@@ -212,6 +214,38 @@ class StepConversationConcurrencyTests(unittest.TestCase):
                 self.assertEqual(len(self.speech.voices), 1)
             finally:
                 self.service.audio_lock.release()
+
+    def test_advancement_commits_before_speech_and_replay_does_not_purchase_again(self):
+        state = self.start('advance-audio')
+        sid, tid = state['id'], state['current_turn']['id']
+        dialogue = json.loads(self.saved(sid)['dialogue_json'])
+        correct = next(option['id'] for option in dialogue['turns'][0]['options'] if option['correct'])
+        self.service.answer(self.access, sid, {'submission_id': 'correct-current', 'turn_id': tid, 'option_id': correct})
+        entered, release = threading.Event(), threading.Event()
+
+        def synthesize(text, voice):
+            entered.set()
+            if not release.wait(5):
+                raise AssertionError('The test did not release speech preparation.')
+            return b'test-only-mp3'
+
+        self.speech.speak = Mock(side_effect=synthesize)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            original = pool.submit(self.service.next, self.access, sid, {'turn_id': tid})
+            try:
+                self.assertTrue(entered.wait(2))
+                replay = pool.submit(self.service.next, self.access, sid, {'turn_id': tid}).result(timeout=2)
+                self.assertEqual(replay['completed_turns'], 1)
+                self.assertEqual(replay['current_turn']['id'], dialogue['turns'][1]['id'])
+                self.assertIsNone(replay['current_turn']['npc_audio_url'])
+                self.assertEqual(self.service.read(self.access, sid)['completed_turns'], 1)
+                self.speech.speak.assert_called_once()
+            finally:
+                release.set()
+            prepared = original.result(timeout=2)
+        self.assertTrue(prepared['current_turn']['npc_audio_url'])
+        self.assertIsNone(prepared['current_turn']['npc_audio_error'])
+        self.speech.speak.assert_called_once()
 
 
 if __name__ == '__main__':

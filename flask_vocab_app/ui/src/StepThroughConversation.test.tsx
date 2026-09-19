@@ -1,15 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/preact';
 import { StepThroughConversation, type StepConversation } from './StepThroughConversation';
+import { primeStepAudio, playStepAudio, stopStepAudio } from './step-audio-player';
+
+vi.mock('./step-audio-player',()=>({primeStepAudio:vi.fn(),playStepAudio:vi.fn(),stopStepAudio:vi.fn()}));
 
 const scenario={title:'Tea for the journey',title_ru:'Чай в дорогу',description:'Order tea to take away.',description_ru:'Закажите чай с собой.',role:'Café worker',role_ru:'Сотрудник кафе',seed:'cafe-tea-v1'};
 const firstTurn={id:'turn-one',ordinal:1,npc:{russian:'Здравствуйте! Что будете пить?',english:'Hello! What would you like to drink?'},intent:{en:'Ask for a tea, please.',ru:'Попросите чай.'},
   options:[{id:'tea',russian:'Чай, пожалуйста.'},{id:'yesterday',russian:'Вчера, пожалуйста.'},{id:'station',russian:'Вокзал, пожалуйста.'}],hint:null,answered:false,feedback:null,npc_audio_url:null,reply_audio_url:null};
-const active:StepConversation={id:'step-one',state:'active',scenario,target_level:'A1',language:'en',created_at:1,error:null,retryable:false,turn_count:4,completed_turns:0,current_turn:firstTurn,transcript:[]};
+const active:StepConversation={audio_configured:false,id:'step-one',state:'active',scenario,target_level:'A1',language:'en',created_at:1,error:null,retryable:false,turn_count:4,completed_turns:0,current_turn:firstTurn,transcript:[]};
 const accepted:StepConversation={...active,completed_turns:1,current_turn:{...firstTurn,answered:true,feedback:{option_id:'tea',correct:true,explanation:{en:'A polite way to order.',ru:'Вежливый способ сделать заказ.'},english:'Tea, please.'}},
   transcript:[{id:'turn-one',ordinal:1,npc:firstTurn.npc,reply:{russian:'Чай, пожалуйста.',english:'Tea, please.'}}]};
 const second:StepConversation={...active,completed_turns:1,current_turn:{...firstTurn,id:'turn-two',ordinal:2,npc:{russian:'С сахаром?',english:'With sugar?'},intent:{en:'Ask for no sugar.',ru:'Попросите без сахара.'},options:[{id:'no-sugar',russian:'Без сахара.'},{id:'with-sugar',russian:'С сахаром.'},{id:'tomorrow',russian:'Завтра.'}]},transcript:accepted.transcript};
-const options={configured:true,audio_configured:true,scenario,sessions:[]};
+const options={configured:true,audio_configured:false,scenario,sessions:[]};
 const response=(value:unknown,ok=true)=>Promise.resolve({ok,json:async()=>value});
 const failure=(message='Connection lost',code='request_failed')=>response({error:{message,code}},false);
 function setup(handler:(url:string,init?:RequestInit)=>ReturnType<typeof response>=url=>response(url.includes('/options')?options:active)) {
@@ -19,8 +22,9 @@ async function open() {await screen.findByRole('group',{name:'Ask for a tea, ple
 function choose(name='Чай, пожалуйста.') {fireEvent.click(screen.getByRole('radio',{name}));}
 const body=(init?:RequestInit)=>JSON.parse(String(init?.body));
 beforeEach(()=>{
-  vi.spyOn(HTMLMediaElement.prototype,'pause').mockImplementation(()=>{});
-  vi.spyOn(HTMLMediaElement.prototype,'play').mockResolvedValue(undefined);
+  vi.mocked(primeStepAudio).mockReset();
+  vi.mocked(playStepAudio).mockReset().mockResolvedValue(undefined);
+  vi.mocked(stopStepAudio).mockReset();
 });
 afterEach(()=>{cleanup();vi.useRealTimers();vi.restoreAllMocks();vi.unstubAllGlobals();});
 
@@ -33,6 +37,8 @@ describe('Step-through conversation',()=>{
     expect(fetch.mock.calls).toHaveLength(1);
     expect(fetch.mock.calls[0][0]).toBe('/api/v1/step-conversations/options?scenario_id=cafe&level=A2');
     expect(fetch.mock.calls[0][1]?.method).toBe('GET');
+    expect(primeStepAudio).not.toHaveBeenCalled();
+    expect(playStepAudio).not.toHaveBeenCalled();
     expect(screen.getByText(/recording is not needed/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'← Speaking'}));expect(onBack).toHaveBeenCalledOnce();
   });
@@ -101,7 +107,9 @@ describe('Step-through conversation',()=>{
     const fetch=setup((url)=>url.includes('/options')?response(options):new Promise(resolve=>{finish=resolve;}) as ReturnType<typeof response>);
     render(<StepThroughConversation scenarioId="cafe" scenarioSeed="chosen-variant" targetLevel="A2"/>);
     const start=await screen.findByRole('button',{name:'Start step-through'});
-    fireEvent.click(start);fireEvent.click(start);
+    fireEvent.click(start);
+    expect(primeStepAudio).toHaveBeenCalledOnce();
+    fireEvent.click(start);
     const creates=fetch.mock.calls.filter(([url])=>url==='/api/v1/step-conversations');
     expect(creates).toHaveLength(1);
     expect(body(creates[0][1])).toMatchObject({scenario_id:'cafe',scenario_seed:'chosen-variant',target_level:'A2',language:'en',submission_id:expect.any(String)});
@@ -111,9 +119,9 @@ describe('Step-through conversation',()=>{
     await open();
   });
 
-  it('requires Check reply and supports correcting a rejected reply without advancing',async()=>{
+  it('waits for Check reply, keeps wrong-answer feedback, and continues automatically after a correct reply',async()=>{
     const wrong={...active,current_turn:{...firstTurn,feedback:{option_id:'station',correct:false,explanation:{en:'Name a drink here.',ru:'Здесь нужно назвать напиток.'},english:'Station, please.'}}};
-    const fetch=setup((url,init)=>url.endsWith('/answer')?response(body(init).option_id==='station'?wrong:accepted):response(active));
+    const fetch=setup((url,init)=>url.endsWith('/answer')?response(body(init).option_id==='station'?wrong:accepted):response(url.endsWith('/next')?second:active));
     render(<StepThroughConversation sessionId="step-one"/>);await open();
     expect(screen.getByRole('button',{name:'Check reply'}).hasAttribute('disabled')).toBe(true);
     choose('Вокзал, пожалуйста.');
@@ -124,11 +132,10 @@ describe('Step-through conversation',()=>{
     expect(screen.queryByText('Station, please.')).toBeNull();
     expect(screen.queryByRole('button',{name:'Continue'})).toBeNull();
     choose();fireEvent.click(screen.getByRole('button',{name:'Check reply'}));
-    expect(await screen.findByText('Tea, please.')).toBeTruthy();
-    expect(screen.getByRole('button',{name:'Continue'})).toBeTruthy();
+    expect(await screen.findByRole('group',{name:'Ask for no sugar.'})).toBeTruthy();
+    expect(screen.queryByRole('button',{name:'Continue'})).toBeNull();
     expect(fetch.mock.calls.filter(([url])=>url.endsWith('/answer'))).toHaveLength(2);
-    expect(fetch.mock.calls.some(([url])=>url.endsWith('/next'))).toBe(false);
-    expect(document.activeElement).toBe(screen.getByText('Your reply').closest('[role="status"]'));
+    expect(fetch.mock.calls.filter(([url])=>url.endsWith('/next'))).toHaveLength(1);
   });
 
   it('requests a hint only on demand and keeps the chosen answer',async()=>{
@@ -141,71 +148,169 @@ describe('Step-through conversation',()=>{
     expect(body(fetch.mock.calls.find(([url])=>url.endsWith('/hint'))?.[1])).toEqual({turn_id:'turn-one'});
   });
 
-  it('resumes an accepted reply without submitting it again, then continues explicitly',async()=>{
+  it('resumes an accepted reply by advancing once without resubmitting the answer',async()=>{
     const fetch=setup(url=>response(url.endsWith('/next')?second:accepted));
     render(<StepThroughConversation sessionId="step-one"/>);
-    await screen.findByRole('button',{name:'Continue'});
-    expect(screen.queryByRole('radio')).toBeNull();
-    expect(screen.queryByText('Conversation so far')).toBeNull();
-    expect(fetch.mock.calls.every(([,init])=>init?.method==='GET')).toBe(true);
-    fireEvent.click(screen.getByRole('button',{name:'Continue'}));
     expect(await screen.findByRole('group',{name:'Ask for no sugar.'})).toBeTruthy();
     expect(screen.getByText('Step 2 of 4')).toBeTruthy();
     expect(screen.getByText('Conversation so far').closest('details')?.open).toBe(false);
-    expect(document.activeElement?.textContent).toBe('С сахаром?');
-    expect(body(fetch.mock.calls.find(([url])=>url.endsWith('/next'))?.[1])).toEqual({turn_id:'turn-one'});
+    expect(fetch.mock.calls.filter(([url])=>url.endsWith('/answer'))).toHaveLength(0);
+    const next=fetch.mock.calls.filter(([url])=>url.endsWith('/next'));
+    expect(next).toHaveLength(1);
+    expect(body(next[0][1])).toEqual({turn_id:'turn-one'});
+    expect(playStepAudio).not.toHaveBeenCalled();
   });
 
-  it('prepares reply audio only when requested and reuses the saved recording',async()=>{
-    const fetch=setup(url=>response(url.endsWith('/audio')?{...accepted,current_turn:{...accepted.current_turn!,reply_audio_url:'/private/reply.mp3'}}:accepted));
-    const {container}=render(<StepThroughConversation sessionId="step-one"/>);
-    fireEvent.click(await screen.findByRole('button',{name:'Listen to your reply'}));
-    const pause=await screen.findByRole('button',{name:'Pause your reply'});
-    const recording=container.querySelector('audio')!;
-    expect(recording.getAttribute('src')).toBe('/private/reply.mp3');
-    expect(recording.hidden).toBe(true);
-    expect(recording.hasAttribute('controls')).toBe(false);
-    await vi.waitFor(()=>expect(HTMLMediaElement.prototype.play).toHaveBeenCalledOnce());
-    vi.mocked(HTMLMediaElement.prototype.pause).mockClear();
-    fireEvent.click(pause);
-    expect(HTMLMediaElement.prototype.pause).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole('button',{name:'Listen to your reply'}));
-    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2);
-    fireEvent.ended(recording);
-    expect(screen.getByRole('button',{name:'Listen to your reply'})).toBeTruthy();
-    expect(fetch.mock.calls.filter(([url])=>url.endsWith('/audio'))).toHaveLength(1);
-    expect(body(fetch.mock.calls.find(([url])=>url.endsWith('/audio'))?.[1])).toEqual({kind:'reply',turn_id:'turn-one'});
-  });
-
-  it('pauses the previous speaker when listening to the reply and resets on the next turn',async()=>{
-    const withAudio={...accepted,current_turn:{...accepted.current_turn!,npc_audio_url:'/private/npc.mp3',reply_audio_url:'/private/reply.mp3'}};
-    setup(url=>response(url.endsWith('/next')?{...second,current_turn:{...second.current_turn!,npc_audio_url:'/private/next.mp3'}}:withAudio));
-    const {container}=render(<StepThroughConversation sessionId="step-one"/>);
-    fireEvent.click(await screen.findByRole('button',{name:'Listen to the other speaker'}));
-    expect(screen.getByRole('button',{name:'Pause the other speaker'})).toBeTruthy();
-    vi.mocked(HTMLMediaElement.prototype.pause).mockClear();
-    fireEvent.click(screen.getByRole('button',{name:'Listen to your reply'}));
-    expect(HTMLMediaElement.prototype.pause).toHaveBeenCalledOnce();
-    expect(vi.mocked(HTMLMediaElement.prototype.pause).mock.instances[0]).toBe(container.querySelector('audio[src="/private/npc.mp3"]'));
-    expect(screen.getByRole('button',{name:'Listen to the other speaker'})).toBeTruthy();
-    expect(screen.getByRole('button',{name:'Pause your reply'})).toBeTruthy();
-    vi.mocked(HTMLMediaElement.prototype.pause).mockClear();
-    fireEvent.click(screen.getByRole('button',{name:'Continue'}));
+  it('does not automatically retry a failed continuation and preserves the accepted turn on retry',async()=>{
+    let attempts=0;
+    const fetch=setup(url=>url.endsWith('/next')?(++attempts===1?failure():response(second)):response(accepted));
+    render(<StepThroughConversation sessionId="step-one"/>);
+    const retry=await screen.findByRole('button',{name:'Try again'});
+    expect(screen.getByRole('alert').textContent).toContain('Connection lost');
+    expect(fetch.mock.calls.filter(([url])=>url.endsWith('/next'))).toHaveLength(1);
+    expect(screen.queryByRole('button',{name:'Continue'})).toBeNull();
+    expect(screen.queryByRole('radio')).toBeNull();
+    fireEvent.click(retry);
     await screen.findByRole('group',{name:'Ask for no sugar.'});
-    expect(HTMLMediaElement.prototype.pause).toHaveBeenCalledTimes(2);
-    expect(screen.getByRole('button',{name:'Listen to the other speaker'})).toBeTruthy();
-    expect(screen.queryByRole('button',{name:/Pause/})).toBeNull();
-    expect(container.querySelectorAll('audio')).toHaveLength(1);
-    expect(container.querySelector('audio')?.getAttribute('src')).toBe('/private/next.mp3');
+    const next=fetch.mock.calls.filter(([url])=>url.endsWith('/next'));
+    expect(next).toHaveLength(2);
+    expect(body(next[0][1])).toEqual({turn_id:'turn-one'});
+    expect(body(next[1][1])).toEqual(body(next[0][1]));
+  });
+
+  it('recovers automatic continuation after an explicit reload of the same accepted turn',async()=>{
+    let attempts=0;
+    const fetch=setup(url=>url.endsWith('/next')?(++attempts===1?failure():response(second)):response(accepted));
+    render(<StepThroughConversation sessionId="step-one"/>);
+    fireEvent.click(await screen.findByRole('button',{name:'Reload conversation'}));
+    await screen.findByRole('group',{name:'Ask for no sugar.'});
+    expect(fetch.mock.calls.filter(([,init])=>init?.method==='GET')).toHaveLength(2);
+    const next=fetch.mock.calls.filter(([url])=>url.endsWith('/next'));
+    expect(next).toHaveLength(2);
+    expect(body(next[1][1])).toEqual({turn_id:'turn-one'});
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('plays each character line immediately, without replaying for hints or rejected replies',async()=>{
+    const voiced={...active,audio_configured:true,current_turn:{...firstTurn,npc_audio_url:'/private/first.mp3'}};
+    const nextVoiced={...second,audio_configured:true,current_turn:{...second.current_turn!,npc_audio_url:'/private/second.mp3'}};
+    const hinted={...voiced,current_turn:{...voiced.current_turn,hint:{en:'Name a drink.',ru:'Назовите напиток.'}}};
+    const wrong={...hinted,current_turn:{...hinted.current_turn,feedback:{option_id:'station',correct:false,explanation:{en:'Choose a drink.',ru:'Выберите напиток.'},english:'Station, please.'}}};
+    const fetch=setup((url,init)=>response(url.endsWith('/hint')?hinted:url.endsWith('/next')?nextVoiced:url.endsWith('/answer')?(body(init).option_id==='station'?wrong:accepted):voiced));
+    render(<StepThroughConversation sessionId="step-one"/>);await open();
+    await vi.waitFor(()=>expect(playStepAudio).toHaveBeenCalledOnce());
+    expect(vi.mocked(playStepAudio).mock.calls[0][0]).toBe('/private/first.mp3');
+    expect(screen.getByRole('button',{name:'Pause the other speaker'})).toBeTruthy();
+    act(()=>vi.mocked(playStepAudio).mock.calls[0][1].onEnded());
+    fireEvent.click(screen.getByRole('button',{name:'Show a hint'}));
+    await screen.findByText('Name a drink.');
+    choose('Вокзал, пожалуйста.');fireEvent.click(screen.getByRole('button',{name:'Check reply'}));
+    await screen.findByText('Try another reply.');
+    expect(playStepAudio).toHaveBeenCalledOnce();
+    expect(fetch.mock.calls.filter(([url])=>url.endsWith('/next'))).toHaveLength(0);
+    choose();fireEvent.click(screen.getByRole('button',{name:'Check reply'}));
+    await screen.findByRole('group',{name:'Ask for no sugar.'});
+    await vi.waitFor(()=>expect(playStepAudio).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(playStepAudio).mock.calls.map(([url])=>url)).toEqual(['/private/first.mp3','/private/second.mp3']);
+    expect(fetch.mock.calls.filter(([url])=>url.endsWith('/next'))).toHaveLength(1);
+    expect(fetch.mock.calls.filter(([url])=>url.endsWith('/audio'))).toHaveLength(0);
+  });
+
+  it('prepares missing legacy audio once and plays it as soon as it is ready',async()=>{
+    const legacy={...active,audio_configured:true};
+    const fetch=setup(url=>response(url.endsWith('/audio')?{...legacy,current_turn:{...firstTurn,npc_audio_url:'/private/legacy.mp3'}}:legacy));
+    render(<StepThroughConversation sessionId="step-one"/>);await open();
+    await vi.waitFor(()=>expect(playStepAudio).toHaveBeenCalledOnce());
+    const audio=fetch.mock.calls.filter(([url])=>url.endsWith('/audio'));
+    expect(audio).toHaveLength(1);
+    expect(body(audio[0][1])).toEqual({kind:'npc',turn_id:'turn-one'});
+    expect(vi.mocked(playStepAudio).mock.calls[0][0]).toBe('/private/legacy.mp3');
+    act(()=>vi.mocked(playStepAudio).mock.calls[0][1].onEnded());
+    fireEvent.click(screen.getByRole('button',{name:'Listen to the other speaker'}));
+    expect(playStepAudio).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls.filter(([url])=>url.endsWith('/audio'))).toHaveLength(1);
+  });
+
+  it('plays once when an audio response returns the next turn advanced in another tab',async()=>{
+    const fetch=setup(url=>response(url.endsWith('/audio')
+      ? {...second,audio_configured:true,current_turn:{...second.current_turn!,npc_audio_url:'/private/concurrent-next.mp3'}}
+      : {...active,audio_configured:true}));
+    render(<StepThroughConversation sessionId="step-one"/>);
+    await screen.findByRole('group',{name:'Ask for no sugar.'});
+    await vi.waitFor(()=>expect(playStepAudio).toHaveBeenCalledOnce());
+    expect(vi.mocked(playStepAudio).mock.calls[0][0]).toBe('/private/concurrent-next.mp3');
+    expect(fetch.mock.calls.filter(([url])=>url.endsWith('/audio'))).toHaveLength(1);
+  });
+
+  it('does not repeat a persisted audio failure automatically but supports an explicit Listen retry',async()=>{
+    const failed={...active,audio_configured:true,current_turn:{...firstTurn,npc_audio_error:'Audio is unavailable.'}};
+    const fetch=setup(url=>response(url.endsWith('/audio')?{...failed,current_turn:{...firstTurn,npc_audio_url:'/private/retried.mp3'}}:failed));
+    render(<StepThroughConversation sessionId="step-one"/>);await open();
+    expect(screen.getByText('Audio is unavailable.')).toBeTruthy();
+    expect(fetch.mock.calls).toHaveLength(1);
+    expect(playStepAudio).not.toHaveBeenCalled();
+    choose();expect(screen.getByRole('button',{name:'Check reply'}).hasAttribute('disabled')).toBe(false);
+    fireEvent.click(screen.getByRole('button',{name:'Listen to the other speaker'}));
+    await vi.waitFor(()=>expect(playStepAudio).toHaveBeenCalledOnce());
+    expect(fetch.mock.calls.filter(([url])=>url.endsWith('/audio'))).toHaveLength(1);
+  });
+
+  it('keeps answering available when automatic audio preparation fails without retrying in a loop',async()=>{
+    const fetch=setup(url=>url.endsWith('/audio')?failure('Audio is unavailable.'):response({...active,audio_configured:true}));
+    render(<StepThroughConversation sessionId="step-one"/>);await open();
+    await screen.findByText('Audio is unavailable.');
+    choose();expect(screen.getByRole('button',{name:'Check reply'}).hasAttribute('disabled')).toBe(false);
+    expect(fetch.mock.calls.filter(([url])=>url.endsWith('/audio'))).toHaveLength(1);
+    expect(playStepAudio).not.toHaveBeenCalled();
+  });
+
+  it('lets Listen recover browser-blocked autoplay without requesting another recording',async()=>{
+    vi.mocked(playStepAudio).mockRejectedValueOnce(new DOMException('Permission needed','NotAllowedError'));
+    const fetch=setup(()=>response({...active,current_turn:{...firstTurn,npc_audio_url:'/private/first.mp3'}}));
+    render(<StepThroughConversation sessionId="step-one"/>);await open();
+    await screen.findByText('Audio is ready. Select Listen to play it.');
+    expect(playStepAudio).toHaveBeenCalledOnce();
+    choose();expect(screen.getByRole('button',{name:'Check reply'}).hasAttribute('disabled')).toBe(false);
+    fireEvent.click(screen.getByRole('button',{name:'Listen to the other speaker'}));
+    expect(primeStepAudio).toHaveBeenCalledOnce();
+    expect(screen.getByRole('button',{name:'Pause the other speaker'})).toBeTruthy();
+    expect(playStepAudio).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText('Audio is ready. Select Listen to play it.')).toBeNull();
+    expect(fetch.mock.calls).toHaveLength(1);
+  });
+
+  it('ignores an old playback rejection and callbacks after the learner pauses and restarts it',async()=>{
+    let reject!:(reason:unknown)=>void;
+    vi.mocked(playStepAudio).mockImplementationOnce(()=>new Promise<void>((_,fail)=>{reject=fail;}));
+    setup(()=>response({...active,current_turn:{...firstTurn,npc_audio_url:'/private/first.mp3'}}));
+    render(<StepThroughConversation sessionId="step-one"/>);await open();
+    fireEvent.click(await screen.findByRole('button',{name:'Pause the other speaker'}));
+    fireEvent.click(screen.getByRole('button',{name:'Listen to the other speaker'}));
+    const old=vi.mocked(playStepAudio).mock.calls[0][1];
+    await act(async()=>{old.onError();old.onEnded();reject(new DOMException('Playback interrupted','AbortError'));});
+    expect(screen.getByRole('button',{name:'Pause the other speaker'})).toBeTruthy();
+    expect(screen.queryByText('Audio could not play. Try again.')).toBeNull();
+    expect(playStepAudio).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels audio and ignores a late preparation response after leaving the activity',async()=>{
+    let finish!:(value:Awaited<ReturnType<typeof response>>)=>void;
+    setup(url=>url.endsWith('/audio')?new Promise(resolve=>{finish=resolve;}) as ReturnType<typeof response>:response({...active,audio_configured:true}));
+    const {unmount}=render(<StepThroughConversation sessionId="step-one"/>);await open();
+    await vi.waitFor(()=>expect(finish).toBeTypeOf('function'));
+    vi.mocked(stopStepAudio).mockClear();unmount();
+    expect(stopStepAudio).toHaveBeenCalled();
+    await act(async()=>finish({ok:true,json:async()=>({...active,current_turn:{...firstTurn,npc_audio_url:'/private/late.mp3'}})}));
+    expect(playStepAudio).not.toHaveBeenCalled();
   });
 
   it('retries an uncertain answer with the same submission ID and payload',async()=>{
     let failed=false;
-    const fetch=setup((url)=>{if(url.endsWith('/answer')){if(!failed){failed=true;return failure();}return response(accepted);}return response(active);});
+    const fetch=setup((url)=>{if(url.endsWith('/answer')){if(!failed){failed=true;return failure();}return response(accepted);}return response(url.endsWith('/next')?second:active);});
     render(<StepThroughConversation sessionId="step-one"/>);await open();choose();
     fireEvent.click(screen.getByRole('button',{name:'Check reply'}));
     fireEvent.click(await screen.findByRole('button',{name:'Try again'}));
-    await screen.findByRole('button',{name:'Continue'});
+    await screen.findByRole('group',{name:'Ask for no sugar.'});
     const calls=fetch.mock.calls.filter(([url])=>url.endsWith('/answer'));
     expect(calls).toHaveLength(2);expect(body(calls[0][1])).toEqual(body(calls[1][1]));
   });
@@ -286,52 +391,22 @@ describe('Step-through conversation',()=>{
     expect(fetch.mock.calls.every(([,init])=>init?.method==='GET')).toBe(true);
   });
 
-  it('keeps blocked audio playback recoverable with the Listen button',async()=>{
-    vi.mocked(HTMLMediaElement.prototype.play).mockRejectedValueOnce(new DOMException('Permission needed','NotAllowedError'));
-    setup(()=>response({...accepted,current_turn:{...accepted.current_turn!,reply_audio_url:'/private/reply.mp3'}}));
-    render(<StepThroughConversation sessionId="step-one"/>);
-    fireEvent.click(await screen.findByRole('button',{name:'Listen to your reply'}));
-    expect(await screen.findByText('Audio is ready. Select Listen to play it.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button',{name:'Listen to your reply'}));
-    expect(screen.getByRole('button',{name:'Pause your reply'})).toBeTruthy();
-    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2);
-    expect(screen.queryByText('Audio is ready. Select Listen to play it.')).toBeNull();
-    expect(screen.getByRole('button',{name:'Continue'}).hasAttribute('disabled')).toBe(false);
-  });
-
-  it('does not report an interrupted playback request after the learner pauses it',async()=>{
-    let reject!:(reason:unknown)=>void;
-    vi.mocked(HTMLMediaElement.prototype.play).mockImplementationOnce(()=>new Promise<void>((_,fail)=>{reject=fail;}));
-    setup(()=>response({...active,current_turn:{...firstTurn,npc_audio_url:'/private/npc.mp3'}}));
-    render(<StepThroughConversation sessionId="step-one"/>);await open();
-    fireEvent.click(screen.getByRole('button',{name:'Listen to the other speaker'}));
-    fireEvent.click(screen.getByRole('button',{name:'Pause the other speaker'}));
-    await act(async()=>reject(new DOMException('Playback interrupted','AbortError')));
-    expect(screen.getByRole('button',{name:'Listen to the other speaker'})).toBeTruthy();
-    expect(screen.queryByText('Audio could not play. Try again.')).toBeNull();
-  });
-
-  it('lets the learner continue choosing replies after optional audio preparation fails',async()=>{
-    setup(url=>url.endsWith('/audio')?failure('Audio is unavailable.'):response(active));
-    render(<StepThroughConversation sessionId="step-one"/>);await open();
-    fireEvent.click(screen.getByRole('button',{name:'Listen to the other speaker'}));
-    await screen.findByText('Audio is unavailable.');choose();
-    expect(screen.getByRole('button',{name:'Check reply'}).hasAttribute('disabled')).toBe(false);
-  });
-
-  it('shows the server reward and refreshes progression once when the last reply is completed',async()=>{
-    const completed={...accepted,state:'completed',current_turn:null,completed_turns:4,reward:{amount:3,basis:'guided_step_completion'},ending:{russian:'До свидания!',english:'Goodbye!'}};
+  it('plays the farewell and refreshes rewards on completion, without replaying either when reopening history',async()=>{
+    const completed={...accepted,state:'completed',current_turn:null,completed_turns:4,reward:{amount:3,basis:'guided_step_completion'},ending:{russian:'До свидания!',english:'Goodbye!'},ending_audio_url:'/private/farewell.mp3'};
     setup(url=>response(url.endsWith('/next')?completed:accepted));
     const progression=vi.fn();window.addEventListener('lingo:progression',progression);
     try {
       const {unmount}=render(<StepThroughConversation sessionId="step-one"/>);
-      fireEvent.click(await screen.findByRole('button',{name:'Continue'}));
       expect(await screen.findByText('Lingocoins earned: 3')).toBeTruthy();
       expect(progression).toHaveBeenCalledOnce();
+      await vi.waitFor(()=>expect(playStepAudio).toHaveBeenCalledOnce());
+      expect(vi.mocked(playStepAudio).mock.calls[0][0]).toBe('/private/farewell.mp3');
       unmount();setup(()=>response(completed));
       render(<StepThroughConversation sessionId="step-one"/>);
       await screen.findByRole('heading',{name:'Conversation complete'});
       expect(progression).toHaveBeenCalledOnce();
+      expect(playStepAudio).toHaveBeenCalledOnce();
+      expect(screen.getByRole('button',{name:'Listen to the other speaker'})).toBeTruthy();
     } finally {window.removeEventListener('lingo:progression',progression);}
   });
 
