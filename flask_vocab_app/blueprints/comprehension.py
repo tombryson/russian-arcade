@@ -3,6 +3,7 @@ import json
 import logging
 
 from services.onboarding import onboarding_state
+from services.story_vocabulary import story_key
 from services.curriculum import level_options, normalize_level, topic_options
 
 from asgiref.sync import async_to_sync
@@ -23,7 +24,10 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
     story_repository = StoryRepository(db_path)
 
     def story_for_display(story):
-        return present_story(story, session.get("ui_lang", "en"))
+        displayed = present_story(story, session.get("ui_lang", "en"))
+        if story.get("text"):
+            displayed["capture_key"] = story_key(story["text"])
+        return displayed
 
     def topics_and_stories():
         return topic_options(session.get("ui_lang", "en")), [story_for_display(story) for story in story_repository.list_saved()]

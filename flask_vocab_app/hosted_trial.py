@@ -28,6 +28,8 @@ COOKIE = '__Host-russian-arcade-trial'
 FLOW_COOKIE = '__Host-russian-arcade-oauth'
 SESSION_SECONDS = 7 * 24 * 3600
 FLOW_SECONDS = 600
+DEFAULT_TENANT_STORAGE_BYTES = 100 * 1024 * 1024
+MAX_STORAGE_CONFIG_BYTES = 64 * 1024
 
 
 def safe_return_url(value):
@@ -262,6 +264,40 @@ class HostedTrialDispatcher:
     def _json(self, value, status=200):
         return self._response(Response(json.dumps(value), status=status, content_type='application/json'))
 
+    def _maintenance(self, identity):
+        """Only an operator-owned marker can pause a verified workspace."""
+        digest = sha256(identity.encode()).hexdigest()
+        return (self.root / 'operator' / 'maintenance' / digest).exists()
+
+    def _maintenance_response(self, request, account):
+        message = 'Your saved practice is temporarily unavailable while we update your workspace. Please try again shortly.'
+        if (request.path.startswith('/api/') or request.is_json
+                or request.accept_mimetypes.best == 'application/json'):
+            response = self._json({'error': {'code': 'workspace_maintenance', 'message': message}}, 503)
+        else:
+            response = self._page('Your workspace is being updated', message, 503, account=account)
+        response.headers['Retry-After'] = '60'
+        return response
+
+    def _storage_limit(self, identity):
+        """Read operator overrides; malformed or absent values keep the default.
+
+        This path is outside tenant uploads and never comes from request data.
+        Read on admission so an atomic operator update needs no app restart.
+        """
+        try:
+            with (self.root / 'operator' / 'storage-limits.json').open('rb') as source:
+                raw = source.read(MAX_STORAGE_CONFIG_BYTES + 1)
+            if len(raw) > MAX_STORAGE_CONFIG_BYTES:
+                return DEFAULT_TENANT_STORAGE_BYTES
+            limits = json.loads(raw)
+            value = limits.get(sha256(identity.encode()).hexdigest()) if isinstance(limits, dict) else None
+            if type(value) is int and value > 0:
+                return value
+        except (OSError, ValueError, UnicodeError):
+            pass
+        return DEFAULT_TENANT_STORAGE_BYTES
+
     def _page(self, title, message, status=200, *, account=None):
         from html import escape
         button = '<a href="/trial/sign-in">Sign in with GitHub</a>' if self.enabled and self.provider.configured else ''
@@ -313,7 +349,10 @@ class HostedTrialDispatcher:
                     return self._page('Demo capacity reached', 'The demo is full for now. Sample activities are still available.', 503)
                 conn.execute('INSERT INTO identities VALUES (?,?,?) ON CONFLICT(identity) DO UPDATE SET display_name=excluded.display_name',
                              (identity, name[:60], int(self.clock())))
-            self._application(identity, name)
+            # Authentication stays available during maintenance. Do not seed,
+            # migrate or reopen the workspace until the operator releases it.
+            if not self._maintenance(identity):
+                self._application(identity, name)
         except (TrialIdentityError, ValueError) as error:
             # Never expose provider bodies, tokens, file paths or secret values.
             return self._page('Sign-in not completed', 'Your personal workspace could not be opened. Please try again later.', 503)
@@ -385,7 +424,7 @@ class HostedTrialDispatcher:
         directory = self.root / 'tenants' / sha256(identity.encode()).hexdigest()
         occupied = sum(path.stat().st_size for path in directory.rglob('*') if path.is_file() and not path.is_symlink())
         reservation = max(length, 1024 * 1024)
-        if occupied + self.storage_reserved.get(identity, 0) + reservation > 100 * 1024 * 1024 or shutil.disk_usage(self.root).free - reservation < 256 * 1024 * 1024:
+        if occupied + self.storage_reserved.get(identity, 0) + reservation > self._storage_limit(identity) or shutil.disk_usage(self.root).free - reservation < 256 * 1024 * 1024:
             return self._json({'error': {'code': 'storage_limit', 'message': 'The demo workspace is full. Saved activities remain available.'}}, 507), 0
         self.storage_reserved[identity] = self.storage_reserved.get(identity, 0) + reservation
         return None, reservation
@@ -474,6 +513,8 @@ class HostedTrialDispatcher:
             elif account:
                 identity = account['identity']
                 with self.lock:
+                    if self._maintenance(identity):
+                        return self._maintenance_response(request, account)(environ, start_response)
                     app = self._application(identity, account['display_name'])
                     rejected, reserved = self._admit(identity, request)
                     if rejected is not None:

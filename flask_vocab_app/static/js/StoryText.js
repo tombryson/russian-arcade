@@ -4,12 +4,10 @@ import {
     useEffect,
     useRef,
 } from './preact_deps.js';
-import { WordModal } from './WordModal.js';
-import { uiText } from './ui_text.js';
+import { WordModal } from './WordModal.js?v=2';
+import { uiText } from './ui_text.js?v=2';
 
-const wordCache = new Map();
-
-export function StoryText({ words, initialVisibility }) {
+export function StoryText({ words, initialVisibility, source = {} }) {
     const [visibility, setVisibility] = useState(
         initialVisibility || 'revealed',
     );
@@ -17,9 +15,8 @@ export function StoryText({ words, initialVisibility }) {
     const [hoveredWord, setHoveredWord] = useState(null);
     const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
     const [hoveredIndex, setHoveredIndex] = useState(null); // Track hovered word for color change
-    const vocabCache = new Set(
-        JSON.parse(localStorage.getItem('vocabCache') || '[]'),
-    );
+    const [savedLemmas, setSavedLemmas] = useState([]);
+    const lookupSequence = useRef(0);
     const debounceTimeout = useRef(null);
 
     const toggleVisibility = (newVisibility) => {
@@ -72,59 +69,46 @@ export function StoryText({ words, initialVisibility }) {
     const handleClick = async (word, index, event) => {
         if (word.lemma) {
             const rect = event.target.getBoundingClientRect();
-            const modalWidth = 150;
-            const modalHeight = 120;
-            let x = rect.left + rect.width / 2 - modalWidth / 2;
-            let y = rect.top - modalHeight - 10;
-            x = Math.max(0, Math.min(x, window.innerWidth - modalWidth));
-            y = Math.max(0, Math.min(y, window.innerHeight - modalHeight));
+            const modalWidth = Math.min(320, window.innerWidth - 24);
+            const x = Math.max(12, Math.min(rect.left, window.innerWidth - modalWidth - 12));
+            const y = Math.max(12, Math.min(rect.bottom + 8, window.innerHeight - 350));
+            const sequence = ++lookupSequence.current;
+            setHoveredWord({ word: word.word, loading: true });
+            setModalPosition({ x, y });
             let wordData;
-            if (wordCache.has(word.lemma)) {
-                wordData = wordCache.get(word.lemma);
-            } else {
-                try {
-                    const response = await fetch(
-                        `/word-details/${encodeURIComponent(
-                            word.lemma,
-                        )}?json=1`,
-                    );
-                    if (!response.ok)
-                        throw new Error(
-                            `HTTP error! status: ${response.status}`,
-                    );
-                    wordData = await response.json();
-                    wordCache.set(word.lemma, wordData);
-                } catch (error) {
-                    console.error('Error fetching word details:', error);
-                    wordData = {
-                        translation: 'Перевод недоступен',
-                        pos: 'unknown',
-                        status: vocabCache.has(word.lemma)
-                            ? 'Уже в списке слов'
-                            : '',
-                    };
-                    wordCache.set(word.lemma, wordData);
-                }
+            try {
+                const params = new URLSearchParams(source);
+                const response = await fetch(`/word-details/${encodeURIComponent(word.word)}?${params}`);
+                const result = await response.json().catch(() => null);
+                if (!response.ok || !result?.word) throw new Error(result?.error?.message || uiText('error_load_word'));
+                wordData = result;
+            } catch (error) {
+                wordData = { word: word.word, error: error instanceof TypeError ? uiText('error_load_word') : error.message || uiText('error_load_word') };
             }
-            setHoveredWord({ ...word, ...wordData });
+            if (sequence !== lookupSequence.current) return;
+            setHoveredWord(wordData);
             setModalPosition({ x, y });
         }
     };
 
     const closeModal = () => {
+        lookupSequence.current += 1;
         setHoveredWord(null);
     };
 
     // Handle clicks outside the modal to close it
     useEffect(() => {
         const handleOutsideClick = (event) => {
-            if (hoveredWord && !event.target.closest('.tooltip')) {
+            if (hoveredWord && !event.target.closest('.word-modal, .word-span')) {
                 closeModal();
             }
         };
         document.addEventListener('click', handleOutsideClick);
         return () => document.removeEventListener('click', handleOutsideClick);
     }, [hoveredWord]);
+
+    useEffect(() => () => { lookupSequence.current += 1; }, []);
+    const activeLookup = lookupSequence.current;
 
     const renderedText = words.map((word, i) => {
         if (word.word === ' ' || !word.lemma) {
@@ -135,7 +119,7 @@ export function StoryText({ words, initialVisibility }) {
             'span',
             {
                 key: i,
-                className: `word-span ${word.added ? 'added' : ''} ${
+                className: `word-span ${word.added || savedLemmas.includes(word.lemma) ? 'added' : ''} ${
                     isHidden
                         ? 'hidden-word'
                         : `revealed-word ${
@@ -174,7 +158,14 @@ export function StoryText({ words, initialVisibility }) {
               ),
         hoveredWord &&
             h(WordModal, {
+                key: hoveredWord.word,
                 word: hoveredWord,
+                source,
+                onSaved: (result) => {
+                    if (activeLookup !== lookupSequence.current) return;
+                    setSavedLemmas(values => [...new Set([...values, result.lemma])]);
+                    setHoveredWord(result);
+                },
                 position: modalPosition,
                 onClose: closeModal,
             }),

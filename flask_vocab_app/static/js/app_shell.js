@@ -498,7 +498,7 @@
         try {
             const [{ h, render }, { StoryText }] = await Promise.all([
                 loadPreact(),
-                import('/static/js/StoryText.js'),
+                import('/static/js/StoryText.js?v=2'),
             ]);
             const words = JSON.parse(storyContainer.dataset.words || '[]');
             // Replace the readable server fallback once per DOM node. A restored
@@ -510,6 +510,7 @@
             render(
                 h(StoryText, {
                     words,
+                    source: { story_id: storyContainer.dataset.storyId || '', story_key: storyContainer.dataset.storyKey || '' },
                     initialVisibility:
                         storyContainer.dataset.visibility || 'revealed',
                 }),

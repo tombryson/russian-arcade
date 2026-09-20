@@ -8,7 +8,7 @@
     </header>
     <div class="row">
         <div class="col-md-9">
-            <div id="story-container" class="story-text-mount" data-words='{{ story.words | tojson | safe }}' data-visibility='{{ visibility | default('revealed') }}'><p lang="ru">{{ story.text }}</p></div>
+            <div id="story-container" class="story-text-mount" data-story-id="{{ story.id | default('') }}" data-story-key="{{ story.capture_key | default('') }}" data-words='{{ story.words | tojson | safe }}' data-visibility='{{ visibility | default('revealed') }}'><p lang="ru">{{ story.text }}</p></div>
         </div>
         <div class="col-md-3">
             {% if story.image_url %}

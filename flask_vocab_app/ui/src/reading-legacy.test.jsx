@@ -4,7 +4,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/preact';
 vi.mock('../../static/js/preact_deps.js', async () => ({
   ...await import('preact'), ...await import('preact/hooks'),
 }));
-vi.mock('../../static/js/WordModal.js', () => ({ WordModal: () => null }));
+vi.mock('../../static/js/WordModal.js?v=2', () => ({ WordModal: () => null }));
 import { StoryText } from '../../static/js/StoryText.js';
 import { readFileSync } from 'node:fs';
 const shellSource = readFileSync('../static/js/app_shell.js', 'utf8');
@@ -20,11 +20,11 @@ describe('legacy reading text', () => {
   it('retains text spacing and provides keyboard word lookup with English controls', async () => {
     const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ translation: 'cat' }) });
     vi.stubGlobal('fetch', fetch);
-    render(<StoryText words={words} initialVisibility="revealed" />);
+    render(<StoryText words={words} initialVisibility="revealed" source={{ story_id: 4, story_key: 'snapshot' }} />);
     expect(document.getElementById('story-text').textContent).toBe('Привет, кот!\n\nКак дела');
     expect(screen.getByRole('button', { name: 'Show text' }).getAttribute('aria-pressed')).toBe('true');
     fireEvent.keyDown(screen.getByRole('button', { name: 'кот' }), { key: 'Enter' });
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/word-details/%D0%BA%D0%BE%D1%82?json=1'));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/word-details/%D0%BA%D0%BE%D1%82?story_id=4&story_key=snapshot'));
     fireEvent.click(screen.getByRole('button', { name: 'Hide text' }));
     expect(screen.queryByRole('button', { name: 'кот' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Show text' }));

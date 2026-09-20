@@ -19,21 +19,18 @@ def get_morph():
 
 
 def process_story_words(story_text, db_path, drive_service, added_lemmas=None):
-    words = re.findall(r"\w+|\s+|[^\w\s]", story_text, re.UNICODE)
+    # Russian compounds are one selectable surface: selecting only "повара"
+    # from "шеф-повара" would lose its actual lemma and fail source validation.
+    words = re.findall(r"[А-Яа-яЁё][А-Яа-яЁё\u0301]*(?:-[А-Яа-яЁё][А-Яа-яЁё\u0301]*)*|\w+|\s+|[^\w\s]", story_text, re.UNICODE)
     word_objs = []
-    added_lemmas = set(added_lemmas or [])
+    # A Drive capture can still be awaiting sync. Only SQLite entries count as
+    # saved here, so the story's Add action can complete their lexical data.
+    added_lemmas = set()
     try:
-        cloud_content = drive_service.download_vocab_list()
-        cloud_lemmas = {w.strip().lower() for w in cloud_content.split() if w.strip()}
-        added_lemmas.update(cloud_lemmas)
         with connect_db(db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT lemma FROM words")
-            db_lemmas = {row[0].lower() for row in cursor.fetchall()}
-        added_lemmas.update(db_lemmas)
-        logger.debug("Fetched %s cloud lemmas, %s db lemmas", len(cloud_lemmas), len(db_lemmas))
-    except Exception as e:
-        logger.error("Error fetching added lemmas: %s", str(e))
+            added_lemmas = {row[0].lower() for row in conn.execute("SELECT lemma FROM words")}
+    except sqlite3.Error:
+        logger.exception("Could not read saved vocabulary for story highlighting")
 
     def sanitize(value):
         if value is None:
@@ -46,7 +43,7 @@ def process_story_words(story_text, db_path, drive_service, added_lemmas=None):
         if not re.match(r"\w+", word, re.UNICODE):
             word_objs.append({"word": word, "lemma": None, "added": False})
             continue
-        parsed = get_morph().parse(word)[0]
+        parsed = get_morph().parse(word.replace('\u0301', ''))[0]
         lemma = parsed.normal_form if parsed.normal_form else None
         word = sanitize(word)
         lemma = sanitize(lemma)

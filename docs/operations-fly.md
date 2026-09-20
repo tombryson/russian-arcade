@@ -110,6 +110,34 @@ the mounted volume. Keep one Machine and one application process. The spending
 ledger must survive restarts: missing storage pauses AI rather than creating a
 fresh allowance. Back up identity, budget, workspace databases and media together.
 
+### Account maintenance and storage
+
+Each hosted workspace has a 100 MiB storage limit. An operator can give a known
+account a larger limit without changing other visitors' limits. Store overrides
+in `HOSTED_TRIAL_ROOT/operator/storage-limits.json`. This is a JSON object whose
+keys are the SHA-256 hex digests of verified identities such as `github:12345`.
+Values are positive integer byte limits; 256 MiB is `268435456` bytes. The identity
+must come from the identity registry, not a display name or browser request.
+
+Write this file atomically and keep the operator directory outside tenant upload
+and media directories. Overrides are read on each write admission. Missing,
+invalid or oversized configuration keeps the default limit. Upload limits, free
+disk requirements, request limits and AI budgets still apply. This file is not a
+way to grant additional AI spending or to expose private content publicly.
+
+For a data migration, create an empty file at
+`HOSTED_TRIAL_ROOT/operator/maintenance/<identity-digest>`. New content requests
+for that account receive HTTP 503 with `Retry-After: 60`. Sign-in, account status
+and sign-out remain available, and signing in does not open or seed the paused
+workspace. Other accounts and anonymous samples continue to work.
+
+The marker blocks new requests; it does not cancel requests or background jobs
+already running. Drain those jobs or stop the worker before taking the final
+backup and replacing files. Keep the marker present during the cutover. Restart
+the worker to discard cached application state, verify the imported database and
+media, then remove the marker. Preserve the original backup until the account
+has been checked. Never copy an owner's database into the public sample seed.
+
 The hosted configuration uses the `arcade_data` volume mounted at `/data`:
 
 | Setting or path | Purpose |

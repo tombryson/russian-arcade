@@ -535,53 +535,26 @@ def create_vocab_blueprint(db_path, drive_service, sync_service=None):
             return jsonify(error='This word was not found.'), 404
         return jsonify(result)
 
-    @blueprint.route("/word-details/<lemma>")
-    def word_details(lemma):
-        lemma = unquote(lemma)
-        logger.debug("Fetching word details for lemma: %s", lemma)
-        is_json = request.args.get("json", "0") == "1"
-        x = request.args.get("x", "0")
-        y = request.args.get("y", "0")
+    @blueprint.route("/word-details/<word>")
+    def word_details(word):
+        from repositories.learning_repository import LearningError
+        from services.story_vocabulary import lookup_story_word
         try:
-            in_db = word_repository.exists(lemma)
-            status = "Already in database" if in_db else ""
-            word_data = {
-                "lemma": lemma,
-                "translation": "Translation disabled",
-                "pos": "unknown",
-                "status": status,
-            }
-            logger.debug("Word data: %s", word_data)
-            if is_json:
-                return jsonify(word_data)
-            return render_template("_word_modal.html", word=word_data, x=x, y=y)
-        except Exception as e:
-            logger.error("Word details error for '%s': %s", lemma, str(e), exc_info=True)
-            error_response = {
-                "lemma": lemma,
-                "translation": "Error",
-                "pos": "unknown",
-                "status": "Error fetching details",
-            }
-            if is_json:
-                return jsonify(error_response), 500
-            return render_template("_word_modal.html", word=error_response, x=x, y=y), 500
+            return jsonify(lookup_story_word(db_path, word, request.args))
+        except LearningError as error:
+            return jsonify(error={'code': error.code, 'message': str(error), **error.details}), error.status
 
     @blueprint.route("/add-vocab/<lemma>", methods=["POST"])
     def add_vocab(lemma):
-        lemma = unquote(lemma)
-        logger.debug("Adding vocab: lemma=%s", lemma)
+        from contracts.learning import fields
+        from repositories.learning_repository import LearningError
+        from services.story_vocabulary import capture_story_word
         try:
-            if drive_service.add_word(lemma):
-                added_lemmas = session.get("added_lemmas", set())
-                added_lemmas.add(lemma)
-                session["added_lemmas"] = added_lemmas
-                logger.debug("Added %s to vocab list", lemma)
-                return f'<div class="alert alert-success">Слово "{lemma}" добавлено в список!</div>'
-            logger.debug("Duplicate found: %s", lemma)
-            return f'<div class="alert alert-warning">Слово "{lemma}" уже в списке</div>', 400
-        except Exception as e:
-            logger.error("Add vocab error: %s", str(e))
-            return f'<div class="alert alert-danger">Ошибка добавления: {str(e)}</div>', 500
+            if not request.is_json:
+                raise LearningError('json_required', 'Reopen this story before adding a word.', 415)
+            data = fields(request.get_json(silent=True), {'word', 'pos', 'story_key'}, {'story_id'})
+            return jsonify(capture_story_word(db_path, data['word'], lemma, data['pos'], data))
+        except LearningError as error:
+            return jsonify(error={'code': error.code, 'message': str(error), **error.details}), error.status
 
     return blueprint

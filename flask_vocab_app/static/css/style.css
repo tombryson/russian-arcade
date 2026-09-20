@@ -544,9 +544,10 @@ button.is-submitting {
 
 .word-modal {
     display: block;
-    position: absolute;
-    min-width: 150px;
-    max-width: 250px;
+    position: fixed;
+    width: min(320px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
     background: var(--color-surface);
@@ -561,7 +562,8 @@ button.is-submitting {
 
 .word-modal-header {
     display: flex;
-    justify-content: flex-end;
+    align-items: center;
+    justify-content: space-between;
     margin-bottom: var(--space-2);
 }
 

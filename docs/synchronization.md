@@ -2,9 +2,19 @@
 
 ## Product contract
 
-Drive is an easy place to capture Russian words on mobile. SQLite stores the validated and organized learning library. The app's capture controls continue to write to Drive, and the explicit sync action imports suitable words into SQLite. This preserves the deliberate multi-channel capture workflow.
+Drive is an easy place to capture Russian words on mobile. SQLite stores the validated and organized learning library. The vocabulary page can capture words in Drive, and the explicit sync action imports suitable words into SQLite. In-activity capture saves directly into SQLite through the same lexical pipeline. This preserves the deliberate multi-channel capture workflow.
 
 Removing a word from Drive never deletes its SQLite record, inflections, or learning history. The existing reverse-export behavior is preserved: sync adds SQLite-only lemmas back to the Drive list. Drive is therefore a capture list that can also contain exported library words, not a consumable queue. Changing that export policy requires an explicit product decision.
+
+## Saving words from Comprehension
+
+Selecting a word reads its dictionary-supported lemma and part of speech. Existing words also show their saved mnemonic. Lookup makes no AI call. The popup does not assign a universal English translation to the lemma; meanings remain attached to their examples. If the dictionary supports different words or parts of speech, the learner chooses the reading that fits the sentence.
+
+**Add to my words** uses the same lemma/form resolver as games and lesson cards, which calls `SyncService.process_word`. It commits the lemma and filtered forms, then calls `SyncService.enrich_words` for missing topics and mnemonics. Hosted calls use the existing AI allowance controls. A provider failure leaves the word saved and reports that enrichment needs a retry. Retrying keeps its identity, forms and history.
+
+The server verifies that the selected surface appears in the learner's owned story. A text fingerprint prevents an old tab from capturing against a different story. Newly generated, unsaved stories use the current server session as their source. The popup does not use a browser-wide vocabulary cache or report success before the server confirms it.
+
+This direct capture does not require Drive access. The next explicit sync can export its SQLite lemma to Drive through the existing reverse-export step.
 
 ## Preview
 
