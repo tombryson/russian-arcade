@@ -30,7 +30,7 @@ class HostedTests(unittest.TestCase):
         self.base = 'https://russian-arcade.fly.dev'
 
     def test_every_content_route_requires_credentials(self):
-        for path in ('/post/', '/api/v1/user-session', '/static/uploads/lesson.pdf',
+        for path in ('/', '/post', '/post/', '/tools/anki/', '/api/v1/user-session', '/static/uploads/lesson.pdf',
                      '/static/media/audio.mp3', '/post/assets/app.js'):
             for method in ('GET', 'POST'):
                 response = self.client.open(path, method=method, base_url=self.base)

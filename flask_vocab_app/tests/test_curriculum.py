@@ -128,9 +128,9 @@ class CurriculumPageTests(unittest.TestCase):
             with self.subTest(topic=topic['id']):
                 if topic['id'] in expected:
                     scenario, level = expected[topic['id']]
-                    self.assertIn(f'/post/#speaking/scenario/{scenario}?level={level}', section)
+                    self.assertIn(f'/#speaking/scenario/{scenario}?level={level}', section)
                 else:
-                    self.assertNotIn('/post/#speaking/scenario/', section)
+                    self.assertNotIn('/#speaking/scenario/', section)
 
 
 if __name__ == '__main__':

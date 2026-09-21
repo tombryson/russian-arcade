@@ -36,7 +36,7 @@ class UserSessionTests(unittest.TestCase):
         self.assertIsNone(state['profile'])
         self.assertIn(PERSONAL_PROFILE, [p['id'] for p in state['profiles']])
         self.assertIsNone(self.client.get('/api/v1/household').json['profile'])
-        self.assertEqual(self.client.get('/post/').status_code, 200)
+        self.assertEqual(self.client.get('/').status_code, 200)
         self.assertEqual(self.client.get('/api/v1/progression').status_code, 401)
         self.assertEqual(self.client.get('/api/v1/flashcards').status_code, 401)
         self.assertEqual(self.client.get('/writing').headers['Location'], '/post/profiles')
@@ -180,7 +180,7 @@ class UserSessionTests(unittest.TestCase):
             'next': 'https://other.invalid',
         })
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers['Location'], '/post/#home')
+        self.assertEqual(response.headers['Location'], '/#home')
         self.assertEqual(self.state()['profile']['display_name'], 'Jo')
         response = self.client.post('/post/profiles/actions', data={
             'action': 'logout', 'csrf_token': self.state()['csrf_token'],

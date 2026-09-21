@@ -9,7 +9,7 @@ from utils.navigation import NAVIGATION_COOKIE, NAVIGATION_LAYOUTS, browser_navi
 
 
 def _local_return_path(value):
-    fallback = '/post/'
+    fallback = '/'
     if not isinstance(value, str) or not value.startswith('/'):
         return fallback
     decoded = unquote(value)
@@ -40,7 +40,7 @@ def create_ui_preferences_blueprint():
     @bp.get('/appearance')
     @access_policy('public')
     def appearance():
-        return redirect('/post/')
+        return redirect('/')
 
     @bp.post('/ui-navigation')
     @access_policy('public')

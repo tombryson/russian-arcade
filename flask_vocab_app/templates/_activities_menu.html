@@ -7,8 +7,8 @@
         {% for item in activity_navigation.activities if item.page != 'curriculum' %}
         <a href="{{ item.href }}" hx-boost="false"{% if active_page == item.page %} aria-current="page"{% endif %}>{{ item.label }}</a>
         {% endfor %}
-        <a href="/post/#games" hx-boost="false"{% if active_page == 'games' %} aria-current="page"{% endif %}>{{ ui_t('nav.games') }}</a>
-        <a class="activities-menu-all" href="/post/#activities" hx-boost="false">{{ ui_t('nav.all_activities') }} <span aria-hidden="true">↗</span></a>
+        <a href="/#games" hx-boost="false"{% if active_page == 'games' %} aria-current="page"{% endif %}>{{ ui_t('nav.games') }}</a>
+        <a class="activities-menu-all" href="/#activities" hx-boost="false">{{ ui_t('nav.all_activities') }} <span aria-hidden="true">↗</span></a>
         {% for item in activity_navigation.activities if item.page == 'curriculum' %}
         <a href="{{ item.href }}" hx-boost="false"{% if active_page == item.page %} aria-current="page"{% endif %}>{{ item.label }}</a>
         {% endfor %}

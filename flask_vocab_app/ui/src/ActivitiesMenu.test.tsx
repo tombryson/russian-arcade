@@ -3,9 +3,9 @@ import { fireEvent, render, screen, within } from '@testing-library/preact';
 import { ActivitiesMenu } from './ActivitiesMenu';
 
 const items = [
-  {page:'native_flashcards', href:'/post/#flashcards', label:'Flashcards', boost:false},
+  {page:'native_flashcards', href:'/#flashcards', label:'Flashcards', boost:false},
   {page:'comprehension', href:'/comprehension', label:'Comprehension', boost:true},
-  {page:'speaking', href:'/post/#speaking', label:'Speaking', boost:false},
+  {page:'speaking', href:'/#speaking', label:'Speaking', boost:false},
   {page:'writing', href:'/writing', label:'Writing', boost:true},
   {page:'lessons', href:'/lessons', label:'Lessons', boost:true},
   {page:'word_jumble', href:'/word_jumble', label:'Word Jumble', boost:true},
@@ -14,7 +14,7 @@ const items = [
 
 describe('Top Activities menu', () => {
   it('opens in place and lists each activity before the All activities destination', () => {
-    window.history.replaceState(null, '', '/post/#home');
+    window.history.replaceState(null, '', '/#home');
     const {container} = render(<ActivitiesMenu items={items} language="en" active={false} activePage="home" />);
     expect(container.querySelector('details')!.open).toBe(false);
     fireEvent.click(screen.getByLabelText('Activities'));

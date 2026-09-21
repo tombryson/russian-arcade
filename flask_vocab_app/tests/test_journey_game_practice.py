@@ -86,7 +86,7 @@ class JourneyGamePracticeTests(unittest.TestCase):
         self.chapter()
         original = self.post('/api/v1/first-steps/bag/flashcards', status=201)
         game = self.post(self.game(), status=201)
-        self.assertEqual(game['first_steps']['url'], '/post/#games/session/saved-game')
+        self.assertEqual(game['first_steps']['url'], '/#games/session/saved-game')
         self.assertEqual({item['id'] for item in game['items']}, {item['id'] for item in original['items']})
         self.assertEqual(game['first_steps']['reused'], 3)
         self.finish_batch(game)

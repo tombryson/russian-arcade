@@ -43,7 +43,7 @@ def item(identity, family, scene, scenario, scenario_ru, segments, slots, answer
         lemma, form, pos, grammar, meaning = word
         result['vocabulary'] = {'lemma': lemma, 'form': form, 'pos': pos, 'grammar': grammar,
                                 'sentence': sentence, 'translation': translation, 'target_meaning': meaning,
-                                'source': {'kind': 'grammar', 'title': 'Describe the scene', 'url': '/post/#games/scene-builder'}}
+                                'source': {'kind': 'grammar', 'title': 'Describe the scene', 'url': '/#games/scene-builder'}}
     return result
 
 

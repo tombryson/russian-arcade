@@ -4,7 +4,7 @@ Russian Arcade is a Russian learning application with vocabulary, flashcards, re
 
 Barsik (Барсик), a cat delivering a letter, guides the introductory lessons and journey activities. The application supports both younger learners and adults. Individual study is the default; household controls are optional.
 
-**[Try the public demo](https://russian-arcade.fly.dev/post/)** · [Local setup](#local-setup) · [Architecture](#architecture-and-technology-stack) · [Documentation](#documentation)
+**[Try the public demo](https://russian-arcade.fly.dev/)** · [Local setup](#local-setup) · [Architecture](#architecture-and-technology-stack) · [Documentation](#documentation)
 
 <p align="center">
   <img src="flask_vocab_app/ui/src/assets/barsik.webp" alt="Barsik holding a letter beside a red postbox." width="320">
@@ -177,7 +177,7 @@ A1–C2 describe curriculum task levels. They are not qualifications awarded by 
 
 ## Architecture and technology stack
 
-One Flask application serves the backend and interface. Preact powers `/post/`. Other activities use Flask/Jinja templates with shared styling and navigation. Vite builds the Preact assets; Flask serves them.
+One Flask application serves the backend and interface. Preact powers the homepage and interactive activities. Other activities use Flask/Jinja templates with shared styling and navigation. Vite builds the Preact assets; Flask serves them.
 
 | Layer | Technology and purpose |
 | --- | --- |
@@ -197,7 +197,7 @@ Model settings are listed in [config.py](flask_vocab_app/config.py) and [`.env.e
 
 ## Public demo and project status
 
-The **[public demo](https://russian-arcade.fly.dev/post/)** offers introductory lessons, sample games, vocabulary and authored cloze cards without signing in. Each browser receives a separate temporary sample profile.
+The **[public demo](https://russian-arcade.fly.dev/)** offers introductory lessons, sample games, vocabulary and authored cloze cards without signing in. Each browser receives a separate temporary sample profile.
 
 Sample mode uses synthetic data and makes no paid AI calls. Its cards demonstrate text review without generated pictures or speech. Sample progress resets on restart.
 
@@ -251,7 +251,7 @@ python -m flask --app flask_vocab_app/app.py:create_app seed-demo
 python -m flask --app flask_vocab_app/app.py:create_app run --port 5000
 ```
 
-Open **[localhost:5000/post/](http://localhost:5000/post/)** and choose or create a local profile. The development `seed-demo` command adds three synthetic words; it is not the larger hosted-demo seed and does not generate cards. It refuses to seed a nonempty vocabulary, so skip it when using an existing database.
+Open **[localhost:5000/](http://localhost:5000/)** and choose or create a local profile. The development `seed-demo` command adds three synthetic words; it is not the larger hosted-demo seed and does not generate cards. It refuses to seed a nonempty vocabulary, so skip it when using an existing database.
 
 `db-upgrade` applies pending migrations and backs up an existing database first. Without a `VOCAB_DB_PATH` override, the historical default is `flask_vocab_app/vocab.db`; explicitly choose the database you intend to use.
 
@@ -317,7 +317,9 @@ docs/                    Architecture, product decisions and feature guides
 .github/workflows/       Continuous integration
 ```
 
-`word-post` names and `/post/` URLs remain internal implementation names from the earlier design. **Russian Arcade** is the application name. Historical scripts may retain machine-specific assumptions; read them before running them against real data.
+The homepage is `/`; optional Anki tools are at `/tools/anki/`. Existing `/post/` bookmarks redirect to the homepage and retain their activity destination. Some internal `word-post` names and asset paths remain from the earlier design.
+
+Historical scripts may retain machine-specific assumptions; read them before running them against real data.
 
 ## Documentation
 

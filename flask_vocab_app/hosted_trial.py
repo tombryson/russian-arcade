@@ -37,10 +37,12 @@ def safe_return_url(value):
     if (not isinstance(value, str) or not value.startswith('/') or value.startswith('//')
             or '\\' in value or any(ord(char) < 32 for char in value)
             or len(value) > 2000):
-        return '/post/'
+        return '/'
     parts = urlsplit(value)
     if parts.scheme or parts.netloc or parts.path.startswith('/trial/'):
-        return '/post/'
+        return '/'
+    if parts.path in ('/post', '/post/'):
+        return parts._replace(path='/').geturl()
     return value
 
 
@@ -152,8 +154,6 @@ def install_trial_session(app):
     sessions = PersonalSessions(app.config['DB_PATH'], lifetime=3600)
 
     def boundary():
-        if request.path == '/':
-            return flask_redirect('/post/')
         if request.blueprint == 'flashcards' or request.path in {
             '/sync', '/sync/preview', '/sync/history', '/sync_vocab', '/sanitize_vocab',
             '/apply_sanitization', '/edit_word', '/delete_word', '/add_word',
@@ -307,7 +307,7 @@ class HostedTrialDispatcher:
         body = ('<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width, initial-scale=1">'
                 f'<title>{escape(title)} · Russian Arcade</title><link rel="stylesheet" href="/static/css/public_demo.css"></head>'
                 f'<body class="demo-unavailable"><main class="demo-unavailable-content"><h1>{escape(title)}</h1>'
-                f'<p>{escape(message)}</p>{button}<p><a href="/post/">Back to Russian Arcade</a></p></main></body></html>')
+                f'<p>{escape(message)}</p>{button}<p><a href="/">Back to Russian Arcade</a></p></main></body></html>')
         return self._response(Response(body, status=status, content_type='text/html; charset=utf-8'))
 
     def _begin(self, request):
@@ -506,7 +506,7 @@ class HostedTrialDispatcher:
                 else:
                     with self._db() as conn:
                         conn.execute('DELETE FROM sessions WHERE token_hash=?', (account['token_hash'],))
-                    response = self._response(redirect('/post/'))
+                    response = self._response(redirect('/'))
                     response.delete_cookie(COOKIE, secure=True, httponly=True, samesite='Lax', path='/')
             elif request.path.startswith('/trial/'):
                 response = self._response(Response('Not found', status=404))

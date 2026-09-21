@@ -393,7 +393,7 @@ class TranslationCleanupTests(unittest.TestCase):
             links = [attrs for tag, attrs in Document(response.get_data(as_text=True)).elements
                      if tag == 'a' and attrs.get('aria-current') == 'page']
             self.assertTrue(any(link.get('href') == '/sentences/saved' for link in links))
-            self.assertFalse(any(link.get('href') in ('/sentences', '/post/#activities') for link in links))
+            self.assertFalse(any(link.get('href') in ('/sentences', '/#activities') for link in links))
         practice_links = [attrs for tag, attrs in Document(self.client.get(self.url).get_data(as_text=True)).elements
                           if tag == 'a' and attrs.get('aria-current') == 'page']
         self.assertTrue(any(link.get('href') == '/sentences' for link in practice_links))

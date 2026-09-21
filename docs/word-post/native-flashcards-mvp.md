@@ -4,7 +4,7 @@ Updated 10 September 2026 on `codex/native-flashcards-mvp`. **Individual use is 
 
 ## Generate, study, adjust
 
-1. Open `/post/#flashcards` and choose **Generate cards**.
+1. Open `/#flashcards` and choose **Generate cards**.
 2. Choose card type, number, difficulty, word type, case and topic. The selected words appear before generation. **More options** sets the maximum active native cards per word.
 3. Press **Generate cards**. The application generates the answer, Russian example and English translation, then saves each card to your collection automatically. Picture and Russian word/example audio are selected by default; either can be turned off.
 4. Choose **Study flashcards**. Reveal the answer, then choose **Again**, **Hard**, **Good** or **Easy**. Scheduling and review history are saved locally.
@@ -12,7 +12,7 @@ Updated 10 September 2026 on `codex/native-flashcards-mvp`. **Individual use is 
 
 The vocabulary's `words` table still has no compulsory English-meaning field. The generator writes English wording to each card, where it can be a natural phrase or short explanation. This avoids imposing a single translation on every use of a Russian word. It does not guarantee that AI wording is correct; the individual can change or delete it.
 
-The old `/post/flashcards/manage?word_id=…` link now opens generation for that word. The existing Anki generator remains available at `/`; neither its schedules nor its counters are updated by native generation.
+The old `/post/flashcards/manage?word_id=…` link now opens generation for that word. The existing Anki generator remains available at `/tools/anki/`; neither its schedules nor its counters are updated by native generation.
 
 ## What is implemented
 
@@ -53,7 +53,7 @@ Only enable `WORD_POST_HOUSEHOLD_ENABLED=true` if you want separate learner prof
 
 ### Prepared preview
 
-[Generate flashcards](http://127.0.0.1:5052/post/#generate) runs from ignored `instance/native-flashcards-mvp/`, with a separate database, settings, assets and build. Restart this particular preview with `.venv/bin/python instance/native-flashcards-mvp/serve.py`. Its ten earlier drafts are retained, but are not required for using the generator. No PIN is needed. The canonical schema-8 database was not upgraded or replaced.
+[Generate flashcards](http://127.0.0.1:5052/#generate) runs from ignored `instance/native-flashcards-mvp/`, with a separate database, settings, assets and build. Restart this particular preview with `.venv/bin/python instance/native-flashcards-mvp/serve.py`. Its ten earlier drafts are retained, but are not required for using the generator. No PIN is needed. The canonical schema-8 database was not upgraded or replaced.
 
 On 11 September, the preview's saved-story media was restored into its configured `media/` directory: five original images and five recordings shared by eight stories. The initial database copy had omitted those files. One duplicate story's two empty media fields were filled from saved copies with identical text; titles, answers and scores were preserved. The private `story-media-repair-*/` directory contains the pre-repair SQLite backup, file hashes and HTTP/media verification. Future preview copies must include legacy media as described in [operations](../operations.md#data-locations).
 

@@ -17,7 +17,7 @@
         <link rel="stylesheet" href="/static/css/lessons.css?v=3" />
         <link rel="stylesheet" href="/static/css/vocabulary.css?v=1" />
         <script src="/static/js/lessons.js?v=4" defer></script>
-        <script src="/static/js/lesson_word_selection.js?v=3" defer></script>
+        <script src="/static/js/lesson_word_selection.js?v=4" defer></script>
         {% block page_styles %}{% endblock %}
         {% set shared_styles = arcade_styles() %}
         {% for filename in shared_styles %}<link rel="stylesheet" href="{{ url_for('word_post.assets', filename=filename) }}">{% endfor %}
@@ -26,7 +26,7 @@
         <script src="/static/js/progression.js?v=5" defer></script>
         <link rel="stylesheet" href="/static/css/skill_progress.css?v=2" />
         <link rel="stylesheet" href="/static/css/user_sessions.css?v=1" />
-        <script src="/static/js/user_sessions.js?v=2" defer></script>
+        <script src="/static/js/user_sessions.js?v=3" defer></script>
         <script src="/static/js/language_picker.js?v=1" defer></script>
         <link rel="stylesheet" href="/static/css/navigation_layout.css?v=4" />
         <link rel="stylesheet" href="/static/css/activities_menu.css?v=1" />
@@ -48,9 +48,9 @@
         {% if shared_styles %}
         <a class="arcade-skip" href="#mainContent">Skip to activity</a>
         {% if navigation_layout != 'sidebar' %}
-        <header class="arcade-header"><a class="arcade-brand" href="/post/" hx-boost="false"><span lang="ru" aria-hidden="true">Я</span><strong>{{ ui_t('app.title') }}<small>{{ ui_t('app.tagline') }}</small></strong></a>
+        <header class="arcade-header"><a class="arcade-brand" href="/" hx-boost="false"><span lang="ru" aria-hidden="true">Я</span><strong>{{ ui_t('app.title') }}<small>{{ ui_t('app.tagline') }}</small></strong></a>
           <div class="arcade-header-actions">
-            <nav aria-label="{{ ui_t('nav.main') }}"><a href="/post/" hx-boost="false">{{ ui_t('nav.home') }}</a>{% include '_activities_menu.html' %}<a href="/vocab" hx-boost="false" {% if active_page in ['vocab', 'sentences_saved'] %}aria-current="page"{% endif %}>{{ ui_t('nav.my_words') }}</a></nav>
+            <nav aria-label="{{ ui_t('nav.main') }}"><a href="/" hx-boost="false">{{ ui_t('nav.home') }}</a>{% include '_activities_menu.html' %}<a href="/vocab" hx-boost="false" {% if active_page in ['vocab', 'sentences_saved'] %}aria-current="page"{% endif %}>{{ ui_t('nav.my_words') }}</a></nav>
             {% include '_progression.html' %}
             {% include '_language_picker.html' %}
             {% include '_appearance_picker.html' %}
@@ -64,7 +64,7 @@
             {% if navigation_layout == 'sidebar' or not shared_styles %}{% include '_sidebar.html' %}{% endif %}
             {% block main_content %}{% endblock %}
         </div>
-        <script src="/static/js/app_shell.js?v=24" defer></script>
+        <script src="/static/js/app_shell.js?v=25" defer></script>
         {% block page_scripts %}{% endblock %}
     </body>
 </html>

@@ -85,7 +85,7 @@ class LearningTests(unittest.TestCase):
     def test_default_mode_keeps_legacy_and_personal_study_without_household_controls(self):
         self.app.config['WORD_POST_HOUSEHOLD_ENABLED'] = False
         client = self.app.test_client()
-        self.assertEqual(client.get('/').status_code, 200)
+        self.assertEqual(client.get('/tools/anki/').status_code, 200)
         self.assertEqual(client.get('/api/v1/household').json['mode'], 'personal')
         self.assertEqual(client.post('/api/v1/household/unlock', json={'pin': '246810'}).status_code, 404)
         former_household = client.get('/post/household')
@@ -107,7 +107,7 @@ class LearningTests(unittest.TestCase):
     def test_legacy_routes_private_uploads_and_catalogue_have_no_child_bypass(self):
         child, _ = self.learner()
         for client in (child, self.app.test_client()):
-            for url in ('/', '/vocab', '/metrics', '/user/stats', '/comprehension/load/1', '/writing', '/lessons/load/1',
+            for url in ('/tools/anki/', '/vocab', '/metrics', '/user/stats', '/comprehension/load/1', '/writing', '/lessons/load/1',
                         '/word_jumble', '/static/uploads/private.pdf', '/static/media/private.png', '/post/catalogue'):
                 with self.subTest(url=url):
                     response = client.get(url)
@@ -120,8 +120,8 @@ class LearningTests(unittest.TestCase):
             self.assertEqual(client.get('/static/images/barsik-running-v1.webp').status_code, 200)
             self.assertEqual(client.get('/static/images/barsik-progress-run-v1.webp').status_code, 200)
         self.assertEqual(self.adult.get('/vocab').status_code, 200)
-        self.assertIn('csrf-token', self.adult.get('/').get_data(as_text=True))
-        self.assertEqual(self.adult.get('/').headers['Cache-Control'], 'no-store')
+        self.assertIn('csrf-token', self.adult.get('/tools/anki/').get_data(as_text=True))
+        self.assertEqual(self.adult.get('/tools/anki/').headers['Cache-Control'], 'no-store')
 
     def test_csrf_protects_login_json_forms_and_legacy_get_writes(self):
         client = self.app.test_client()

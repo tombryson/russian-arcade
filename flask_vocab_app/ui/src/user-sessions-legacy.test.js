@@ -3,7 +3,7 @@ import {runInNewContext} from 'node:vm';
 import {describe,expect,it,vi} from 'vitest';
 import {waitFor} from '@testing-library/preact';
 const script=readFileSync('../static/js/user_sessions.js','utf8');
-function setup(path='/post/') {
+function setup(path='/') {
   const handlers={};
   const location={pathname:path,reload:vi.fn(),assign:vi.fn()};
   const replaceState=vi.fn();
@@ -17,11 +17,11 @@ function setup(path='/post/') {
   return {handlers,location,replaceState,state};
 }
 describe('Profile changes across browser tabs',()=>{
-  it('forces a real reload when the app is already at /post/',async()=>{
+  it('forces a real reload when the app is already at /',async()=>{
     const {handlers,state,location,replaceState}=setup();
     state.profile={id:'b'};handlers.storage({key:'russian-arcade-session'});
     await waitFor(()=>expect(location.reload).toHaveBeenCalledOnce());
-    expect(replaceState).toHaveBeenCalledWith(null,'','/post/#home');
+    expect(replaceState).toHaveBeenCalledWith(null,'','/#home');
     expect(location.assign).not.toHaveBeenCalled();
   });
   it('leaves matching profiles alone and returns a legacy activity home after logout',async()=>{
@@ -30,6 +30,6 @@ describe('Profile changes across browser tabs',()=>{
     await new Promise(resolve=>setTimeout(resolve,0));
     expect(location.assign).not.toHaveBeenCalled();
     state.profile=null;handlers.storage({key:'russian-arcade-session'});
-    await waitFor(()=>expect(location.assign).toHaveBeenCalledWith('/post/#home'));
+    await waitFor(()=>expect(location.assign).toHaveBeenCalledWith('/#home'));
   });
 });

@@ -16,7 +16,7 @@ MESSAGE = 'This public preview includes First steps, sample games, vocabulary an
 # New endpoints stay private even when added to an existing public blueprint.
 READ_ENDPOINTS = frozenset({
     'public_demo_account',
-    'word_post.home', 'word_post.assets', 'word_post.licenses', 'static',
+    'word_post.home', 'word_post.legacy_home', 'word_post.assets', 'word_post.licenses', 'static',
     'ui_preferences.appearance',
     'curriculum.index',
     'vocab.vocab_list', 'vocab.inventory', 'learning.state', 'learning.asset',
@@ -78,7 +78,7 @@ def install_demo(app):
                 '<body class="demo-unavailable"><main class="demo-unavailable-content">'
                 '<h1>Demo profile</h1><p>This temporary profile is for trying the sample activities. '
                 'Personal sign-in is not enabled on this site yet.</p>'
-                '<p><a href="/post/#home">Back to Russian Arcade</a></p></main></body></html>')
+                '<p><a href="/#home">Back to Russian Arcade</a></p></main></body></html>')
 
     def rate_limited(seconds):
         return jsonify(error={'code': 'rate_limited', 'message': 'The demo is busy. Please try again later.'}), 429, {'Retry-After': str(seconds)}
@@ -99,16 +99,14 @@ def install_demo(app):
                 '<link rel="stylesheet" href="/static/css/public_demo.css?v=2"></head><body class="demo-unavailable">'
                 f'<main class="demo-unavailable-content">'
                 f'<h1>Explore the public preview</h1><p>{message}</p>{sign_in}'
-                '<p><a href="/post/#first-delivery">Try First steps</a> · <a href="/post/#flashcards">Try flashcards</a> · '
-                '<a href="/post/#home">Home</a></p></main></body></html>'), 403
+                '<p><a href="/#first-delivery">Try First steps</a> · <a href="/#flashcards">Try flashcards</a> · '
+                '<a href="/#home">Home</a></p></main></body></html>'), 403
 
     def boundary():
         if request.endpoint is None:
             return None
         if request.endpoint == 'journey_games.purchase':
             return jsonify(error={'code': 'demo_unavailable', 'message': 'Game purchases are unavailable in the public demo.'}), 403
-        if request.path == '/':
-            return redirect('/post/')
         if request.path == '/post/profiles' and request.method == 'GET':
             if app.extensions.get('hosted_trial') is not None:
                 return redirect('/trial/account')

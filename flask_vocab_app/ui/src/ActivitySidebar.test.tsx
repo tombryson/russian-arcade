@@ -6,23 +6,23 @@ import type { ActivityNavigation } from './ActivitySidebar';
 const navigation: ActivityNavigation = {
   title: 'Activities & tools', more: 'More tools',
   main: [
-    {page:'home', href:'/post/#home', label:'Home', boost:false},
-    {page:'activities', href:'/post/#activities', label:'All activities', boost:false},
+    {page:'home', href:'/#home', label:'Home', boost:false},
+    {page:'activities', href:'/#activities', label:'All activities', boost:false},
     {page:'vocab', href:'/vocab', label:'My words', boost:false},
   ],
   activities: [
-    {page:'native_flashcards', href:'/post/#flashcards', label:'Flashcards', boost:false},
+    {page:'native_flashcards', href:'/#flashcards', label:'Flashcards', boost:false},
     {page:'writing', href:'/writing', label:'Writing', boost:true},
-    {page:'speaking', href:'/post/#speaking', label:'Speaking', boost:false},
+    {page:'speaking', href:'/#speaking', label:'Speaking', boost:false},
   ],
   tools: [
-    {page:'flashcards', href:'/', label:'Anki card tools', boost:true},
+    {page:'flashcards', href:'/tools/anki/', label:'Anki card tools', boost:true},
     {page:'sentences_saved', href:'/sentences/saved', label:'Phrasebook', boost:false},
   ],
 };
 async function navigate(hash: string) {
   await act(() => {
-    window.history.replaceState(null, '', `/post/#${hash}`);
+    window.history.replaceState(null, '', `/#${hash}`);
     window.dispatchEvent(new HashChangeEvent('hashchange'));
   });
 }
@@ -41,6 +41,7 @@ describe('Saved navigation layout', () => {
     const shortcuts = footer.querySelector<HTMLElement>('.sidebar-shortcuts')!;
     const menuScroll = sidebar.querySelector<HTMLElement>('.sidebar-menu-scroll')!;
     expect(container.querySelector('header.top')).toBeNull();
+    expect(sidebar.querySelector('a[href="/tools/anki/"]')?.textContent).toBe('Anki card tools');
     expect(within(brand).getByRole('link', {name:language === 'ru' ? 'Russian Arcade — главная' : 'Russian Arcade home'}).getAttribute('href')).toBe('#home');
     expect(brand.querySelector('.user-session-link')).toBeNull();
     expect(within(account).getByRole('link', {name:language === 'ru' ? 'Выбрать профиль' : 'Choose a profile'}).getAttribute('href')).toBe('/post/profiles');
@@ -61,7 +62,7 @@ describe('Saved navigation layout', () => {
     expect(footer.querySelector('.skill-rail')).toBeTruthy();
     expect(account.querySelector('form')?.getAttribute('action')).toBe('/ui-language');
     expect(account.querySelector<HTMLInputElement>('input[name="csrf_token"]')?.value).toBe('test-token');
-    expect(account.querySelector<HTMLInputElement>('input[name="next"]')?.value).toBe('/post/#words');
+    expect(account.querySelector<HTMLInputElement>('input[name="next"]')?.value).toBe('/#words');
     expect(footer.querySelector('.sidebar-utilities')).toBeNull();
     for (const [label, href] of [[language === 'ru' ? 'Мои слова' : 'My words', '/vocab'], [language === 'ru' ? 'Разговорник' : 'Phrasebook', '/sentences/saved']]) {
       const link = within(shortcuts).getByRole('link', {name:label});
@@ -185,7 +186,7 @@ describe('Saved navigation layout', () => {
     const menu = screen.getByRole('navigation', {name:'Activities & tools'});
     const tools = within(menu).getByText('More tools').closest('details')!;
     expect(tools.open).toBe(false);
-    expect(tools.querySelector('a')?.getAttribute('href')).toBe('/');
+    expect(tools.querySelector('a')?.getAttribute('href')).toBe('/tools/anki/');
     fireEvent.click(within(menu).getByRole('link', {name:'Flashcards'}));
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
   });

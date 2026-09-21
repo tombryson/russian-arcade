@@ -11,10 +11,10 @@
   <link rel="stylesheet" href="/static/css/profile_skill_progress.css?v=1">
   <link rel="stylesheet" href="/static/css/appearance_picker.css?v=1">
   <script src="/static/js/appearance_picker.js?v=1" defer></script>
-  <script src="/static/js/user_sessions.js?v=2" defer></script>
+  <script src="/static/js/user_sessions.js?v=3" defer></script>
 </head>
 <body class="navigation-layout-{{ navigation_layout }}">
-  <header class="top"><a class="brand" href="/post/"><span class="mark" lang="ru" aria-hidden="true">Я</span><span class="brand-name">Russian Arcade</span></a><a class="text-link" href="/post/">{{ 'На главную' if ui_lang == 'ru' else 'Back to home' }}</a>{% include '_user_session.html' %}</header>
+  <header class="top"><a class="brand" href="/"><span class="mark" lang="ru" aria-hidden="true">Я</span><span class="brand-name">Russian Arcade</span></a><a class="text-link" href="/">{{ 'На главную' if ui_lang == 'ru' else 'Back to home' }}</a>{% include '_user_session.html' %}</header>
   <main class="user-profiles-page">
     <p class="kicker">{{ 'Ваше место для занятий' if ui_lang == 'ru' else 'Your place to practise' }}</p>
     <h1>{{ 'Кто занимается?' if ui_lang == 'ru' else 'Who’s learning?' }}</h1>

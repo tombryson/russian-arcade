@@ -49,8 +49,8 @@
   {% endif %}
 </section>
 {% if lesson_card_history %}
-<section class="lesson-paper"><div class="lesson-card-library-heading"><h2>{{ lt('Your lesson cards', 'Ваши карточки по уроку') }}</h2><a class="btn btn-outline-secondary" href="/post/#flashcards?lesson_id={{ lesson.id }}">{{ lt('Open lesson cards', 'Открыть карточки урока') }} →</a></div>
+<section class="lesson-paper"><div class="lesson-card-library-heading"><h2>{{ lt('Your lesson cards', 'Ваши карточки по уроку') }}</h2><a class="btn btn-outline-secondary" href="/#flashcards?lesson_id={{ lesson.id }}">{{ lt('Open lesson cards', 'Открыть карточки урока') }} →</a></div>
   <p>{{ lt('These are also in your main flashcard collection. Their review dates stay the same wherever you practise.', 'Эти карточки также доступны в общей коллекции. Даты повторения едины для всех разделов.') }}</p>
-  <ul class="lesson-card-history">{% for batch in lesson_card_history %}<li><span>{{ lt('Pages', 'Страницы') }} {{ batch.first_page }}–{{ batch.last_page }} · {{ lt('Up to', 'До') }} {{ batch.quantity }} {{ lt('cards', 'карточек') }}</span><a href="{{ '/post/#generate/' ~ batch.batch_id if batch.batch_id else version_url ~ '&view=flashcards&card_request=' ~ batch.id }}">{{ lt('Open set', 'Открыть набор') if batch.batch_id else lt('Continue preparation', 'Продолжить подготовку') }} →</a></li>{% endfor %}</ul>
+  <ul class="lesson-card-history">{% for batch in lesson_card_history %}<li><span>{{ lt('Pages', 'Страницы') }} {{ batch.first_page }}–{{ batch.last_page }} · {{ lt('Up to', 'До') }} {{ batch.quantity }} {{ lt('cards', 'карточек') }}</span><a href="{{ '/#generate/' ~ batch.batch_id if batch.batch_id else version_url ~ '&view=flashcards&card_request=' ~ batch.id }}">{{ lt('Open set', 'Открыть набор') if batch.batch_id else lt('Continue preparation', 'Продолжить подготовку') }} →</a></li>{% endfor %}</ul>
 </section>
 {% endif %}

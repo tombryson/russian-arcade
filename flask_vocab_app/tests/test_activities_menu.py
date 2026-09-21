@@ -30,9 +30,9 @@ class ActivitiesMenuTests(unittest.TestCase):
                 for item in activities:
                     self.assertIn(f'href="{item["href"]}"', menu)
                     self.assertIn(f'>{item["label"]}</a>', menu)
-                self.assertIn(f'href="/post/#activities" hx-boost="false">{all_activities}', menu)
-                self.assertIn(f'href="/post/#games" hx-boost="false">{translate_ui("nav.games", language)}</a>', menu)
-                self.assertGreater(menu.index('class="activities-menu-all"'), menu.index('href="/post/#games"'))
+                self.assertIn(f'href="/#activities" hx-boost="false">{all_activities}', menu)
+                self.assertIn(f'href="/#games" hx-boost="false">{translate_ui("nav.games", language)}</a>', menu)
+                self.assertGreater(menu.index('class="activities-menu-all"'), menu.index('href="/#games"'))
                 self.assertNotIn('role="menu"', menu)
 
     def test_marks_only_the_current_activity_link_and_trigger(self):

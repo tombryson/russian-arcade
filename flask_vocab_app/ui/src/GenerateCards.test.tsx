@@ -50,14 +50,14 @@ describe('Automatic flashcard generation',()=>{
     expect(fetch.mock.calls.some(([url])=>url.endsWith('/next'))).toBe(false);
   });
   it('opens personal flashcards without presenting household setup',async()=>{
-    window.history.replaceState(null,'','/post/#flashcards');
+    window.history.replaceState(null,'','/#flashcards');
     const overview={profile_id:'me',cards:[],active_session_id:null,counts:{cards:0,words:0,ready:0,new:0,new_allowance:5,due:0,practised_today:0}};
     const fetch=vi.fn((url:string)=>response(url==='/api/v1/household'?{mode:'personal',configured:true,adult:false,profile:{id:'me',display_name:'Me'},csrf_token:'token'}:url==='/api/v1/post'?{profile:{id:'me',display_name:'Me'},content:[],sessions:[]}:url==='/api/v1/word-pocket'?{profile_id:'me',evidence:[]}:overview));
     vi.stubGlobal('fetch',fetch);render(<App />);
     await screen.findByRole('heading',{name:'Flashcards',exact:true});
     expect(await screen.findByRole('link',{name:/Generate cards/})).toBeTruthy();
     expect(screen.queryByText(/PIN|grown-up|Choose a learner/)).toBeNull();
-    await act(()=>{window.history.replaceState(null,'','/post/');});
+    await act(()=>{window.history.replaceState(null,'','/');});
   });
 });
 
@@ -85,7 +85,7 @@ describe('Generation media options and recovery',()=>{
 
 describe('Unfinished generation setup',()=>{
   it('keeps choices when returning to the tab in individual mode',async()=>{
-    window.history.replaceState(null,'','/post/#generate');
+    window.history.replaceState(null,'','/#generate');
     const profile={id:'me',display_name:'Me'};
     const fetch=vi.fn((url:string)=>response(url.endsWith('/household')?{mode:'personal',configured:true,adult:false,profile,csrf_token:'token'}:url.endsWith('/post')?{profile,content:[],sessions:[]}:url.endsWith('/word-pocket')?{profile_id:'me',evidence:[]}:url.includes('/options')?settings:{words:[{word_id:1,form:'кофе'}]}));
     vi.stubGlobal('fetch',fetch);render(<App />);
@@ -114,7 +114,7 @@ it('keeps a lesson generation batch connected to its source and filtered collect
 });
 
 it('names a game source correctly and offers another game rather than regenerating the same saved pack',async()=>{
-  const first_steps={lesson_id:'game:pairs',title:'Postcard Pairs',url:'/post/#games/session/game-one',study_url:'#flashcards?topic=First%20steps',reused:1};
+  const first_steps={lesson_id:'game:pairs',title:'Postcard Pairs',url:'/#games/session/game-one',study_url:'#flashcards?topic=First%20steps',reused:1};
   vi.stubGlobal('fetch',vi.fn((url:string)=>response(url.includes('/options')?settings:{...complete,first_steps})));
   render(<GenerateCards batchId="batch"/>);await screen.findByText('Your cards are ready');
   expect(screen.getByRole('link',{name:/Back to game/}).getAttribute('href')).toBe(first_steps.url);

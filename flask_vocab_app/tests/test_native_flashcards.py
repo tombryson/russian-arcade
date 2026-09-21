@@ -64,9 +64,9 @@ class NativeFlashcardTests(unittest.TestCase):
         before=self.credential(child)
         token=child.get('/api/v1/household').json['csrf_token']
         self.assertEqual(child.post('/ui-language',data={'lang':'ru'}).status_code,403)
-        response=child.post('/ui-language',data={'lang':'ru','next':'/post/#flashcards','csrf_token':token})
+        response=child.post('/ui-language',data={'lang':'ru','next':'/#flashcards','csrf_token':token})
         self.assertEqual(response.status_code,302)
-        self.assertEqual(response.headers['Location'],'/post/#flashcards')
+        self.assertEqual(response.headers['Location'],'/#flashcards')
         with child.session_transaction() as browser:
             self.assertEqual(browser['ui_lang'],'ru')
             self.assertEqual(browser['household_access_id'],before)

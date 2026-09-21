@@ -72,19 +72,19 @@ class NavigationPreferenceTests(unittest.TestCase):
         self.assertIsNone(self.selected_layout())
 
     def test_preference_saves_for_guest_and_is_bootstrapped_into_both_shells(self):
-        response = self.save('sidebar', '/post/#speaking')
+        response = self.save('sidebar', '/#speaking')
         self.assertEqual(response.status_code, 303)
-        self.assertEqual(response.headers['Location'], '/post/#speaking')
+        self.assertEqual(response.headers['Location'], '/#speaking')
         self.assertEqual(response.headers['Cache-Control'], 'no-store')
         self.assertEqual(self.selected_layout(), 'sidebar')
-        native = self.client.get('/post/').text
+        native = self.client.get('/').text
         self.assertIn('data-navigation-layout="sidebar"', native)
         self.assert_layout_selected(self.client.get('/post/profiles').text, 'sidebar')
         self.select_profile()
         legacy = self.client.get('/writing').text
         self.assertIn('navigation-layout-sidebar', legacy)
         self.save('top')
-        self.assertIn('data-navigation-layout="top"', self.client.get('/post/').text)
+        self.assertIn('data-navigation-layout="top"', self.client.get('/').text)
         self.assertIn('navigation-layout-top', self.client.get('/writing').text)
 
     def test_preference_is_private_to_each_browser(self):
@@ -118,7 +118,7 @@ class NavigationPreferenceTests(unittest.TestCase):
                 footer, account = sidebar.split('class="sidebar-footer"', 1)[1].split('class="sidebar-account"', 1)
                 self.assertIn('data-skill-rail', footer)
                 self.assertIn('data-progression-badge', footer)
-                self.assertIn('href="/post/#shop"', footer)
+                self.assertIn('href="/#shop"', footer)
                 self.assertIn('Магазин' if language == 'ru' else 'Shop', sidebar)
                 self.assertNotIn('class="sidebar-utilities"', footer)
                 self.assertIn('class="user-session-link"', account)
@@ -164,7 +164,7 @@ class NavigationPreferenceTests(unittest.TestCase):
                     saved['ui_lang'] = language
                 page = self.client.get('/writing').text
                 menu = page.split('class="activities-menu-options"', 1)[1].split('</div>', 1)[0]
-                self.assertRegex(menu, rf'<a href="/post/#games" hx-boost="false">{label}</a>\s*<a class="activities-menu-all" href="/post/#activities" hx-boost="false">{all_label}')
+                self.assertRegex(menu, rf'<a href="/#games" hx-boost="false">{label}</a>\s*<a class="activities-menu-all" href="/#activities" hx-boost="false">{all_label}')
 
     def test_sidebar_preserves_progress_introduction_gates(self):
         self.save('sidebar')
@@ -184,7 +184,7 @@ class NavigationPreferenceTests(unittest.TestCase):
         self.assertIn('Max-Age=31536000', response.headers.get('Set-Cookie'))
         self.client.delete_cookie(self.app.config['SESSION_COOKIE_NAME'])
         self.assertIsNone(self.selected_layout())
-        self.assertIn('data-navigation-layout="sidebar"', self.client.get('/post/').text)
+        self.assertIn('data-navigation-layout="sidebar"', self.client.get('/').text)
         self.assert_layout_selected(self.client.get('/post/profiles').text, 'sidebar')
         self.select_profile()
         self.assertEqual(self.selected_layout(), 'sidebar')
@@ -194,7 +194,7 @@ class NavigationPreferenceTests(unittest.TestCase):
         for value in ('left', 'TOP', '<script>', 'sidebar;other=value'):
             with self.subTest(value=value):
                 self.client.set_cookie('ui_navigation', value)
-                self.assertIn('data-navigation-layout="top"', self.client.get('/post/').text)
+                self.assertIn('data-navigation-layout="top"', self.client.get('/').text)
                 self.assert_layout_selected(self.client.get('/post/profiles').text, 'top')
         self.app.config['SESSION_COOKIE_SECURE'] = True
         self.save('sidebar')
@@ -222,19 +222,19 @@ class NavigationPreferenceTests(unittest.TestCase):
         self.assertIsNone(self.selected_layout())
 
     def test_return_paths_preserve_local_hashes_and_reject_external_redirects(self):
-        for path in ('/post/#flashcards', '/post/profiles#appearance', '/writing?load=1#draft'):
+        for path in ('/#flashcards', '/post/profiles#appearance', '/writing?load=1#draft'):
             self.assertEqual(self.save('sidebar', path).headers['Location'], path)
         for path in ('https://other.example/', '//other.example/', '/\\other.example/',
                      '/%2fother.example/', '/%5cother.example/', '/writing%0AInjected', 'javascript:alert(1)', ''):
             with self.subTest(path=path):
-                self.assertEqual(self.save('sidebar', path).headers['Location'], '/post/')
-        self.assertEqual(self.save('top').headers['Location'], '/post/')
+                self.assertEqual(self.save('sidebar', path).headers['Location'], '/')
+        self.assertEqual(self.save('top').headers['Location'], '/')
 
     def test_old_appearance_address_redirects_to_home_without_loading_build_assets(self):
         self.app.config['WORD_POST_DIST_DIR'] = '/missing-navigation-test-build'
         response = self.client.get('/appearance')
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers['Location'], '/post/')
+        self.assertEqual(response.headers['Location'], '/')
         self.assertEqual(response.headers['Cache-Control'], 'no-store')
         self.assertIn("form-action 'self'", response.headers['Content-Security-Policy'])
 
@@ -278,7 +278,9 @@ class NavigationPreferenceTests(unittest.TestCase):
             menu = activity_navigation(language)
             self.assertEqual([item['page'] for item in menu['main']], ['home', 'activities', 'vocab'])
             self.assertEqual(menu['activities'][0]['page'], 'native_flashcards')
-            self.assertTrue(any(item['href'] == '/post/#speaking' and not item['boost'] for item in menu['activities']))
+            self.assertEqual(menu['main'][0]['href'], '/#home')
+            self.assertEqual(menu['tools'][0]['href'], '/tools/anki/')
+            self.assertTrue(any(item['href'] == '/#speaking' and not item['boost'] for item in menu['activities']))
             self.assertFalse(any(item['page'] == 'vocab' for item in menu['activities']))
             self.assertEqual([item['page'] for item in menu['tools']], ['flashcards', 'sentences_saved'])
             self.assertTrue(all(item['label'] for item in menu['main'] + menu['activities'] + menu['tools']))
@@ -331,13 +333,13 @@ class NavigationPreferenceTests(unittest.TestCase):
         install_demo(self.app)
         previous_settings = self.client.get('/appearance')
         self.assertEqual(previous_settings.status_code, 302)
-        self.assertEqual(previous_settings.headers['Location'], '/post/')
+        self.assertEqual(previous_settings.headers['Location'], '/')
         self.assertIn("style-src 'self'", previous_settings.headers['Content-Security-Policy'])
-        response = self.save('sidebar', '/post/#home')
+        response = self.save('sidebar', '/#home')
         self.assertEqual(response.status_code, 303)
         self.assertEqual(self.selected_layout(), 'sidebar')
         fallback = self.save('sidebar')
-        self.assertEqual(fallback.headers['Location'], '/post/')
+        self.assertEqual(fallback.headers['Location'], '/')
         self.assertEqual(self.client.get(fallback.headers['Location']).status_code, 200)
         denied = self.client.post('/api/v1/user-session/profiles', json={'display_name': 'Not allowed'},
                                   headers={'X-CSRF-Token': self.token()})

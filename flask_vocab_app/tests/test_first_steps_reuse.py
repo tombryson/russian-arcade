@@ -26,7 +26,7 @@ class FirstStepsReuseTests(unittest.TestCase):
     def test_chapter_finishes_pending_earlier_items_and_media_without_duplicates(self):
         self.chapter()
         earlier = self.create('hello')
-        self.assertEqual(earlier['first_steps']['url'], '/post/#first-delivery')
+        self.assertEqual(earlier['first_steps']['url'], '/#first-delivery')
         original_ids = {item['id'] for item in earlier['items']}
         chapter = self.create('chapter')
         self.assertFalse(chapter['complete'])

@@ -24,7 +24,7 @@ Migration tests exercise empty databases, adoption of a compatible legacy schema
 
 Historical maintenance scripts have not all been converted to shared commands/configuration. Read them and use a copied database before running one. The supported entry points for setup are currently `db-upgrade`, `seed-demo`, `db-status`, and the Flask application factory.
 
-## Word Post UI
+## Preact interface
 
 The UI package lives in `flask_vocab_app/ui`. Use Node 24 (24.20.0 is pinned in the root `.nvmrc`) and the committed npm lockfile:
 
@@ -38,11 +38,13 @@ WORD_POST_REQUIRE_BUILD=1 python -m unittest discover -s flask_vocab_app/tests -
 
 The build runs TypeScript checking, generates CSS from `ui/src/styles/tokens.json`, and emits hashed assets plus `.vite/manifest.json` in ignored `ui/dist/`. `tokens.json` is the only editable token authority. The generator is also available as `npm run tokens --prefix flask_vocab_app/ui`. Artwork is imported from `ui/src/assets`; Fontsource packages supply pinned Latin/Cyrillic fonts and the public directory supplies their OFL licences.
 
-Flask serves `/post/` with its own document and asset route. It never loads the legacy Bootstrap, HTMX or CDN Preact shell there. The integration follows [Vite's backend manifest contract](https://vite.dev/guide/backend-integration.html). A missing/invalid build returns a 503 setup page; `/` still works. There is no separate production frontend process and no provider or database call in the preview.
+Flask serves the Preact interface at `/` in its own document. It loads bundled assets from `/post/assets/`, without the legacy Bootstrap or HTMX shell. Navigation between Preact and Jinja pages loads a new document. The integration follows [Vite's backend manifest contract](https://vite.dev/guide/backend-integration.html); there is no separate production frontend process.
+
+The Anki generator is at `/tools/anki/`. Old `/post` and `/post/` links redirect to `/`, retaining query strings and activity fragments such as `#flashcards`. A missing or invalid UI build returns a 503 setup page at the homepage; the Anki route remains available subject to the configured access controls.
 
 For iteration, run `npm run watch --prefix flask_vocab_app/ui` beside Flask. This watches production builds; **reload the browser after each successful build**. It does not provide HMR. Restart Flask for Python changes. Keep development output out of Git; rebuild from the lockfile on a fresh checkout.
 
-Set `WORD_POST_CATALOGUE_ENABLED=1` before starting Flask to open `/post/catalogue`. The catalogue provides theme controls, a complete interactive preview, and sample feedback/empty/save-error/capture states. Those samples do not perform network operations. Keep the catalogue disabled for ordinary household use. `WORD_POST_ENABLED=false` disables the preview and its asset routes on app restart. `WORD_POST_DIST_DIR` can select a prepared build directory.
+Set `WORD_POST_CATALOGUE_ENABLED=1` before starting Flask to open `/post/catalogue`. The catalogue provides theme controls, a complete interactive preview, and sample feedback/empty/save-error/capture states. Those samples do not perform network operations. Keep the catalogue disabled for ordinary household use. `WORD_POST_ENABLED=false` disables the Preact interface and its asset routes on app restart. `WORD_POST_DIST_DIR` can select a prepared build directory.
 
 Component tests cover hints, wrong-answer recovery, sentence rearrangement, duplicate taps, navigation focus, temporary evidence and reload/reset semantics. Python tests cover manifest validation, route switches, stylesheet dependencies, private-path rejection, local production asset delivery and lazy-service isolation. `WORD_POST_REQUIRE_BUILD=1` makes a missing build fail the suite, as in CI.
 

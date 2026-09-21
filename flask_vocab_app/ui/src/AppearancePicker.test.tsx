@@ -4,7 +4,7 @@ import { AppearancePicker } from './AppearancePicker';
 
 describe('Appearance picker', () => {
   it.each(['top', 'sidebar'] as const)('marks the current %s layout and submits a choice directly to the current route', layout => {
-    window.history.replaceState(null, '', '/post/?source=library#flashcards?word_id=4');
+    window.history.replaceState(null, '', '/?source=library#flashcards?word_id=4');
     const {container} = render(<AppearancePicker language="en" navigationLayout={layout} csrfToken="test-token" />);
     const picker = container.querySelector('details')!;
     expect(picker.open).toBe(false);
@@ -14,7 +14,7 @@ describe('Appearance picker', () => {
     expect(form.getAttribute('action')).toBe('/ui-navigation');
     expect(form.getAttribute('method')).toBe('post');
     expect(form.querySelector<HTMLInputElement>('input[name="csrf_token"]')?.value).toBe('test-token');
-    expect(form.querySelector<HTMLInputElement>('input[name="next"]')?.value).toBe('/post/?source=library#flashcards?word_id=4');
+    expect(form.querySelector<HTMLInputElement>('input[name="next"]')?.value).toBe('/?source=library#flashcards?word_id=4');
     const top = screen.getByRole('button', {name:'Top navigation'});
     const sidebar = screen.getByRole('button', {name:'Sidebar'});
     for (const [button, value] of [[top, 'top'], [sidebar, 'sidebar']] as const) {
@@ -24,9 +24,9 @@ describe('Appearance picker', () => {
       expect(button.getAttribute('aria-pressed')).toBe(String(layout === value));
       expect(button.querySelector('[aria-hidden="true"]')?.textContent).toBe(layout === value ? '✓' : '');
     }
-    window.history.replaceState(null, '', '/post/?source=recent#review/session-12');
+    window.history.replaceState(null, '', '/?source=recent#review/session-12');
     fireEvent.submit(form);
-    expect(new FormData(form).get('next')).toBe('/post/?source=recent#review/session-12');
+    expect(new FormData(form).get('next')).toBe('/?source=recent#review/session-12');
     expect(container.querySelector('a[href="/appearance"]')).toBeNull();
     expect(screen.queryByRole('button', {name:/save/i})).toBeNull();
   });

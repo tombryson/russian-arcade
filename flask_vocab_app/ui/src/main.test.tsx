@@ -10,7 +10,7 @@ it('replaces the server loading fallback when the application mounts', async () 
   root.dataset.signInAvailable = 'true';
   root.dataset.sessionScope = 'preview';
   root.dataset.profile = JSON.stringify({id:'demo-preview',display_name:'Demo'});
-  root.innerHTML = '<section><h1>Opening your activities…</h1><a href="/">Existing workspace</a></section>';
+  root.innerHTML = '<section><h1>Opening your activities…</h1><a href="/tools/anki/">Existing workspace</a></section>';
   document.body.append(root);
   try {
     await import('./main');

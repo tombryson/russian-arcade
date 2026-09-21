@@ -374,7 +374,7 @@ class RadioBroadcastService:
                 'metadata': {'pos': item['pos'], 'grammar': item['tags'], 'topics': [record['options'].get('topic') or 'Radio']},
                 'assets': [], 'new_word': True,
                 'source': {'kind': 'radio', 'id': session_id, 'title': broadcast['title'],
-                           'url': f'/post/#games/session/{session_id}', 'origin': 'source', 'model': record['model']}})
+                           'url': f'/#games/session/{session_id}', 'origin': 'source', 'model': record['model']}})
         return {'version': VERSION, 'generator': VERSION, 'title': 'Post Office Radio',
                 'lesson_version': VERSION+':'+payload_hash({'script': script, 'questions': broadcast['questions']}),
                 'options': deepcopy(record['options']), 'source': deepcopy(record['source']), 'rounds': rounds,

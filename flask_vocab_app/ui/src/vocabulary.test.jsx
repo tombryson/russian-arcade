@@ -35,12 +35,12 @@ it('uses real POS codes and keeps filters separate from the word rows',async () 
 it('shows current native counts, labels export history and opens exact form details',async () => {
  render(<VocabTable />);
  const word = await screen.findByRole('button',{name:'ёж'});
- expect(screen.getByRole('link',{name:'ёж: 2 in-app cards'}).getAttribute('href')).toBe('/post/#flashcards?word_id=1');
+ expect(screen.getByRole('link',{name:'ёж: 2 in-app cards'}).getAttribute('href')).toBe('/#flashcards?word_id=1');
  expect(screen.getByText('Anki exports: 9')).toBeTruthy();
  expect(screen.queryByText('A memory hint')).toBeNull();
  fireEvent.click(word);
  expect(screen.getByText('A memory hint')).toBeTruthy();
- expect(screen.getByRole('link',{name:'Make flashcards →'}).getAttribute('href')).toBe('/post/#generate?word_id=1');
+ expect(screen.getByRole('link',{name:'Make flashcards →'}).getAttribute('href')).toBe('/#generate?word_id=1');
  await screen.findByText('Word forms · 1');
  expect(fetch).toHaveBeenCalledWith('/vocab/words/1',expect.objectContaining({signal:expect.anything()}));
  fireEvent.click(screen.getByText('Word forms · 1'));

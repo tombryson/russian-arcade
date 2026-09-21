@@ -204,7 +204,7 @@ def create_learning_blueprint(household, content, learning, store):
         elif action == 'select-profile':
             household.select_profile(access_id(), request.form.get('profile_id'))
             session.pop(GUEST_ONBOARDING_KEY, None)
-            return redirect('/post/')
+            return redirect('/')
         elif action == 'archive-profile':
             household.archive_profile(access_id(), request.form.get('profile_id'))
         elif action == 'publish':

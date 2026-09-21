@@ -26,7 +26,7 @@ def create_card_authoring_blueprint(authoring,content):
         reviewing = current_app.config['WORD_POST_HOUSEHOLD_ENABLED'] and request.args.get('review')
         if not reviewing and not any(request.args.get(key) for key in ('edit','manual')):
             word=request.args.get('word_id','')
-            return redirect('/post/#generate'+('?word_id='+word if word.isdigit() else ''))
+            return redirect('/#generate'+('?word_id='+word if word.isdigit() else ''))
         return page()
 
     @bp.post('/post/flashcards/drafts')
@@ -40,7 +40,7 @@ def create_card_authoring_blueprint(authoring,content):
         if not current_app.config['WORD_POST_HOUSEHOLD_ENABLED']:
             if content.inspect(access_id(),version)['status']=='draft':
                 content.publish(access_id(),version,'Me')
-            return redirect('/post/#flashcards')
+            return redirect('/#flashcards')
         return redirect('/post/flashcards/manage?review=1#version-'+version)
 
     @bp.post('/post/flashcards/actions')
@@ -54,6 +54,6 @@ def create_card_authoring_blueprint(authoring,content):
         elif operation=='discard':authoring.discard(access_id(),request.form.get('version_id'))
         elif operation=='retire':authoring.retire(access_id(),request.form.get('card_id'))
         else:raise LearningError('invalid_action','Choose an available card action.')
-        return redirect('/post/flashcards/manage?review=1' if current_app.config['WORD_POST_HOUSEHOLD_ENABLED'] else '/post/#flashcards')
+        return redirect('/post/flashcards/manage?review=1' if current_app.config['WORD_POST_HOUSEHOLD_ENABLED'] else '/#flashcards')
 
     return bp

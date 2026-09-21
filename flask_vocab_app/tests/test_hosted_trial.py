@@ -83,7 +83,7 @@ class HostedTrialTests(unittest.TestCase):
     def get(self, client, path):
         return client.get(path, base_url=self.base, buffered=True)
 
-    def login(self, client, identity='github:11', next_url='/post/'):
+    def login(self, client, identity='github:11', next_url='/'):
         self.provider.identity = identity
         result = self.get(client, '/trial/sign-in?next=' + next_url)
         self.assertEqual(result.status_code, 302)
@@ -223,7 +223,7 @@ class HostedTrialTests(unittest.TestCase):
                     self.assertIn('sign-in', page.text.lower())
                     self.assertIn('not enabled', page.text.lower())
                     self.assertNotIn('href="/trial/sign-in"', page.text)
-                self.assertIn('href="/post/"', page.text)
+                self.assertIn('href="/"', page.text)
 
     def test_tenant_cap_and_auth_status(self):
         self.login(self.a)
@@ -245,10 +245,13 @@ class HostedTrialTests(unittest.TestCase):
 
     def test_return_urls_and_cookie_flags(self):
         for bad in ('//evil.example/path', 'https://evil.example', '/\\evil.example', '/x\nLocation:evil', '/trial/sign-out'):
-            self.assertEqual(safe_return_url(bad), '/post/')
-        self.assertEqual(safe_return_url('/post/#activities'), '/post/#activities')
+            self.assertEqual(safe_return_url(bad), '/')
+        self.assertEqual(safe_return_url('/#activities'), '/#activities')
+        self.assertEqual(safe_return_url('/post/?level=A2#speaking'), '/?level=A2#speaking')
+        self.assertEqual(safe_return_url('/post#flashcards'), '/#flashcards')
+        self.assertEqual(safe_return_url('/post/profiles'), '/post/profiles')
         response, _ = self.login(self.a, next_url='//evil.example')
-        self.assertEqual(response.location, '/post/')
+        self.assertEqual(response.location, '/')
         cookies = '\n'.join(response.headers.getlist('Set-Cookie'))
         for setting in ('Secure', 'HttpOnly', 'SameSite=Lax', 'Path=/'):
             self.assertIn(setting, cookies)

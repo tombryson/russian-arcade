@@ -11,7 +11,7 @@ function watcher(scope: string | undefined, response: object) {
   let check: () => Promise<void> = async () => {};
   const window = {
     addEventListener: (name: string, callback: typeof listeners[string]) => { listeners[name] = callback; },
-    location: { pathname: '/post/', reload, assign: vi.fn() },
+    location: { pathname: '/', reload, assign: vi.fn() },
     history: { replaceState: vi.fn() },
   };
   const document = {
@@ -30,7 +30,7 @@ describe('Account changes in another tab', () => {
   it('reloads when two hosted accounts have the same local profile ID', async () => {
     const state = watcher('hosted:first', { mode: 'personal', profile: { id: 'personal-learning' }, session_scope: 'hosted:second' });
     await state.check();
-    expect(state.window.history.replaceState).toHaveBeenCalledWith(null, '', '/post/#home');
+    expect(state.window.history.replaceState).toHaveBeenCalledWith(null, '', '/#home');
     expect(state.reload).toHaveBeenCalledOnce();
   });
 

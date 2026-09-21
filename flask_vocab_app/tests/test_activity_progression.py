@@ -245,7 +245,7 @@ class ActivityProgressionTests(unittest.TestCase):
         self.assertIn('Anki progress stays in Anki', html)
         self.assertNotIn('Coins earned:', html)
         self.assertNotIn('Processed 0 Anki cards', html)
-        self.assertIn('Check Anki stats', self.client.get('/').get_data(as_text=True))
+        self.assertIn('Check Anki stats', self.client.get('/tools/anki/').get_data(as_text=True))
 
 
 if __name__ == '__main__':

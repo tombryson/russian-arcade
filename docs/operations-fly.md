@@ -2,7 +2,7 @@
 
 ## Public demo
 
-URL: https://russian-arcade.fly.dev/post/
+URL: https://russian-arcade.fly.dev/
 
 The user selected a public demonstration with synthetic content, rather than
 uploading their private learning installation. `fly.toml` sets `PUBLIC_DEMO=true`.

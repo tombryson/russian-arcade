@@ -23,7 +23,7 @@ if (root) {
   };
   if (root.dataset.view === 'catalogue') {
     void import('./Catalogue').then(({ Catalogue }) => mount(<Catalogue />)).catch(() => {
-      mount(<main class="page"><h1>The component guide could not open.</h1><p>Try reloading, or <a href="/post/">open Russian Arcade</a>.</p></main>);
+      mount(<main class="page"><h1>The component guide could not open.</h1><p>Try reloading, or <a href="/">open Russian Arcade</a>.</p></main>);
     });
   } else {
     const profile=JSON.parse(root.dataset.profile ?? 'null');

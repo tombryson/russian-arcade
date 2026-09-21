@@ -1,7 +1,7 @@
 # Speaking activity
 
 Speaking offers **Fluent conversation** and **Step-through** modes under the same
-scenario catalogue. Open `/post/#speaking`. Fluent conversation keeps the live
+scenario catalogue. Open `/#speaking`. Fluent conversation keeps the live
 microphone connection and audio review described below. Step-through pauses each
 exchange for a reply choice and optional hint; see
 [Step-through conversations](step-through-speaking.md).
@@ -16,7 +16,7 @@ Speaking is the single activity for new conversations. The former recording-and-
 learner interface. Its saved recordings, replies, translations and language notes
 remain accessible through **Previous conversations**, alongside saved live calls.
 Recorded sessions open for review; they no longer offer new microphone/file turns.
-The diagnostic **Speech lab** is under **Developer tools** at `/post/#speaking/lab`.
+The diagnostic **Speech lab** is under **Developer tools** at `/#speaking/lab`.
 
 Existing links are preserved and normalised without starting providers:
 

@@ -140,6 +140,6 @@ def create_user_sessions_blueprint():
                 raise LearningError('invalid_action', 'Choose a supported profile action.')
         except LearningError as error:
             return render_picker(error=str(error), form_name=request.form.get('display_name', '')), error.status
-        return redirect('/post/#home')
+        return redirect('/#home')
 
     return bp

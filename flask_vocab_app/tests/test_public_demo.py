@@ -45,16 +45,16 @@ class PublicDemoTests(unittest.TestCase):
         self.assertIn('sign-in', page.text.lower())
         self.assertIn('not enabled', page.text.lower())
         self.assertNotIn('href="/trial/sign-in"', page.text)
-        self.assertIn('href="/post/#home"', page.text)
+        self.assertIn('href="/#home"', page.text)
         account = self.a.get('/trial/account', base_url=self.base)
         self.assertEqual(account.status_code, 200)
         self.assertIn('<h1>Demo profile</h1>', account.text)
         self.assertNotIn('href="/trial/sign-in"', account.text)
 
     def test_sample_pages_work_and_provider_upload_edit_routes_are_blocked(self):
-        for path in ('/post/', '/vocab', '/curriculum', '/api/v1/flashcards', '/api/v1/first-steps', '/api/v1/games'):
+        for path in ('/', '/vocab', '/curriculum', '/api/v1/flashcards', '/api/v1/first-steps', '/api/v1/games'):
             self.assertEqual(self.a.get(path, base_url=self.base).status_code, 200, path)
-        for path in ('/sentence/generate', '/sync_vocab', '/vocab?source=cloud', '/sync/preview'):
+        for path in ('/tools/anki/', '/sentence/generate', '/sync_vocab', '/vocab?source=cloud', '/sync/preview'):
             self.assertEqual(self.a.get(path, base_url=self.base).status_code, 403, path)
         state = self.state(self.a)
         for path in ('/api/v1/user-session/profiles', '/api/v1/live-conversations', '/lessons/create',
@@ -264,7 +264,7 @@ class PublicDemoTests(unittest.TestCase):
                                    headers={'X-CSRF-Token': state['csrf_token']})
             self.assertEqual(response.status_code, 429)
             self.assertGreater(int(response.headers['Retry-After']), 0)
-        self.assertEqual(self.app.test_client().get('/post/', base_url=self.base).status_code, 200)
+        self.assertEqual(self.app.test_client().get('/', base_url=self.base).status_code, 200)
 
     def test_new_cookie_profile_creation_is_globally_limited(self):
         limiter = DemoLimits(self.app.config['DB_PATH'])
@@ -277,7 +277,7 @@ class PublicDemoTests(unittest.TestCase):
         self.assertEqual(self.a.get('/static/css/public_demo.css', base_url=self.base).status_code, 200)
 
     def test_demo_notices_use_external_styles_under_the_existing_csp(self):
-        page = self.a.get('/post/', base_url=self.base)
+        page = self.a.get('/', base_url=self.base)
         self.assertIn("style-src 'self'", page.headers['Content-Security-Policy'])
         self.assertNotIn('style=', page.get_data(as_text=True))
         self.assertIn('<details class="demo-notice">', page.get_data(as_text=True))

@@ -134,7 +134,7 @@ def create_flashcards(generator, credential, lesson_id):
         _, lessons = _completed(conn, credential, generator.clock())
         selected = _selection(lessons, lesson_id)
         title = 'First steps with Barsik' if lesson_id == 'chapter' else selected[0]['title']
-        url = '/post/#first-delivery' if lesson_id == 'hello' else '/post/#first-steps' + ('' if lesson_id == 'chapter' else '/' + lesson_id)
+        url = '/#first-delivery' if lesson_id == 'hello' else '/#first-steps' + ('' if lesson_id == 'chapter' else '/' + lesson_id)
         return ([word for lesson in selected for word in lesson.get('vocabulary', [])],
                 {'lesson_id': lesson_id, 'title': title, 'url': url}, 'first-steps:' + lesson_id)
     return _create_context_flashcards(generator, credential, source)
@@ -162,7 +162,7 @@ def create_game_flashcards(generator, credential, session_id, items=None):
                 raise LearningError('invalid_input', 'Choose words from this saved game.')
             candidates = [candidate for candidate in candidates if _identity(candidate) in items]
         return (candidates, {'lesson_id': 'game:' + row['game_id'], 'title': content['title'], 'topic': 'Journey games',
-                             'url': '/post/#games/session/' + row['id']}, 'journey-game:' + row['game_id'])
+                             'url': '/#games/session/' + row['id']}, 'journey-game:' + row['game_id'])
     return _create_context_flashcards(generator, credential, source)
 
 
@@ -231,7 +231,7 @@ def _create_context_flashcards(generator, credential, source_loader):
             word_ids = {candidate.get('word_id') for candidate in candidates}
             source['study_url'] = '#flashcards' + ('?word_id=' + str(next(iter(word_ids))) if len(word_ids) == 1 and None not in word_ids else '')
         if origin['lesson_id'] == 'hello':
-            source['url'] = '/post/#first-delivery'
+            source['url'] = '/#first-delivery'
         conn.execute('UPDATE native_card_batches SET options=? WHERE id=?', (encoded(options), batch_id))
     generator.enrich_batch(credential, batch_id)
     return generator.read(credential, batch_id)

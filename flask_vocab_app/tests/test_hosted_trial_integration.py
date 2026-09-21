@@ -64,9 +64,19 @@ class HostedTrialIntegrationTests(unittest.TestCase):
         visitor = app.test_client()
         learner = app.test_client()
         self.assertEqual(visitor.get('/comprehension', base_url=self.base).status_code, 403)
-        self.assertEqual(visitor.get('/post/', base_url=self.base).status_code, 200)
+        self.assertEqual(visitor.get('/', base_url=self.base).status_code, 200)
+        for path in ('/post', '/post/'):
+            response = visitor.get(path + '?v=bookmark', base_url=self.base)
+            self.assertEqual(response.status_code, 308)
+            self.assertEqual(response.location, '/?v=bookmark')
+        self.assertEqual(visitor.get('/tools/anki/', base_url=self.base).status_code, 403)
         self.login(learner)
-        paths = ('/post/', '/comprehension', '/writing', '/word_jumble', '/sentences',
+        self.assertEqual(learner.get('/tools/anki/', base_url=self.base).status_code, 403)
+        for path in ('/post', '/post/'):
+            response = learner.get(path + '?v=bookmark', base_url=self.base)
+            self.assertEqual(response.status_code, 308)
+            self.assertEqual(response.location, '/?v=bookmark')
+        paths = ('/', '/comprehension', '/writing', '/word_jumble', '/sentences',
                  '/sentences/saved', '/lessons', '/vocab', '/api/v1/user-session',
                  '/api/v1/flashcards', '/api/v1/games', '/api/v1/first-steps',
                  '/api/v1/live-conversations/scenarios', '/api/v1/live-conversations/options',
@@ -74,7 +84,7 @@ class HostedTrialIntegrationTests(unittest.TestCase):
         for path in paths:
             response = learner.get(path, base_url=self.base, buffered=True)
             self.assertEqual(response.status_code, 200, f'{path}: {response.text[:250]}')
-        home = learner.get('/post/', base_url=self.base).text
+        home = learner.get('/', base_url=self.base).text
         self.assertIn('/trial/account', home)
         self.assertNotIn('AI generation and uploads need a local installation', home)
         self.assertEqual(visitor.get('/comprehension', base_url=self.base).status_code, 403)
@@ -143,7 +153,7 @@ class HostedTrialIntegrationTests(unittest.TestCase):
             self.assertTrue(app.config['HOSTED_ACCOUNTS_ENABLED'])
             self.assertFalse(app.config['HOSTED_TRIAL_AVAILABLE'])
             client = app.test_client()
-            preview = client.get('/post/', base_url=self.base).text
+            preview = client.get('/', base_url=self.base).text
             self.assertIn('/trial/sign-in', preview)
             self.assertIn('AI generation is currently turned off.', preview)
             denied = client.post('/api/v1/card-generation/batches', base_url=self.base, json={})
@@ -242,7 +252,7 @@ class HostedTrialIntegrationTests(unittest.TestCase):
         with patch.dict(os.environ, {'AI_TRIAL_ENABLED': 'false', **dict.fromkeys(required, '')}):
             app = create_hosted_app()
             client = app.test_client()
-            self.assertEqual(client.get('/post/', base_url=self.base).status_code, 200)
+            self.assertEqual(client.get('/', base_url=self.base).status_code, 200)
             self.assertEqual(client.get('/trial/sign-in', base_url=self.base).status_code, 503)
             self.assertEqual(client.get('/trial/status', base_url=self.base).json['enabled'], False)
 

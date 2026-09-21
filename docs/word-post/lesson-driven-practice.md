@@ -12,7 +12,7 @@ The app then checks each target against the source page and the Russian morpholo
 
 Cards reuse the existing native generation, image/audio jobs, editing, library counts and scheduler. Each lesson card needs a picture, target-form recording and sentence recording before it can enter practice. Media failures can be retried independently. Optional hints, English cues, answer reveal and Again / Hard / Good / Easy retain the existing player behaviour. Recordings and dictionary/source-page links are withheld from the cloze front.
 
-The lesson's collection is available at `/post/#flashcards?lesson_id=<id>`. The same cards appear in the main collection, with source-page links, and review sessions retain a **Back to lesson** link. A lesson start no longer resumes an unrelated general-vocabulary session. The shared daily new-card allowance still applies.
+The lesson's collection is available at `/#flashcards?lesson_id=<id>`. The same cards appear in the main collection, with source-page links, and review sessions retain a **Back to lesson** link. A lesson start no longer resumes an unrelated general-vocabulary session. The shared daily new-card allowance still applies.
 
 Persistence uses migrations **016–019**:
 

@@ -4,7 +4,7 @@ import { App } from './App';
 
 async function navigate(hash: string) {
   await act(() => {
-    window.history.replaceState(null, '', `/post/#${hash}`);
+    window.history.replaceState(null, '', `/#${hash}`);
     window.dispatchEvent(new HashChangeEvent('hashchange'));
   });
 }
@@ -14,7 +14,7 @@ afterEach(() => {vi.unstubAllGlobals();vi.restoreAllMocks();});
 
 describe('Russian Arcade activity home', () => {
   it('opens the Games catalogue from navigation without starting or purchasing a game',async()=>{
-    window.history.replaceState(null,'','/post/#home');
+    window.history.replaceState(null,'','/#home');
     const fetch=vi.fn((url:string)=>response(url==='/api/v1/games'?{profile_id:null,games:[]}:{profile_id:null,lessons:[],completed_count:0,complete:false,next_lesson:null}));
     vi.stubGlobal('fetch',fetch);render(<App initialProfile={null}/>);
     expect(screen.getByRole('link',{name:'Games',hidden:true}).getAttribute('href')).toBe('#games');
@@ -26,7 +26,7 @@ describe('Russian Arcade activity home', () => {
     expect(fetch.mock.calls.every(([url])=>['/api/v1/games','/api/v1/first-steps'].includes(url))).toBe(true);
   });
   it.each(['pairs','mailbox-sort','missing-stamp','radio','detective','letter-back'])('opens the new %s game as a standalone activity',async id=>{
-    window.history.replaceState(null,'',`/post/#games/${id}`);
+    window.history.replaceState(null,'',`/#games/${id}`);
     const fetch=vi.fn((url:string)=>response(url==='/api/v1/games'?{profile_id:null,games:[{id,title:'A discovered game',description:'A game from your lesson.',lesson_id:'bag',lesson_title:'What’s in the bag?',lesson_href:'#first-steps/bag',unlocked:true,new:true,active_session_id:null}]}:{}));
     vi.stubGlobal('fetch',fetch);render(<App initialProfile={null}/>);
     expect(await screen.findByRole('heading',{name:'A discovered game',level:1})).toBeTruthy();
@@ -35,7 +35,7 @@ describe('Russian Arcade activity home', () => {
     expect(fetch.mock.calls.every(([url])=>url==='/api/v1/games')).toBe(true);
   });
   it('opens an old post-office link as the chapter for a guest without loading the retired quiz', async () => {
-    window.history.replaceState(null, '', '/post/#journey/post-office');
+    window.history.replaceState(null, '', '/#journey/post-office');
     const fetch=vi.fn((_url:string)=>response({profile_id:null,lessons:[],completed_count:0,complete:false,next_lesson:null}));
     vi.stubGlobal('fetch',fetch);
     render(<App initialProfile={null}/>);
@@ -53,13 +53,13 @@ describe('Russian Arcade activity home', () => {
     for (const [name, href] of [['Comprehension', '/comprehension'], ['Word Jumble', '/word_jumble'], ['Translate a sentence', '/sentences'], ['Writing', '/writing'], ['Lessons', '/lessons'], ['^Speaking', '#speaking']]) {
       expect(within(screen.getByRole('main')).getByRole('link', { name: new RegExp(name) }).getAttribute('href')).toBe(href);
     }
-    expect(screen.getByRole('link', { name: /Open existing Anki/ }).getAttribute('href')).toBe('/');
+    expect(screen.getByRole('link', { name: /Open existing Anki/ }).getAttribute('href')).toBe('/tools/anki/');
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Choose an activity.' }));
     expect(fetch.mock.calls.every(([url])=>['/api/v1/progression','/api/v1/first-steps','/api/v1/games'].includes(url))).toBe(true);
     expect(screen.queryByRole('link', {name:/^Conversation|^Live conversation/})).toBeNull();
   });
   it.each(['speaking','speaking/step','conversation','live-conversation'])('opens %s as Speaking without starting a call', async hash => {
-    window.history.replaceState(null, '', `/post/#${hash}`);
+    window.history.replaceState(null, '', `/#${hash}`);
     const fetch = vi.fn((url: string) => response(url.endsWith('/household')
       ? {adult:false,profile:{id:'personal',display_name:'Learner'},csrf_token:'csrf'}
       : {configured:true,notes_configured:true,max_seconds:300,sessions:[],scenarios:[]}));
@@ -74,7 +74,7 @@ describe('Russian Arcade activity home', () => {
     expect(fetch.mock.calls.some(([url]) => url.endsWith('/connect') || url === '/api/v1/conversations')).toBe(false);
   });
   it('preserves the curriculum level when opening and changing a scenario link',async()=>{
-    window.history.replaceState(null,'','/post/#speaking/scenario/shop?level=A2');
+    window.history.replaceState(null,'','/#speaking/scenario/shop?level=A2');
     const fetch=vi.fn((url:string)=>response(url.endsWith('/household')
       ? {adult:false,profile:{id:'personal',display_name:'Learner'},csrf_token:'csrf'}
       : url.endsWith('/scenarios')
@@ -91,7 +91,7 @@ describe('Russian Arcade activity home', () => {
     expect(fetch.mock.calls.some(([url])=>url==='/api/v1/live-conversations' || url==='/api/v1/step-conversations')).toBe(false);
   });
   it.each(['live-conversation/live-one','speaking/live-one'])('keeps saved live links working: %s', async hash => {
-    window.history.replaceState(null, '', `/post/#${hash}`);
+    window.history.replaceState(null, '', `/#${hash}`);
     vi.stubGlobal('fetch',vi.fn((url: string) => response(url.endsWith('/household')
       ? {adult:false,profile:{id:'personal',display_name:'Learner'},csrf_token:'csrf'} : url.endsWith('/options')
       ? {configured:true,notes_configured:true,max_seconds:300,sessions:[],scenarios:[]}
@@ -102,7 +102,7 @@ describe('Russian Arcade activity home', () => {
     expect(screen.getByRole('heading',{level:1,name:'Your conversation'})).toBeTruthy();
   });
   it('resumes a step-through link without opening a live conversation or regenerating it',async()=>{
-    window.history.replaceState(null,'','/post/#speaking/step/guided-one');
+    window.history.replaceState(null,'','/#speaking/step/guided-one');
     const fetch=vi.fn((url:string)=>response(url.endsWith('/household')
       ? {adult:false,profile:{id:'personal',display_name:'Learner'},csrf_token:'csrf'}
       : {id:'guided-one',state:'completed',scenario:{seed:'shop-one',title:'At the shop'},target_level:'A1',language:'en',created_at:1,error:null,retryable:false,turn_count:4,completed_turns:4,current_turn:null,transcript:[],ending:{russian:'Спасибо! До свидания!',english:'Thank you! Goodbye!'}}));
@@ -114,7 +114,7 @@ describe('Russian Arcade activity home', () => {
     expect(screen.getByLabelText('Activities').getAttribute('data-active')).toBe('true');
   });
   it.each(['conversation/old-one','speaking/recorded/old-one'])('opens recorded history under Speaking: %s', async hash => {
-    window.history.replaceState(null, '', `/post/#${hash}`);
+    window.history.replaceState(null, '', `/#${hash}`);
     const fetch = vi.fn((url: string) => response(url.endsWith('/household')
       ? {adult:false,profile:{id:'personal',display_name:'Learner'},csrf_token:'csrf'} : url.endsWith('/options')
       ? {configured:true,sessions:[],cases:[]}
@@ -127,7 +127,7 @@ describe('Russian Arcade activity home', () => {
     expect(fetch.mock.calls.some(([url]) => url === '/api/v1/conversations')).toBe(false);
   });
   it.each(['speech-lab','speaking/lab'])('keeps the diagnostic lab reachable: %s', async hash => {
-    window.history.replaceState(null, '', `/post/#${hash}`);
+    window.history.replaceState(null, '', `/#${hash}`);
     vi.stubGlobal('fetch',vi.fn((url: string) => response(url.endsWith('/household')
       ? {adult:false,profile:{id:'personal',display_name:'Learner'},csrf_token:'csrf'}
       : {configured:true,sessions:[],cases:[]})));
@@ -175,7 +175,7 @@ describe('Russian Arcade activity home', () => {
     expect(fetch.mock.calls.filter(([,options])=>options?.method==='POST').every(([url])=>url==='/api/v1/onboarding')).toBe(true);
   });
   it('resumes completed guest practice and points an unselected household to learner setup', async () => {
-    window.history.replaceState(null, '', '/post/#first-delivery');
+    window.history.replaceState(null, '', '/#first-delivery');
     const fetch = vi.fn((url:string,options?:RequestInit)=>response(url==='/api/v1/onboarding' ? {profile_id:null,coins_introduced:true,progress_introduced:JSON.parse(String(options?.body)).milestone==='progress'} : url==='/api/v1/onboarding/practice' ? {profile_id:null,attempt:{id:'intro',version:'first-delivery-v2',phase:'completed',question_index:3,total_questions:3,question:null,answers:[],completed_at:1},pending_reward:3,reward:{amount:3,status:'pending',awarded_now:false}} : { configured: true, adult: false, profile: null, csrf_token: 'test-csrf' }));
     vi.stubGlobal('fetch', fetch);
     render(<App householdEnabled />);
@@ -218,7 +218,7 @@ describe('Russian Arcade activity home', () => {
 
 describe('Personal user sessions', () => {
   it.each(['top','sidebar'] as const)('shows the correct account entry throughout the %s layout', navigationLayout => {
-    window.history.replaceState(null, '', '/post/#activities');
+    window.history.replaceState(null, '', '/#activities');
     vi.stubGlobal('fetch',vi.fn(()=>response({profile_id:'demo-preview',balance:0,skill:{status:'not_calibrated',skills:[]}})));
     const navigation={title:'Activities & tools',more:'More tools',activities:[],tools:[]};
     const profile={id:'demo-preview',display_name:'Demo'};
@@ -242,7 +242,7 @@ describe('Personal user sessions', () => {
     expect(control().getAttribute('href')).toBe('/post/profiles');
   });
   it('keeps the introduction public and offers a profile without fetching private progress', async () => {
-    window.history.replaceState(null, '', '/post/#home');
+    window.history.replaceState(null, '', '/#home');
     const fetch=vi.fn(); vi.stubGlobal('fetch',fetch);
     render(<App initialProfile={null} />);
     expect(screen.getByRole('link',{name:'Choose a profile'}).getAttribute('href')).toBe('/post/profiles');
@@ -255,7 +255,7 @@ describe('Personal user sessions', () => {
     expect(fetch.mock.calls.every(([url])=>['/api/v1/first-steps','/api/v1/games'].includes(url))).toBe(true);
   });
   it('identifies the selected profile from the server on every home visit', () => {
-    window.history.replaceState(null, '', '/post/#home');
+    window.history.replaceState(null, '', '/#home');
     vi.stubGlobal('fetch',vi.fn(()=>response({profile_id:'tom',wallet:0,journey:{worlds:[]}})));
     render(<App initialProfile={{id:'tom',display_name:'Tom'}} />);
     const link=screen.getByRole('link',{name:'Profile: Tom'});
@@ -266,7 +266,7 @@ describe('Personal user sessions', () => {
 
 describe('Stepwise header introduction',()=>{
   it('reveals coins on the second page and the bar on the third, including with a preview URL',async()=>{
-    window.history.replaceState(null,'','/post/?progress-preview=50#home');
+    window.history.replaceState(null,'','/?progress-preview=50#home');
     const introduction={profile_id:'tom',coins_introduced:false,progress_introduced:false};
     const calls:string[]=[];
     vi.stubGlobal('fetch',vi.fn((url:string,options?:RequestInit)=>{

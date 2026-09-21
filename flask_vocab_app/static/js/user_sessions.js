@@ -16,10 +16,10 @@
           (state.mode==='personal' && (state.profile?.id || '')!==current)) {
         leaving=true;
         // A hash-only navigation would leave the old app/profile mounted.
-        if (window.location.pathname==='/post/') {
-          window.history.replaceState(null,'','/post/#home');
+        if (window.location.pathname==='/') {
+          window.history.replaceState(null,'','/#home');
           window.location.reload();
-        } else window.location.assign('/post/#home');
+        } else window.location.assign('/#home');
       }
     } catch (_) { /* Keep a draft during connection problems; the server rejects stale writes. */ }
     finally {checking=false;}

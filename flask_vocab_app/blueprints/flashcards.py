@@ -13,7 +13,7 @@ def create_flashcards_blueprint(db_path, flashcard_service, user_service):
     blueprint = Blueprint("flashcards", __name__)
     word_repository = WordRepository(db_path)
 
-    @blueprint.route("/")
+    @blueprint.route("/tools/anki/")
     def index():
         words = word_repository.list_basic()
         try:

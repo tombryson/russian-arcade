@@ -204,7 +204,7 @@ def create_lessons_blueprint(legacy, companion, cards=None, selection=None):
         if not current_app.config['NATIVE_FLASHCARDS_ENABLED']:
             abort(404)
         result = cards.advance(access_id(), request_id, lesson_id)
-        result['url'] = '/post/#generate/'+result['batch_id'] if result['batch_id'] else location(lesson_id, view='flashcards', card_request=request_id)
+        result['url'] = '/#generate/'+result['batch_id'] if result['batch_id'] else location(lesson_id, view='flashcards', card_request=request_id)
         if request.accept_mimetypes.best == 'application/json':
             return jsonify(result)
         return redirect(result['url'], 303)

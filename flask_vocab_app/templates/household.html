@@ -10,7 +10,7 @@
 </head>
 <body class="navigation-layout-{{ navigation_layout }}">
 <a class="skip-link" href="#main">Skip to household controls</a>
-<header class="top"><a class="brand" href="/post/"><span class="mark" lang="ru" aria-hidden="true">Я</span><span><span class="brand-name">Russian Arcade</span><span class="origin">Learn and practise Russian</span></span></a><a class="text-link" href="/post/">Back to home</a></header>
+<header class="top"><a class="brand" href="/"><span class="mark" lang="ru" aria-hidden="true">Я</span><span><span class="brand-name">Russian Arcade</span><span class="origin">Learn and practise Russian</span></span></a><a class="text-link" href="/">Back to home</a></header>
 <main id="main" class="page household-page">
   <p class="kicker">For grown-ups</p><h1>Our household</h1>
   {% include '_profile_skill_progress.html' %}
@@ -27,7 +27,7 @@
       </form></section>
   {% else %}
     <p class="intro">{{ state.name }}. Choose who is learning and review the material they will practise.</p>
-    <div class="action-row">{% if config.NATIVE_FLASHCARDS_ENABLED %}<a class="text-link" href="/post/flashcards/manage">Prepare &amp; review flashcards</a>{% endif %}<a class="text-link" href="/">Open vocabulary &amp; Anki tools</a><form method="post" action="/post/household/actions">{{ hidden('lock') }}<button class="text-link">Lock grown-up controls</button></form></div>
+    <div class="action-row">{% if config.NATIVE_FLASHCARDS_ENABLED %}<a class="text-link" href="/post/flashcards/manage">Prepare &amp; review flashcards</a>{% endif %}<a class="text-link" href="/tools/anki/">Open vocabulary &amp; Anki tools</a><form method="post" action="/post/household/actions">{{ hidden('lock') }}<button class="text-link">Lock grown-up controls</button></form></div>
     <div class="household-grid">
       <section class="letter"><h2>Who’s learning?</h2><p>Choosing a learner closes grown-up controls in this browser’s other tabs too.</p>
         {% for profile in state.profiles if not profile.archived %}<div class="profile-row"><strong>{{ profile.display_name }}</strong>

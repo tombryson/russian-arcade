@@ -85,7 +85,7 @@ class PersonalFlashcardTests(unittest.TestCase):
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM household_settings').fetchone()[0],0)
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM learning_profiles').fetchone()[0],1)
         redirect = self.client.get('/post/flashcards/manage?word_id=1')
-        self.assertEqual(redirect.headers['Location'],'/post/#generate?word_id=1')
+        self.assertEqual(redirect.headers['Location'],'/#generate?word_id=1')
 
     def test_personal_generation_and_edit_writes_still_require_same_origin_token(self):
         response = self.client.post('/api/v1/card-generation/batches',json={})

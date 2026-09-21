@@ -8,7 +8,7 @@ Implemented 11 September 2026 at `/vocab`. The page uses the existing Flask shel
 - Search matches lemmas and stored inflected forms, ignoring case, optional stress marks and the ё/е distinction for search only. Nothing is normalised in the database.
 - Part-of-speech and difficulty filters come from actual stored values. This fixes missing matches caused by the old hard-coded `ADV`/`PRON`/`NUM` filters against `ADVB`/`NPRO`/`NUMR` rows.
 - The compact table shows words, topics, difficulty and card coverage. A word expands to reveal its mnemonic, added date, card history summary, original grammatical form records and links to generation/dictionary lookup. Identical spellings with different grammatical tags remain separate forms; homographic lemma records remain keyed by their word ID.
-- Current card counts link to `/post/#flashcards?word_id=<id>`. The card browser opens that word's collection, and generator links preselect the same word. Applying further card filters retains the word selection; **Show all cards** clears it.
+- Current card counts link to `/#flashcards?word_id=<id>`. The card browser opens that word's collection, and generator links preselect the same word. Applying further card filters retains the word selection; **Show all cards** clears it.
 
 ## What “Cards” counts
 

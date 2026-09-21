@@ -3,5 +3,5 @@ import { cleanup } from '@testing-library/preact';
 
 afterEach(() => {
   cleanup();
-  window.history.replaceState(null, '', '/post/');
+  window.history.replaceState(null, '', '/');
 });

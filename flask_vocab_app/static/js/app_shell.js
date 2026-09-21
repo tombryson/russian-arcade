@@ -284,7 +284,7 @@
         const main = getMainContent(root);
         if (main?.dataset.page) return main.dataset.page;
         const path = window.location.pathname;
-        if (path === '/') return 'flashcards';
+        if (path.startsWith('/tools/anki')) return 'flashcards';
         if (path.startsWith('/vocab')) return 'vocab';
         if (path.startsWith('/comprehension')) return 'comprehension';
         if (path.startsWith('/writing')) return 'writing';
@@ -450,7 +450,7 @@
     let vocabMount;
     let vocabMountRequest = 0;
     async function loadVocabTable() {
-        return Promise.all([loadPreact(), import('/static/js/VocabTable.js')]);
+        return Promise.all([loadPreact(), import('/static/js/VocabTable.js?v=2')]);
     }
 
     function refreshVocabSource() {

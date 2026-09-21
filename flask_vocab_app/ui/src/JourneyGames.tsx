@@ -44,7 +44,7 @@ function GameError({
   busy?: boolean;
 }) {
   const t = useGameText();
-  return <div class="journey-game-error" role="alert"><p>{message}</p>{blocked ? <a class="text-link" href="/post/#activities">{t("Reopen activities")}</a> : <button class="text-link" disabled={busy} onClick={retry}>{t("Try again")}</button>}</div>;
+  return <div class="journey-game-error" role="alert"><p>{message}</p>{blocked ? <a class="text-link" href="/#activities">{t("Reopen activities")}</a> : <button class="text-link" disabled={busy} onClick={retry}>{t("Try again")}</button>}</div>;
 }
 function useCatalogue() {
   const t = useGameText();

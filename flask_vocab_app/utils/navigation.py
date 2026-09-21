@@ -31,14 +31,14 @@ def activity_navigation(language="en"):
         "title": translate_ui("nav.activity_tools", language),
         "more": translate_ui("nav.more_tools", language),
         "main": [
-            link("home", "/post/#home", "nav.home", False),
-            labelled("activities", "/post/#activities", "All activities", "Все занятия", False),
+            link("home", "/#home", "nav.home", False),
+            labelled("activities", "/#activities", "All activities", "Все занятия", False),
             link("vocab", "/vocab", "nav.my_words"),
         ],
         "activities": [
-            link("native_flashcards", "/post/#flashcards", "nav.flashcards", False),
+            link("native_flashcards", "/#flashcards", "nav.flashcards", False),
             link("comprehension", "/comprehension", "nav.comprehension"),
-            labelled("speaking", "/post/#speaking", "Speaking", "Разговорная практика", False),
+            labelled("speaking", "/#speaking", "Speaking", "Разговорная практика", False),
             link("writing", "/writing", "nav.writing"),
             link("lessons", "/lessons", "nav.lessons"),
             link("word_jumble", "/word_jumble", "nav.word_jumble"),
@@ -46,7 +46,7 @@ def activity_navigation(language="en"):
             labelled("curriculum", "/curriculum", "Curriculum", "Учебная программа", False),
         ],
         "tools": [
-            link("flashcards", "/", "nav.anki_tools"),
+            link("flashcards", "/tools/anki/", "nav.anki_tools"),
             link("sentences_saved", "/sentences/saved", "sentences.saved_title", False),
         ],
     }

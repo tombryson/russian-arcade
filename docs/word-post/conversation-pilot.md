@@ -1,7 +1,7 @@
 # Conversation pilot
 
 **Deprecated as a separate learner activity, 15 September 2026.** New conversations
-now start in [Speaking](live-conversation.md) at `/post/#speaking`. The previous
+now start in [Speaking](live-conversation.md) at `/#speaking`. The previous
 recording-and-send game is retained as a saved-session viewer and as infrastructure
 for Speech lab. Its data, audio and API compatibility remain intact. The description
 below documents the original pilot; its old start/record controls are no longer
@@ -11,8 +11,8 @@ Implemented 11 September 2026: a usable speaking activity and a transcription-pr
 
 ## Try it
 
-- `/post/#speaking`: start a live café conversation or open **Previous conversations** to replay older recordings, read optional English translations and revisit language notes. Saved recorded sessions use `/post/#speaking/recorded/<id>`; old session links still work.
-- `/post/#speaking/lab`: under **Developer tools**, read a deliberately incorrect sentence or a correct control. Compare MAI verbatim, MAI clean and OpenAI on the same recording. The reference sentence is never sent to recognition.
+- `/#speaking`: start a live café conversation or open **Previous conversations** to replay older recordings, read optional English translations and revisit language notes. Saved recorded sessions use `/#speaking/recorded/<id>`; old session links still work.
+- `/#speaking/lab`: under **Developer tools**, read a deliberately incorrect sentence or a correct control. Compare MAI verbatim, MAI clean and OpenAI on the same recording. The reference sentence is never sent to recognition.
 - Current preview: `http://127.0.0.1:5052`.
 
 ## Models

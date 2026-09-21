@@ -7,7 +7,9 @@ import json
 from pathlib import Path
 import re
 
-from flask import Blueprint, abort, current_app, render_template, send_from_directory
+from flask import Blueprint, abort, current_app, redirect, render_template, request, send_from_directory
+
+from utils.household_access import access_policy
 
 
 class BuildUnavailable(ValueError):
@@ -57,7 +59,7 @@ def build_assets(dist, entry_key='src/main.tsx'):
 
 
 def create_word_post_blueprint():
-    blueprint = Blueprint('word_post', __name__, url_prefix='/post')
+    blueprint = Blueprint('word_post', __name__)
 
     @blueprint.app_context_processor
     def shared_design():
@@ -101,13 +103,22 @@ def create_word_post_blueprint():
     def home():
         return page('app')
 
-    @blueprint.get('/catalogue')
+    @blueprint.get('/post')
+    @blueprint.get('/post/')
+    @access_policy('public')
+    def legacy_home():
+        # A Location without a fragment preserves the browser's existing hash
+        # route. Keep the raw query too, including previews and shared filters.
+        query = request.query_string.decode('latin-1')
+        return redirect('/' + ('?' + query if query else ''), code=308)
+
+    @blueprint.get('/post/catalogue')
     def catalogue():
         if not current_app.config['WORD_POST_CATALOGUE_ENABLED']:
             abort(404)
         return page('catalogue')
 
-    @blueprint.get('/assets/<path:filename>')
+    @blueprint.get('/post/assets/<path:filename>')
     def assets(filename):
         if not re.fullmatch(r'[A-Za-z0-9_-][A-Za-z0-9_.-]*', filename):
             abort(404)
@@ -119,7 +130,7 @@ def create_word_post_blueprint():
         response.cache_control.immutable = True
         return response
 
-    @blueprint.get('/licenses/<filename>')
+    @blueprint.get('/post/licenses/<filename>')
     def licenses(filename):
         if filename not in {'golos-text-OFL.txt', 'unbounded-OFL.txt'}:
             abort(404)

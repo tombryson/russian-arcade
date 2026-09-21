@@ -3,7 +3,7 @@ import { ActivityLink, Feedback, Sheet, Art } from './components';
 
 export function Catalogue() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
-  return <div data-theme={theme} class="catalogue"><div class="catalogue-toolbar"><a href="/post/">Open Russian Arcade</a>
+  return <div data-theme={theme} class="catalogue"><div class="catalogue-toolbar"><a href="/">Open Russian Arcade</a>
     {(['light', 'dark'] as const).map(value => <button key={value} aria-pressed={theme === value} onClick={() => setTheme(value)}>{value} theme</button>)}<span>Component samples</span></div>
     <main class="page"><p class="kicker">Russian Arcade</p><h1>Design components</h1><p>Sample states for the shared learning interface. These examples do not save answers.</p>
       <section class="catalogue-sample"><h2>Activity entry</h2><ActivityLink title="Comprehension" description="Read or listen, then answer questions about the story." detail="Reading & listening" mark="Аа" href="/comprehension" /></section>

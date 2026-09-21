@@ -44,7 +44,7 @@
           if(pick.region_id){const crop=node('img',null,'lesson-word-crop');crop.src=`${endpoint}/${pick.page}/crop/${encodeURIComponent(pick.region_id)}`;crop.alt=t('Selected word on the page','Выбранное слово на странице');crop.loading='lazy';details.append(crop);}
           details.append(context,label,save);article.append(details);
         } else if(pick.batch_id) {
-          const link=node('a',t('Open set →','Открыть набор →'));link.href='/post/#generate/'+encodeURIComponent(pick.batch_id);article.append(link);
+          const link=node('a',t('Open set →','Открыть набор →'));link.href='/#generate/'+encodeURIComponent(pick.batch_id);article.append(link);
         }
         if(pick.error)article.append(node('p',pick.error,'lesson-card-note'));
         list.append(article);

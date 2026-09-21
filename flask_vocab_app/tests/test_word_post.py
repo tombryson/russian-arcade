@@ -52,7 +52,7 @@ class WordPostTests(unittest.TestCase):
             self.assertEqual(client.get('/static/images/private.png').status_code, 302)
 
     def test_page_owns_its_document_and_assets_without_initializing_services(self):
-        response = self.client.get('/post/', headers={'HX-Request': 'true'})
+        response = self.client.get('/', headers={'HX-Request': 'true'})
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
         self.assertTrue(html.startswith('<!doctype html>'))
@@ -78,26 +78,54 @@ class WordPostTests(unittest.TestCase):
             self.assertEqual(client.get('/static/images/scene-builder/private.png').status_code, 302)
             self.assertEqual(client.get('/static/images/scene-builder/../../media/private.mp3').status_code, 302)
 
+    def test_root_home_is_public_and_anki_keeps_its_profile_boundary(self):
+        for household in (False, True):
+            with self.subTest(household=household):
+                self.app.config.update(WORD_POST_HOUSEHOLD_ENABLED=household, SECRET_KEY='test-only-' * 4)
+                client = FlaskClient(self.app)
+                home = client.get('/')
+                self.assertEqual(home.status_code, 200)
+                self.assertIn('data-view="app"', home.text)
+                self.assertIn("script-src 'self'", home.headers['Content-Security-Policy'])
+                self.assertEqual(home.headers['Cache-Control'], 'no-store')
+                tools = client.get('/tools/anki/')
+                self.assertEqual(tools.status_code, 302)
+                self.assertEqual(tools.location, '/post/household' if household else '/post/profiles')
+
+    def test_legacy_home_redirect_preserves_query_without_overriding_browser_fragment(self):
+        for household in (False, True):
+            self.app.config.update(WORD_POST_HOUSEHOLD_ENABLED=household, SECRET_KEY='test-only-' * 4)
+            client = FlaskClient(self.app)
+            for path in ('/post', '/post/'):
+                for method in ('GET', 'HEAD'):
+                    query = 'v=old-bookmark&progress-preview=50&tag=a%2Fb&tag=c'
+                    response = client.open(path + '?' + query, method=method)
+                    self.assertEqual(response.status_code, 308)
+                    self.assertEqual(response.location, '/?' + query)
+                    self.assertNotIn('#', response.location)
+                    self.assertEqual(client.get(path, follow_redirects=True).status_code, 200)
+            self.assertEqual(client.get('/post/not-a-route').status_code, 404)
+
     def test_missing_or_invalid_build_has_a_recoverable_setup_page(self):
         manifest_path = self.dist / '.vite/manifest.json'
         for content in ('', 'null', '{}', '[]', '{"src/main.tsx": 1}'):
             manifest_path.write_text(content)
-            response = self.client.get('/post/')
+            response = self.client.get('/')
             self.assertEqual(response.status_code, 503)
             self.assertIn('npm run build', response.get_data(as_text=True))
         manifest_path.unlink()
-        self.assertEqual(self.client.get('/post/').status_code, 503)
+        self.assertEqual(self.client.get('/').status_code, 503)
 
     def test_native_and_flask_pages_share_the_localized_activity_menu(self):
         for language in ('en', 'ru'):
             with self.client.session_transaction() as session:
                 session['ui_lang'] = language
-            native = self.client.get('/post/').get_data(as_text=True)
+            native = self.client.get('/').get_data(as_text=True)
             serialized = re.search(r'data-navigation="([^"]+)"', native).group(1)
             menu = json.loads(html_module.unescape(serialized))
             self.assertEqual(menu, activity_navigation(language))
-            self.assertEqual(menu['activities'][0]['href'], '/post/#flashcards')
-            self.assertEqual(menu['tools'][0]['href'], '/')
+            self.assertEqual(menu['activities'][0]['href'], '/#flashcards')
+            self.assertEqual(menu['tools'][0]['href'], '/tools/anki/')
             legacy = self.client.get('/writing').get_data(as_text=True)
             for item in menu['activities'] + menu['tools']:
                 self.assertIn(f'href="{item["href"]}"', legacy)
@@ -128,14 +156,14 @@ class WordPostTests(unittest.TestCase):
         self.app.config['WORD_POST_CATALOGUE_ENABLED'] = True
         self.assertIn('data-view="catalogue"', self.client.get('/post/catalogue').get_data(as_text=True))
         self.app.config['WORD_POST_ENABLED'] = False
-        for path in ('/post/', '/post/catalogue', '/post/assets/main-test.js'):
+        for path in ('/', '/post/catalogue', '/post/assets/main-test.js'):
             self.assertEqual(self.client.get(path).status_code, 404)
 
     def test_household_bootstrap_is_explicit_and_does_not_leak_a_profile(self):
-        html = self.client.get('/post/').get_data(as_text=True)
+        html = self.client.get('/').get_data(as_text=True)
         self.assertIn('data-household="false"', html)
         self.app.config.update(WORD_POST_HOUSEHOLD_ENABLED=True, SECRET_KEY='test-private-household-secret-at-least-32-chars')
-        html = self.client.get('/post/').get_data(as_text=True)
+        html = self.client.get('/').get_data(as_text=True)
         self.assertIn('data-household="true"', html)
         self.assertNotIn('csrf_token', html)
 
@@ -149,7 +177,7 @@ class WordPostTests(unittest.TestCase):
             with self.subTest(mode=mode, sign_in_available=available):
                 self.app.config.update(PUBLIC_DEMO=public_demo, HOSTED_AI_TRIAL=hosted,
                                        HOSTED_ACCOUNTS_ENABLED=available, AI_TRIAL_IDENTITY='github:test-account')
-                with self.app.test_request_context('/post/'):
+                with self.app.test_request_context('/'):
                     page = render_template('word_post.html', view='app',
                                            assets={'styles': [], 'script': 'main-test.js'},
                                            user_session_scope='hosted:opaque-account')
@@ -219,7 +247,7 @@ class ProductionBuildTests(unittest.TestCase):
         app = isolated_app(self)
         app.config.update(WORD_POST_DIST_DIR=str(dist), WORD_POST_ENABLED=True)
         client = app.test_client()
-        response = client.get('/post/')
+        response = client.get('/')
         self.assertEqual(response.status_code, 200)
         self.assertNotIn('https://', response.get_data(as_text=True))
         resolved = build_assets(dist)

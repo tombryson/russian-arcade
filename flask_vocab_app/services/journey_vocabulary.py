@@ -164,7 +164,7 @@ def _native_contexts(conn, profile_id):
         contexts.setdefault(key, {'form': target, 'sentence': item['context'], 'translation': item['context_meaning'],
                                   'target_meaning': meaning, 'notes': item.get('explanation', ''), 'assets': _assets(conn, item.get('assets')),
                                   'source': {'kind': 'card', 'id': meta['card_id'], 'title': meta['title'],
-                                             'url': '/post/#flashcards?word_id=' + str(meta['word_id']), 'version': meta['content_version_id']}})
+                                             'url': '/#flashcards?word_id=' + str(meta['word_id']), 'version': meta['content_version_id']}})
     return contexts
 
 

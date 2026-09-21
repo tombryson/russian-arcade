@@ -39,7 +39,7 @@ class RouteSmokeTests(unittest.TestCase):
         with self.client.session_transaction() as session:
             session.pop('ui_navigation', None)
         for path, expected_page in [
-            ("/", "flashcards"),
+            ("/tools/anki/", "flashcards"),
             ("/vocab", "vocab"),
             ("/comprehension", "comprehension"),
             ("/writing", "writing"),
@@ -67,7 +67,7 @@ class RouteSmokeTests(unittest.TestCase):
             session.pop('ui_navigation', None)
         for path, expected_page in [
             ("/vocab", "vocab"),
-            ("/", "flashcards"),
+            ("/tools/anki/", "flashcards"),
             ("/comprehension", "comprehension"),
             ("/writing", "writing"),
             ("/lessons", "lessons"),
@@ -150,7 +150,7 @@ class RouteSmokeTests(unittest.TestCase):
         with self.client.session_transaction() as session:
             session.pop('ui_navigation', None)
         sequence = [
-            ("/", "flashcards", 0),
+            ("/tools/anki/", "flashcards", 0),
             ("/comprehension", "comprehension", 1),
             ("/vocab", "vocab", 0),
             ("/comprehension", "comprehension", 1),
@@ -179,7 +179,7 @@ class RouteSmokeTests(unittest.TestCase):
                     self.assertNotIn('id="sidebar"', html)
 
     def test_flashcard_form_controls_have_accessible_labels(self):
-        response = self.client.get("/")
+        response = self.client.get("/tools/anki/")
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
