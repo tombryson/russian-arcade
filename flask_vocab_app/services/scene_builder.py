@@ -13,7 +13,8 @@ from flask import current_app
 
 from repositories.learning_repository import LearningError, encoded, identifier, timestamp, transaction
 
-VERSION = 'scene-builder-v1'
+VERSION = 'scene-builder-v2'
+REWARD_VERSION = 'scene-builder-v1'
 GAME = {'id': 'scene-builder', 'title': 'Describe the scene', 'lesson_id': 'bag',
         'lesson_title': 'What’s in the bag?',
         'description': 'Build Russian sentences about position, movement and who does what.'}
@@ -32,7 +33,7 @@ def item(identity, family, scene, scenario, scenario_ru, segments, slots, answer
     for position, (part, answer) in enumerate(zip(slots, expected)):
         sentence += next(choice['text'] for choice in part['choices'] if choice['id'] == answer) + segments[position + 1]
     sentence = sentence[0].upper() + sentence[1:]
-    result = {'id': identity, 'mechanic': 'scene-builder', 'prompt': 'Build the sentence to describe the scene.',
+    result = {'id': identity, 'mechanic': 'scene-builder', 'prompt': '',
               'clues': [], 'max_choices': len(slots), 'expected_answer': expected,
               'scene_builder': {'family': family, 'scene': scene, 'scenario': scenario, 'scenario_ru': scenario_ru,
                                 'segments': segments, 'slots': slots},
@@ -91,31 +92,8 @@ def _locations():
 
 
 def _motions():
-    present = slot('verb', 'Verb of motion', 'Глагол движения', [('walk-now','идёт'),('walk-usual','ходит'),('ride-now','едет'),('ride-usual','ездит')])
-    arrival = slot('verb', 'Arrival or departure', 'Прибытие или отъезд', [('arrive-foot','пришёл'),('arrive-ride','приехал'),('leave-foot','ушёл'),('leave-ride','уехал')])
-    boundary = slot('verb', 'Entering or leaving', 'Вход или выход', [('enter-foot','вошёл'),('exit-foot','вышел'),('enter-ride','въехал'),('exit-ride','выехал')])
-    rows = [
-        ('walk-now','walking','John is on foot, halfway to the café right now.','Джон сейчас на пути в кафе. Он пешком.',present,'walk-now',['Джон сейчас ', ' в кафе.'],'John is walking to the café now.','идти','идёт','Use «идёт» for one journey on foot happening now.','«Идёт» — одно направленное движение пешком сейчас.'),
-        ('walk-habit','walking','John walks to the café every morning. Describe his routine.','Каждое утро Джон отправляется в кафе пешком. Это его привычка.',present,'walk-usual',['Джон каждое утро ', ' в кафе.'],'John walks to the café every morning.','ходить','ходит','Use «ходит» for a regular trip on foot.','«Ходит» подходит для регулярных походов пешком.'),
-        ('ride-now','taxi-moving','John is in a moving taxi, halfway to the café right now.','Джон сейчас в такси на пути в кафе.',present,'ride-now',['Джон сейчас ', ' в кафе на такси.'],'John is going to the café by taxi now.','ехать','едет','Use «едет» for one journey by transport happening now.','«Едет» — одно направленное движение на транспорте сейчас.'),
-        ('ride-habit','taxi-moving','John takes a taxi to the café every Friday. Describe his routine.','Каждую пятницу Джон добирается до кафе на такси.',present,'ride-usual',['Джон каждую пятницу ', ' в кафе на такси.'],'John goes to the café by taxi every Friday.','ездить','ездит','Use «ездит» for regular journeys by transport.','«Ездит» подходит для регулярных поездок.'),
-        ('arrive-foot','walking','John walked from home and has just reached the café. Describe his arrival.','Джон добрался из дома до кафе пешком и уже здесь.',arrival,'arrive-foot',['Джон ', ' в кафе пешком.'],'John arrived at the café on foot.','прийти','пришёл','«Пришёл» means he arrived on foot.','«Пришёл» обозначает прибытие пешком.'),
-        ('arrive-ride','taxi','John took a taxi and has just reached the café. Describe his arrival.','Джон добрался до кафе на такси и уже здесь.',arrival,'arrive-ride',['Джон ', ' в кафе на такси.'],'John arrived at the café by taxi.','приехать','приехал','«Приехал» means he arrived by transport.','«Приехал» обозначает прибытие на транспорте.'),
-        ('leave-foot','walking-away','John has finished his coffee. He left the café on foot and is no longer there.','Кофе допит. Джона уже нет в кафе: он отправился домой пешком.',arrival,'leave-foot',['Джон ', ' из кафе пешком.'],'John left the café on foot.','уйти','ушёл','«Ушёл» means he left on foot.','«Ушёл» обозначает уход пешком.'),
-        ('leave-ride','taxi-away','John has finished his coffee. His taxi took him away from the café.','Кофе допит. Джона уже нет в кафе: такси отвезло его домой.',arrival,'leave-ride',['Джон ', ' из кафе на такси.'],'John left the café by taxi.','уехать','уехал','«Уехал» means he left by transport.','«Уехал» обозначает отъезд на транспорте.'),
-        ('enter-foot','doorway-inside','John was outside. He crossed the café doorway on foot and is now inside.','Сначала Джон был снаружи кафе. Он пересёк порог пешком и теперь внутри.',boundary,'enter-foot',['Джон ', ' в кафе.'],'John entered the café.','войти','вошёл','«Вошёл» describes crossing into a place on foot.','«Вошёл» — движение внутрь пешком.'),
-        ('exit-foot','walking-away','John was inside the café. He crossed the doorway on foot and is now outside.','Сначала Джон был внутри кафе. Он пересёк порог пешком и теперь снаружи.',boundary,'exit-foot',['Джон ', ' из кафе.'],'John came out of the café.','выйти','вышел','«Вышел» describes crossing out of a place on foot.','«Вышел» — движение наружу пешком.'),
-        ('enter-ride','courtyard-in','John’s taxi crossed the entrance into a courtyard. The car is now inside the courtyard.','Такси с Джоном пересекло ворота. Теперь машина внутри двора.',boundary,'enter-ride',['Джон ', ' во двор на такси.'],'John entered the courtyard by taxi.','въехать','въехал','«Въехал» describes entering a space by transport.','«Въехал» — движение внутрь на транспорте.'),
-        ('exit-ride','courtyard-out','John’s taxi crossed the gate out of a courtyard. The car is now outside the courtyard.','Такси с Джоном пересекло ворота. Теперь машина снаружи двора.',boundary,'exit-ride',['Джон ', ' из двора на такси.'],'John left the courtyard by taxi.','выехать','выехал','«Выехал» describes leaving a space by transport.','«Выехал» — движение наружу на транспорте.'),
-    ]
-    result=[]
-    for key,scene,en,ru,choices,answer,segments,translation,lemma,form,explanation,explanation_ru in rows:
-        grammar = {'tense':'pres','person':'3per','number':'sing'} if choices is present else {'tense':'past','gender':'masc','number':'sing'}
-        result.append(item('motion-'+key,'motion',scene,en,ru,segments,[choices],[answer],translation,[(explanation,explanation_ru)],
-            'Check how he travels, when it happens, and whether this is a habit, an arrival or a departure.',
-            'Учитывайте способ движения, время и направление. Это привычка, прибытие или отъезд?',
-            (lemma,form,'VERB',grammar,{'идёт':'is walking','ходит':'walks regularly','едет':'is travelling','ездит':'travels regularly'}.get(form, translation.removeprefix('John ').rstrip('.')))))
-    return result
+    from services.scene_motion import questions
+    return questions(item, slot)
 
 
 def _placements():
@@ -221,28 +199,72 @@ def curriculum():
 
 def options(value):
     from contracts.learning import fields
-    fields(value,set(),{'grammar_focus','rounds'})
+    from services.scene_motion import LEVELS
+    fields(value,set(),{'grammar_focus','rounds','motion_level'})
     focus, rounds=value.get('grammar_focus','location'), value.get('rounds',5)
-    if focus not in (*FAMILIES,'mixed') or type(rounds) is not int or rounds not in (5,10):
+    if not isinstance(focus, str) or focus not in (*FAMILIES,'mixed') or type(rounds) is not int or rounds not in (5,10):
         raise LearningError('invalid_options','Choose a grammar focus and five or ten rounds.')
-    return {'grammar_focus':focus,'rounds':rounds,'word_policy':'mixed-v1'}
+    result = {'grammar_focus':focus,'rounds':rounds,'word_policy':'mixed-v1'}
+    if focus in ('motion', 'mixed'):
+        level = value.get('motion_level', 'A1')
+        if not isinstance(level, str) or level not in LEVELS:
+            raise LearningError('invalid_options', 'Choose A1, A2 or B1 for motion practice.')
+        result['motion_level'] = level
+    elif 'motion_level' in value:
+        raise LearningError('invalid_options', 'Motion levels apply to verbs of motion or mixed practice.')
+    return result
+
+
+def _interleave(groups, rng):
+    """Sample across contrasts before taking another example of the same one."""
+    keys = list(groups)
+    rng.shuffle(keys)
+    for rows in groups.values():
+        rng.shuffle(rows)
+    result = []
+    while any(groups.values()):
+        for key in keys:
+            if groups[key]:
+                result.append(groups[key].pop())
+    return result
+
+
+def _motion_sequence(rows, rng):
+    # Skill coverage first, then distinct answers within each skill. A short
+    # round set should not accidentally consist entirely of transport arrivals.
+    skills = {}
+    for row in rows:
+        skills.setdefault(row['scene_builder']['skill'], {}).setdefault(tuple(row['expected_answer']), []).append(row)
+    groups = {skill:_interleave(answers, rng) for skill,answers in skills.items()}
+    keys = list(groups)
+    rng.shuffle(keys)
+    result = []
+    while any(groups.values()):
+        for key in keys:
+            if groups[key]:
+                result.append(groups[key].pop(0))
+    return result
 
 
 def build_content(seed, settings):
     rng=random.Random(seed)
-    families={family:[round for round in curriculum() if round['scene_builder']['family']==family] for family in FAMILIES}
-    for rounds in families.values():
-        rng.shuffle(rounds)
+    families={family:[round for round in curriculum() if round['scene_builder']['family']==family
+                      and (family!='motion' or round['scene_builder']['level']==settings.get('motion_level','A1'))]
+              for family in FAMILIES}
+    for family, rounds in families.items():
+        if family == 'motion':
+            families[family] = _motion_sequence(rounds, rng)
+        else:
+            rng.shuffle(rounds)
     if settings['grammar_focus']=='mixed':
-        selected=[families[FAMILIES[index%len(FAMILIES)]].pop() for index in range(settings['rounds'])]
+        selected=[families[FAMILIES[index%len(FAMILIES)]].pop(0) for index in range(settings['rounds'])]
     else:
         selected=families[settings['grammar_focus']][:settings['rounds']]
-    # The snapshot travels with the session, so future editorial changes never
-    # silently change an unfinished question, its answers or its reward identity.
-    # Shuffling or changing the round count does not mint another daily reward
-    # for repeating the same authored focus.
-    lesson_version=VERSION+':'+settings['grammar_focus']
-    vocabulary=list({(r['vocabulary']['lemma'],r['vocabulary']['sentence']):r['vocabulary'] for r in selected if 'vocabulary' in r}.values())
+    # Content revisions and chosen levels must not mint another daily reward.
+    # Frozen sessions retain their original questions and answer identities.
+    lesson_version=REWARD_VERSION+':'+settings['grammar_focus']
+    references = [ref for row in selected for ref in row.get('vocabulary_refs', [row['vocabulary']] if 'vocabulary' in row else [])]
+    vocabulary=list({(ref['lemma'],ref['sentence']):ref for ref in references}.values())
     return {'version':VERSION,'lesson_version':lesson_version,'title':GAME['title'],'options':settings,
             'source':{'kind':'grammar','lesson_id':'scene-builder','title':'Russian grammar','href':'#games/scene-builder'},
             'rounds':selected,'vocabulary_refs':vocabulary,'media_texts':[]}
@@ -262,11 +284,15 @@ def start(request_id, value, *, new_game=False, sample=False):
         rows=conn.execute('SELECT * FROM journey_game_sessions WHERE '+where+' AND game_id=? ORDER BY created_at DESC,rowid DESC',(*params,GAME['id'])).fetchall()
         original=next((row for row in rows if request_id in json.loads(row['request_ids_json'])),None)
         if original:
-            if json.loads(original['content_json']).get('options')!=settings:
+            original_content = json.loads(original['content_json'])
+            comparison = dict(settings)
+            if original_content.get('version') == 'scene-builder-v1' and 'motion_level' not in (value or {}):
+                comparison.pop('motion_level', None)
+            if original_content.get('options')!=comparison:
                 raise LearningError('idempotency_conflict','This start request already has a different grammar focus.',409)
             return _public(conn,original)
         active=next((row for row in rows if row['completed_at'] is None and row['superseded_at'] is None),None)
-        if active and not new_game and json.loads(active['content_json'])['options']==settings:
+        if active and not new_game and json.loads(active['content_json']).get('version')==VERSION and json.loads(active['content_json'])['options']==settings:
             conn.execute('UPDATE journey_game_sessions SET request_ids_json=? WHERE id=?',(encoded([*json.loads(active['request_ids_json']),request_id]),active['id']))
             return _public(conn,active)
         if not sample:

@@ -1,4 +1,6 @@
 """Scene facts, component grading, owned snapshots and correction flows."""
+from collections import Counter
+from copy import deepcopy
 import hashlib
 import json
 import unittest
@@ -7,7 +9,7 @@ from unittest.mock import patch
 
 from repositories.learning_repository import LearningError, identifier, transaction
 from services.journey_games import assess_answer, normalise_answer
-from services.scene_builder import FAMILIES, build_content, curriculum, options
+from services.scene_builder import FAMILIES, build_content, curriculum, item, options, slot
 from tests.support import select_test_profile
 from tests import test_journey_games as existing
 
@@ -47,13 +49,116 @@ class SceneContentTests(unittest.TestCase):
             with self.assertRaises(LearningError):
                 options(value)
 
-    def test_motion_caption_establishes_the_distinction_and_choices_are_stable(self):
-        rows={r['id']:r for r in curriculum()}
-        self.assertIn('taxi',rows['motion-arrive-ride']['scene_builder']['scenario'])
-        self.assertIn('walked',rows['motion-arrive-foot']['scene_builder']['scenario'])
-        self.assertIn('every morning',rows['motion-walk-habit']['scene_builder']['scenario'])
-        self.assertEqual(rows['motion-walk-habit']['scene_builder']['slots'],rows['motion-ride-now']['scene_builder']['slots'])
-        self.assertNotEqual(rows['motion-walk-habit']['expected_answer'],rows['motion-walk-now']['expected_answer'])
+    def test_motion_options_default_to_a1_and_accept_only_supported_levels(self):
+        for focus in ('motion','mixed'):
+            self.assertEqual(options({'grammar_focus':focus}),options({'grammar_focus':focus,'motion_level':'A1'}))
+            for level in ('A1','A2','B1'):
+                self.assertEqual(options({'grammar_focus':focus,'motion_level':level})['motion_level'],level)
+            for level in ('B2','a1','',None,True,1,[],{}):
+                with self.subTest(focus=focus,level=level),self.assertRaises(LearningError):
+                    options({'grammar_focus':focus,'motion_level':level})
+        for focus in FAMILIES:
+            if focus!='motion':
+                self.assertNotIn('motion_level',options({'grammar_focus':focus}))
+                with self.assertRaises(LearningError):
+                    options({'grammar_focus':focus,'motion_level':'A1'})
+
+    def test_motion_levels_have_distinct_material_and_increasing_sentence_choices(self):
+        motion=[row for row in curriculum() if row['scene_builder']['family']=='motion']
+        self.assertEqual({row['scene_builder']['level'] for row in motion},{'A1','A2','B1'})
+        for level,choice_count in (('A1',2),('A2',4),('B1',6)):
+            rows=[row for row in motion if row['scene_builder']['level']==level]
+            with self.subTest(level=level):
+                self.assertGreaterEqual(len({row['id'] for row in rows}),10)
+                self.assertGreaterEqual(len({row['correct_sentence'] for row in rows}),10)
+                for row in rows:
+                    scene=row['scene_builder']
+                    self.assertTrue(scene['skill'])
+                    self.assertIsInstance(scene['motion_visual'],dict)
+                    self.assertTrue(scene['motion_visual'])
+                    self.assertEqual(len(scene['slots'][0]['choices']),choice_count)
+                    self.assertTrue(all(len(part['choices'])==choice_count for part in scene['slots']))
+                    self.assertEqual(len(scene['segments']),len(scene['slots'])+1)
+                    self.assertEqual(len(row['slot_explanations']),len(scene['slots']))
+                    self.assertEqual(len(row['vocabulary_refs']),len(scene['slots']))
+                    self.assertTrue(scene['scenario'])
+                    self.assertTrue(scene['scenario_ru'])
+                    self.assertTrue(row['hint_ru'])
+                    self.assertEqual(normalise_answer(row,row['expected_answer'],'scene-builder'),row['expected_answer'])
+                    self.assertTrue(assess_answer(row,row['expected_answer'])['correct'])
+                    if level in ('A1','A2'):
+                        self.assertEqual(len(scene['slots']),1)
+                if level=='B1':
+                    self.assertTrue(any(len(row['scene_builder']['slots'])==2 for row in rows))
+
+    def test_motion_pack_selection_is_level_filtered_diverse_and_repeatable(self):
+        for level in ('A1','A2','B1'):
+            eligible=[row for row in curriculum()
+                if row['scene_builder']['family']=='motion' and row['scene_builder']['level']==level]
+            available_skills=Counter(row['scene_builder']['skill'] for row in eligible)
+            for seed in ('seed','another-seed','third-seed'):
+                for count in (5,10):
+                    settings=options({'grammar_focus':'motion','motion_level':level,'rounds':count})
+                    pack=build_content(seed,settings)
+                    with self.subTest(level=level,seed=seed,count=count):
+                        self.assertEqual(pack,build_content(seed,settings))
+                        self.assertEqual(len({row['id'] for row in pack['rounds']}),count)
+                        self.assertEqual({row['scene_builder']['family'] for row in pack['rounds']},{'motion'})
+                        self.assertEqual({row['scene_builder']['level'] for row in pack['rounds']},{level})
+                        self.assertEqual(pack['version'],'scene-builder-v2')
+                        self.assertEqual(pack['lesson_version'],'scene-builder-v1:motion')
+                        self.assertEqual(
+                            {(ref['lemma'],ref['form'],ref['sentence']) for ref in pack['vocabulary_refs']},
+                            {(ref['lemma'],ref['form'],ref['sentence']) for row in pack['rounds'] for ref in row['vocabulary_refs']})
+                        skills=Counter(row['scene_builder']['skill'] for row in pack['rounds'])
+                        self.assertEqual(len(skills),min(count,len(available_skills)))
+                        for skill,selected in skills.items():
+                            if selected<available_skills[skill]:
+                                self.assertLessEqual(max(skills.values())-selected,1)
+                            available_answers={tuple(row['expected_answer']) for row in eligible if row['scene_builder']['skill']==skill}
+                            selected_answers={tuple(row['expected_answer']) for row in pack['rounds'] if row['scene_builder']['skill']==skill}
+                            self.assertEqual(len(selected_answers),min(selected,len(available_answers)))
+            mixed=build_content('seed',options({'grammar_focus':'mixed','motion_level':level,'rounds':10}))
+            self.assertEqual(Counter(row['scene_builder']['family'] for row in mixed['rounds']),dict.fromkeys(FAMILIES,2))
+            self.assertEqual({row['scene_builder']['level'] for row in mixed['rounds'] if row['scene_builder']['family']=='motion'},{level})
+            self.assertEqual(mixed['lesson_version'],'scene-builder-v1:mixed')
+
+    def test_motion_captions_and_visuals_establish_the_tested_contrasts(self):
+        motion=[row for row in curriculum() if row['scene_builder']['family']=='motion']
+        rows={row['id']:row for row in motion}
+        for row in motion:
+            scene=row['scene_builder']
+            if scene['skill']=='routine':
+                self.assertIn('и обратно',row['correct_sentence'])
+                self.assertEqual(scene['motion_visual']['stage'],'habit')
+                self.assertEqual({choice['text'] for choice in scene['slots'][0]['choices']},{'ходит','ездит'})
+            elif scene['skill']=='now':
+                self.assertEqual(scene['motion_visual']['stage'],'journey')
+                self.assertEqual({choice['text'] for choice in scene['slots'][0]['choices']},{'идёт','едет'})
+        arrival={choice['text'] for choice in rows['motion-clinic-arrival']['scene_builder']['slots'][0]['choices']}
+        boundary={choice['text'] for choice in rows['motion-pharmacy-enter']['scene_builder']['slots'][0]['choices']}
+        self.assertTrue(arrival.isdisjoint(boundary))
+        for identity,detail,mode in (('parcel-hands','in her hands','carrying'),
+                                     ('parcel-vehicle','back of his vehicle','transport'),
+                                     ('child-walking','holding his hand','leading')):
+            scene=rows['motion-'+identity]['scene_builder']
+            self.assertIn(detail,scene['scenario'])
+            self.assertEqual(scene['motion_visual']['mode'],mode)
+
+    def test_motion_second_slot_scores_independently_and_rejects_other_levels_choices(self):
+        rows=curriculum()
+        challenge=next(row for row in rows if row['scene_builder']['family']=='motion' and len(row['scene_builder']['slots'])==2)
+        for position in range(2):
+            wrong=list(challenge['expected_answer'])
+            wrong[position]=next(choice['id'] for choice in challenge['scene_builder']['slots'][position]['choices'] if choice['id']!=wrong[position])
+            result=assess_answer(challenge,normalise_answer(challenge,wrong,'scene-builder'))
+            self.assertEqual((result['correct'],result['score'],result['matched'],result['total']),(False,.5,1,2))
+        foundation=next(row for row in rows if row['scene_builder']['family']=='motion' and row['scene_builder']['level']=='A1')
+        foundation_choices={choice['id'] for choice in foundation['scene_builder']['slots'][0]['choices']}
+        advanced_choice=next(choice['id'] for row in rows if row['scene_builder']['family']=='motion'
+            for choice in row['scene_builder']['slots'][0]['choices'] if choice['id'] not in foundation_choices)
+        with self.assertRaises(LearningError):
+            normalise_answer(foundation,[advanced_choice],'scene-builder')
 
 
 class SceneGameTests(unittest.TestCase):
@@ -66,10 +171,37 @@ class SceneGameTests(unittest.TestCase):
     read=existing.JourneyGamesTests.read
     finish=existing.JourneyGamesTests.finish
 
-    def start_scene(self,focus='location',request_id=None,**kwargs):
+    def start_scene(self,focus='location',request_id=None,*,motion_level=None,rounds=5,**kwargs):
         select_test_profile(self.client)
+        settings={'grammar_focus':focus,'rounds':rounds}
+        if motion_level is not None:
+            settings['motion_level']=motion_level
         return self.request('/api/v1/games/scene-builder/start',{'request_id':request_id or identifier(),
-            'options':{'grammar_focus':focus,'rounds':5},**kwargs})
+            'options':settings,**kwargs})
+
+    def saved_content(self,session_id):
+        with transaction(self.db) as conn:
+            return conn.execute('SELECT content_json FROM journey_game_sessions WHERE id=?',(session_id,)).fetchone()[0]
+
+    def legacy_motion_session(self):
+        """Save the old four-choice shape, independently of the current bank."""
+        state=self.start_scene('motion',request_id='legacy-motion-start')
+        content=json.loads(self.saved_content(state['id']))
+        verbs=slot('verb','Verb of motion','Глагол движения',[
+            ('walk-now','идёт'),('walk-usual','ходит'),('ride-now','едет'),('ride-usual','ездит')])
+        old_round=item('motion-ride-now','motion','taxi-moving',
+            'John is in a moving taxi, halfway to the café right now.','Джон сейчас в такси на пути в кафе.',
+            ['Джон сейчас ', ' в кафе на такси.'],[verbs],['ride-now'],
+            'John is going to the café by taxi now.',
+            [('Use «едет» for one journey by transport happening now.','«Едет» — одно направленное движение на транспорте сейчас.')],
+            'Check how he travels and when it happens.','Учитывайте способ движения и время.')
+        content.update(version='scene-builder-v1',lesson_version='scene-builder-v1:motion',
+            options={'grammar_focus':'motion','rounds':5,'word_policy':'mixed-v1'},
+            rounds=[dict(deepcopy(old_round),id=f'legacy-motion-{index}') for index in range(5)],vocabulary_refs=[])
+        saved=json.dumps(content,ensure_ascii=False)
+        with transaction(self.db,write=True) as conn:
+            conn.execute('UPDATE journey_game_sessions SET content_json=? WHERE id=?',(saved,state['id']))
+        return self.read(state['id']),saved
 
     def test_starts_without_provider_or_vocabulary_and_hides_answer_until_check(self):
         self.seed_lesson('bag')
@@ -99,6 +231,96 @@ class SceneGameTests(unittest.TestCase):
         self.assertEqual(self.start_scene(request_id='scene-request-1')['id'],first['id'])
         self.assertEqual(self.read(first['id'])['round'],first['round'])
         self.request('/api/v1/games/scene-builder/start',{'request_id':'scene-request-1','options':{'grammar_focus':'roles'}},status=409)
+
+    def test_level_changes_create_owned_snapshots_and_replays_do_not_rebuild(self):
+        self.seed_lesson('bag')
+        grant_earned_game_access(self.db)
+        first=self.start_scene('motion',request_id='motion-a1-start')
+        first_saved=self.saved_content(first['id'])
+        second=self.start_scene('motion',request_id='motion-b1-start',motion_level='B1')
+        second_saved=self.saved_content(second['id'])
+        self.assertNotEqual(first['id'],second['id'])
+        for state,level in ((first,'A1'),(second,'B1')):
+            content=json.loads(self.saved_content(state['id']))
+            self.assertEqual(content['options']['motion_level'],level)
+            self.assertEqual({row['scene_builder']['level'] for row in content['rounds']},{level})
+            self.assertEqual(state['round']['scene_builder']['level'],level)
+        with patch('services.scene_builder.build_content',side_effect=AssertionError('saved sessions must not rebuild')):
+            self.assertEqual(self.start_scene('motion',request_id='motion-a1-start',motion_level='A1')['id'],first['id'])
+            self.assertEqual(self.start_scene('motion',request_id='motion-b1-resume',motion_level='B1')['id'],second['id'])
+            self.assertEqual(self.read(first['id'])['round'],first['round'])
+            self.request('/api/v1/games/scene-builder/start',{
+                'request_id':'motion-a1-start','options':{'grammar_focus':'motion','rounds':5,'motion_level':'B1'}},status=409)
+        self.assertEqual(self.saved_content(first['id']),first_saved)
+        self.assertEqual(self.saved_content(second['id']),second_saved)
+
+    def test_legacy_motion_snapshot_resumes_and_grades_without_bank_rewriting(self):
+        self.seed_lesson('bag')
+        grant_earned_game_access(self.db)
+        legacy,saved=self.legacy_motion_session()
+        self.assertNotIn('level',legacy['round']['scene_builder'])
+        self.assertEqual(len(legacy['round']['scene_builder']['slots'][0]['choices']),4)
+        with patch('services.scene_builder.build_content',side_effect=AssertionError('legacy snapshot must not rebuild')):
+            self.assertEqual(self.start_scene('motion',request_id='legacy-motion-start')['id'],legacy['id'])
+            self.request('/api/v1/games/scene-builder/start',{
+                'request_id':'legacy-motion-start','options':{'grammar_focus':'motion','rounds':5,'motion_level':'A1'}},status=409)
+            row=json.loads(saved)['rounds'][0]
+            checked=self.post(legacy['id'],'answer',{'round_id':row['id'],'answer':row['expected_answer']})
+            self.assertTrue(checked['result']['correct'])
+            self.assertEqual(checked['result']['correct_sentence'],row['correct_sentence'])
+        current=self.start_scene('motion')
+        self.assertNotEqual(current['id'],legacy['id'])
+        self.assertEqual(current['round']['scene_builder']['level'],'A1')
+        self.assertEqual(len(current['round']['scene_builder']['slots'][0]['choices']),2)
+        self.start_scene('motion',motion_level='A2')
+        self.assertEqual(self.start_scene('motion',request_id='legacy-motion-start')['id'],legacy['id'])
+        self.assertEqual(self.read(legacy['id'])['result']['correct_sentence'],row['correct_sentence'])
+        self.assertEqual(self.saved_content(legacy['id']),saved)
+
+    def test_motion_level_cannot_mint_another_reward_for_the_same_focus(self):
+        self.seed_lesson('bag')
+        grant_earned_game_access(self.db)
+        legacy,_=self.legacy_motion_session()
+        finished=[self.finish(legacy)]
+        for level in ('A1','A2','B1'):
+            finished.append(self.finish(self.start_scene('motion',motion_level=level)))
+        self.assertEqual([state['reward']['amount'] for state in finished],[3,0,0,0])
+        self.assertTrue(all(state['reward']['reason']=='already_rewarded' for state in finished[1:]))
+        self.assertEqual(len({state['id'] for state in finished}),4)
+        with transaction(self.db) as conn:
+            events=conn.execute("SELECT content_key,target_level FROM progression_events WHERE activity='journey_game'").fetchall()
+            self.assertEqual(len(events),4)
+            self.assertEqual({row['content_key'] for row in events},{'journey-game:scene-builder:scene-builder-v1:motion'})
+            self.assertTrue(all(row['target_level'] is None for row in events))
+
+    def test_server_rejects_invalid_motion_levels_without_creating_a_session(self):
+        self.seed_lesson('bag')
+        grant_earned_game_access(self.db)
+        select_test_profile(self.client)
+        for level in ('B2','a1','',None,True,1,[],{}):
+            with self.subTest(level=level):
+                self.request('/api/v1/games/scene-builder/start',{'request_id':identifier(),
+                    'options':{'grammar_focus':'motion','motion_level':level}},status=400)
+        with transaction(self.db) as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM journey_game_sessions WHERE game_id='scene-builder'").fetchone()[0],0)
+
+    def test_server_filters_mixed_motion_rounds_and_keeps_answers_private(self):
+        self.seed_lesson('bag')
+        grant_earned_game_access(self.db)
+        secrets={'expected_answer','answer_audio','correct_sentence','translation','slot_explanations','vocabulary','vocabulary_refs','feedback'}
+        for level in ('A1','A2','B1'):
+            with self.subTest(level=level):
+                state=self.start_scene('mixed',motion_level=level,rounds=10)
+                for row in self.expected(state['id']):
+                    public=self.read(state['id'])['round']
+                    self.assertTrue(secrets.isdisjoint(public))
+                    self.assertTrue(secrets.isdisjoint(public['scene_builder']))
+                    if row['scene_builder']['family']=='motion':
+                        self.assertEqual(row['scene_builder']['level'],level)
+                        self.assertEqual(public['scene_builder']['level'],level)
+                        self.assertTrue(public['scene_builder']['motion_visual'])
+                    self.post(state['id'],'answer',{'round_id':row['id'],'answer':row['expected_answer']})
+                    self.post(state['id'],'continue',{'round_id':row['id']})
 
     def test_hint_retry_review_and_reward_keep_the_first_attempt(self):
         self.seed_lesson('bag')
@@ -147,14 +369,14 @@ class SceneGameTests(unittest.TestCase):
         from services.first_steps_practice import _game_word
         with self.app.app_context(), transaction(self.db,write=True) as conn:
             for row in curriculum():
-                with self.subTest(round=row['id']):
-                    target=row['vocabulary']
-                    word=_game_word(conn,target)
-                    self.assertEqual(word['lemma'],target['lemma'])
-                    self.assertEqual(word['form'],target['form'])
-                    for key,value in target['grammar'].items():
-                        self.assertEqual(word['tags'][key],value)
-                    self.assertIn(target['form'].lower(),row['correct_sentence'].lower())
+                for target in row.get('vocabulary_refs',[row['vocabulary']]):
+                    with self.subTest(round=row['id'],form=target['form']):
+                        word=_game_word(conn,target)
+                        self.assertEqual(word['lemma'],target['lemma'])
+                        self.assertEqual(word['form'],target['form'])
+                        for key,value in target['grammar'].items():
+                            self.assertEqual(word['tags'][key],value)
+                        self.assertIn(target['form'].lower(),row['correct_sentence'].lower())
 
 
 if __name__=='__main__':

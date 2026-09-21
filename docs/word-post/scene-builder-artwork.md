@@ -2,7 +2,15 @@
 
 Generated on 16 September 2026 using the built-in image generation tool. These are bundled assets. Starting a game does not generate images or incur image API costs.
 
-The scene uses a small set of reusable illustrations. CSS positions the cat and book relative to the table. The walking and taxi pictures illustrate transport, while the written scenario supplies time, destination and repetition. A still image cannot establish those facts by itself.
+The scene uses a small set of reusable illustrations. CSS positions the cat and book relative to the table. The walking and taxi pictures remain available for saved version 1 sessions.
+
+## Motion illustrations
+
+New motion questions use SVG illustrations in `ui/src/SceneBuilder.tsx`. Each question supplies its setting, destination, transport and stage of movement. The renderer can show pedestrians, vehicles, someone carrying a parcel or an adult accompanying a child. Puddles and roadworks illustrate detours; crossings appear only when the question asks about crossing.
+
+These illustrations are assembled locally. They require no image API calls. The accompanying description establishes facts a still image cannot show reliably, such as a repeated journey or the order of two actions. The description and illustration must agree; the description supplies the complete context used for grading.
+
+Motion artwork has a compact size limit so the answer choices and check button remain visible on typical desktop screens. The existing cat, table and book compositions are unchanged.
 
 ## Files
 

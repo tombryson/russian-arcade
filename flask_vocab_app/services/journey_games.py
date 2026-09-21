@@ -91,7 +91,7 @@ def read_catalogue():
         active = {row['game_id']: row['id'] for row in conn.execute(
             'SELECT id,game_id FROM journey_game_sessions WHERE ' + where
             + " AND completed_at IS NULL AND superseded_at IS NULL AND (json_extract(content_json,'$.options.word_policy')='mixed-v1'"
-            + " OR json_extract(content_json,'$.version') IN ('journey-delivery-v2','scene-builder-v1'))", params)}
+            + " OR json_extract(content_json,'$.version') IN ('journey-delivery-v2','scene-builder-v1', 'scene-builder-v2'))", params)}
         games = []
         for game in GAMES:
             if game['id'] == 'pairs':
@@ -600,7 +600,7 @@ def _credit(conn, row, now):
     content = json.loads(row['content_json'])
     amount = award(conn, row['profile_id'], activity='journey_game',
                    content_key=f'journey-game:{row["game_id"]}:{content["lesson_version"]}', source_key=row['id'],
-                   title=content['title'], target_level=None if content.get('version') in ('journey-vocabulary-v1', 'radio-broadcast-v1', 'journey-delivery-v2', 'scene-builder-v1') else 'A1', now=now,
+                   title=content['title'], target_level=None if content.get('version') in ('journey-vocabulary-v1', 'radio-broadcast-v1', 'journey-delivery-v2', 'scene-builder-v1', 'scene-builder-v2') else 'A1', now=now,
                    evidence={'basis': 'first_unassisted_answers', 'game_id': row['game_id']})
     conn.execute('UPDATE journey_game_sessions SET reward_amount=? WHERE id=?', (amount, row['id']))
     return amount
@@ -747,7 +747,7 @@ def allowlisted_media(conn, key):
         texts.update(item['sentence'] for lesson in [frozen, *frozen.get('related_lessons', [])] for item in lesson['vocabulary'])
     for row in conn.execute('SELECT content_json,answers_json FROM journey_game_sessions WHERE ' + where, params):
         content = json.loads(row['content_json'])
-        if content.get('version') == 'scene-builder-v1':
+        if content.get('version') in ('scene-builder-v1', 'scene-builder-v2'):
             answered = json.loads(row['answers_json'])
             texts.update(audio['text'] for item in content['rounds'] if item['id'] in answered for audio in item.get('answer_audio', []))
             continue

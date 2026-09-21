@@ -352,7 +352,7 @@ export function JourneyGame({
     };
     if (!requestId.current) requestId.current = crypto.randomUUID();
     try {
-      const startOptions=gameId==='scene-builder'?{grammar_focus:options.grammar_focus??'location',rounds:options.rounds}:gameId==='directions'&&catalogue?.deliveries?.length?{...options,delivery_id:generatedDelivery(catalogue.deliveries)?.mission_id??options.delivery_id??orderedDeliveries(catalogue.deliveries)[0].mission_id}:options;
+      const startOptions=gameId==='scene-builder'?{grammar_focus:options.grammar_focus??'location',rounds:options.rounds,...(['motion','mixed'].includes(options.grammar_focus??'location')?{motion_level:options.motion_level??'A1'}:{})}:gameId==='directions'&&catalogue?.deliveries?.length?{...options,delivery_id:generatedDelivery(catalogue.deliveries)?.mission_id??options.delivery_id??orderedDeliveries(catalogue.deliveries)[0].mission_id}:options;
       const exploreNewTown=gameId==='directions'&&'delivery_id' in startOptions&&startOptions.delivery_id==='town-procedural'&&startOptions.delivery_new_town===true;
       const next = await startGame(gameId!, requestId.current, startOptions, !!entry?.active_session_id||exploreNewTown);
       accept(next);
@@ -477,7 +477,7 @@ export function JourneyGame({
     <div class="lesson-head"><a class="text-link" href="#activities">{t("All activities")}</a>{state?.source && !['route', 'sample', 'grammar'].includes(state.source.kind ?? '') && <a class="text-link" href={state.source.href}>{vocabularySource ? t("Back to vocabulary") : t("Back to the lesson")}</a>}</div>
     {!playing && <p class="kicker">{state?.phase === 'completed' ? t("Game complete") : t("Play with Barsik")}</p>}
     <header class="journey-game-heading"><h1 ref={heading} tabIndex={-1}>{t(title)}</h1>
-      {playing && round && <div class="journey-game-round-head"><p class="journey-game-round-count">{practising ? t("Review") : broadcast ? t("Question") : t("Round")} {(state.practice?.index ?? state.round_index) + 1}{" "}{t("of")}{" "}{state.practice?.total ?? state.total_rounds}</p><div class="journey-game-round-dots" aria-hidden="true">{Array.from({
+      {playing && round && <div class="journey-game-round-head"><p class="journey-game-round-count">{practising ? t("Review") : broadcast ? t("Question") : t("Round")} {(state.practice?.index ?? state.round_index) + 1}{" "}{t("of")}{" "}{state.practice?.total ?? state.total_rounds}{currentGame==='scene-builder'&&round.scene_builder?.level&&<span class="scene-round-level" aria-label={`${language==='ru'?'Уровень':'Level'} ${round.scene_builder.level}`}>{round.scene_builder.level}</span>}</p><div class="journey-game-round-dots" aria-hidden="true">{Array.from({
               length: state.total_rounds
             }, (_, index) => <span key={index} class={index <= state.round_index ? 'is-current' : ''} />)}</div></div>}
     </header>
@@ -502,7 +502,7 @@ export function JourneyGame({
       {state.profile_id && state.study_available && <GameStudyActions sessionId={state.id} words={state.words} />}
     </div> : state && round ? <>
       {practising && <div class="game-practice-notice"><p>{t("This is practice. Your first result is saved.")}</p><button class="text-link" disabled={busy} onClick={() => void save('practice_exit')}>{t("Close review")}</button></div>}
-      <div class="journey-game-instruction"><h2 lang={broadcast ? 'ru' : undefined}>{t(round.prompt)}</h2>
+      <div class="journey-game-instruction">{currentGame!=='scene-builder'&&<h2 lang={broadcast ? 'ru' : undefined}>{t(round.prompt)}</h2>}
         {!['radio', 'detective'].includes(currentGame) && !round.audio_required && <div class="journey-game-clues">{round.clues.map((clue, index) => <AudioClue key={`${round.id}-${index}-${clue.audio_key}`} text={clue.text} audioKey={clue.audio_key} />)}</div>}
         {round.hint ? <p class="journey-game-hint" role="status">{language==='ru'&&round.hint_ru?round.hint_ru:t(round.hint)}</p> : ['play', 'practice'].includes(state.phase) && !needsListening && <button class="text-link" disabled={busy || answerUncertain} onClick={() => void save(practising ? 'practice_hint' : 'hint', {
             round_id: round.id
