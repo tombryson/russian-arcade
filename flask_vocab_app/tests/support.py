@@ -13,12 +13,21 @@ def latest_schema_version():
     return max(int(path.name.split("_")[0]) for path in MIGRATION_DIR.glob("[0-9][0-9][0-9]_*.sql"))
 
 
+def strip_course_progression(conn):
+    """Remove migration 044's tables and marker when a test rewinds its schema."""
+    for table in ('course_checkpoint_requests', 'course_checkpoint_submissions',
+                  'course_chapter_passes', 'course_evidence', 'course_checkpoint_attempts'):
+        conn.execute('DROP TABLE IF EXISTS ' + table)
+    conn.execute('DELETE FROM schema_migrations WHERE version=44')
+
+
 def strip_progression_and_levels(conn):
     """Remove migrations 023 onward when a test constructs an older SQLite shape.
 
     This helper is test-only. Dropping their version markers alone would leave
     tables/indexes behind and prevent the real migrations from being exercised.
     """
+    strip_course_progression(conn)
     conn.execute('DROP TABLE IF EXISTS step_conversation_answers')
     conn.execute('DROP TABLE IF EXISTS step_conversation_sessions')
     conn.execute('DROP TABLE IF EXISTS speaking_scenario_levels')

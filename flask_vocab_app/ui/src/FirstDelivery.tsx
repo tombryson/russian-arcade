@@ -84,7 +84,7 @@ export function FirstDelivery({ next, onIntroduce, profileHref='/post/profiles' 
           <p class="intro">Play games, practise Russian and help Barsik deliver your letter.</p></div>
         <figure class="tutorial-welcome-art"><img src={settingOffArt} width="1254" height="1254" decoding="async" alt="Barsik jogs ahead holding gold Lingocoins, with your letter tucked into his red postbag." /></figure>
       </div>
-      <Sheet><div class="coin-introduction"><span class="lingocoin" aria-hidden="true">Л</span><div><h2>Earn coins as you learn.</h2><p>Complete activities and review flashcards to earn Lingocoins. Collect enough to unlock the next stop on <a href="#journey">Barsik’s journey</a>.</p><p>Finish this first activity to earn a one-time bonus of 3 Lingocoins.</p><p>Look for the gold coin at the top to see how many you have.</p></div></div>
+      <Sheet><div class="coin-introduction"><span class="lingocoin" aria-hidden="true">Л</span><div><h2>Earn coins as you learn.</h2><p>Complete activities and review flashcards to earn Lingocoins. Spend them on games in <a href="#shop">the shop</a>.</p><p>Finish this first activity to earn a one-time bonus of 3 Lingocoins.</p><p>Look for the gold coin at the top to see how many you have.</p></div></div>
         <details class="coin-rules"><summary>How do I earn coins?</summary>
           <ul><li>Complete an activity: <strong>3 coins</strong>, up to 12 per day.</li><li>Review a flashcard: <strong>1 coin</strong>, up to 10 per day.</li></ul>
           <p>Hints and mistakes won’t reduce your reward. Each activity or card earns coins only once a day.</p>
@@ -94,11 +94,10 @@ export function FirstDelivery({ next, onIntroduce, profileHref='/post/profiles' 
       </Sheet>
       <div class="action-row"><button class="cta" onClick={() => setStep(1)}>Continue <span aria-hidden="true">→</span></button><a class="text-link" href="#activities">Go straight to activities</a></div>
     </> : step === 1 ? <>
-      <p class="kicker">One word at a time</p><h1 ref={heading} tabIndex={-1}>Watch your Russian improve.</h1>
-      <p class="intro">See Barsik at the top of the page? He moves along the bar as your Russian improves.</p>
+      <p class="kicker">One word at a time</p><h1 ref={heading} tabIndex={-1}>Help Barsik reach the next stop.</h1>
+      <p class="intro">Practise the topics in each chapter to move Barsik along the bar.</p>
       <Sheet><div class="tutorial-progress-introduction"><img class="tutorial-progress-barsik" src="/static/images/barsik-running-v1.webp" width="92" height="68" alt="Barsik running with his letter bag." />
-          <div><h2>Your Russian skills</h2><p>Reading, writing and speaking each have their own rating. Tap Barsik to see your ratings in your profile.</p></div></div>
-        <details class="coin-rules"><summary>What is an Elo rating?</summary><p>Elo is a score that changes based on your answers. Your first checked activity gives you a starting rating. It can go up or down as you practise.</p></details>
+          <div><h2>A message at every stop</h2><p>Use what you have learned to read a message and continue the journey. After four A1 chapters, Barsik delivers your letter.</p><p>Tap Barsik to see your chapter and choose what to practise.</p></div></div>
       </Sheet>
       <div class="action-row"><button class="cta" disabled={busy} onClick={openActivity}>Learn your first words <span aria-hidden="true">→</span></button><button class="text-link" onClick={() => setStep(0)}>Back to Lingocoins</button></div>
     </> : step === 2 ? <>

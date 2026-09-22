@@ -78,6 +78,81 @@ class PublicDemoTests(unittest.TestCase):
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM journey_game_purchases').fetchone()[0], 0)
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM journey_game_access').fetchone()[0], 0)
 
+    @patch('utils.lazy.LazyService._get', side_effect=AssertionError('Course demo must not resolve providers'))
+    def test_course_checkpoints_are_playable_owned_and_provider_free(self, provider):
+        import json
+        from repositories.learning_repository import transaction
+
+        response = self.a.get('/api/v1/course', base_url=self.base)
+        self.assertEqual(response.status_code, 200, response.text)
+        course = response.json
+        headers = {'X-CSRF-Token': course['csrf_token']}
+        chapter = course['chapters'][0]
+        self.assertEqual(chapter['status'], 'practice')
+        start_path = '/api/v1/course/chapters/' + chapter['id'] + '/checkpoint'
+        self.assertEqual(self.a.post(start_path, base_url=self.base,
+            json={'request_id': 'without-csrf', 'challenge': True}).status_code, 403)
+
+        def post(path, data):
+            result = self.a.post(path, base_url=self.base, headers=headers, json=data)
+            self.assertEqual(result.status_code, 200, result.text)
+            return result.json
+
+        attempt = post(start_path, {'request_id': 'demo-course', 'challenge': True})
+        path = '/api/v1/course/checkpoints/' + attempt['id']
+        self.assertNotIn('result', attempt)
+        self.assertNotIn('transcript', attempt['listening'])
+        self.assertEqual(self.a.get(path, base_url=self.base).json, attempt)
+        with self.a.get(attempt['listening']['audio_url'], base_url=self.base) as audio:
+            self.assertEqual(audio.status_code, 200)
+            self.assertEqual(audio.mimetype, 'audio/mpeg')
+            self.assertGreater(len(audio.data), 0)
+
+        other_headers = {'X-CSRF-Token': self.state(self.b)['csrf_token']}
+        self.assertEqual(self.b.get(path, base_url=self.base).status_code, 404)
+        for operation, data in [('listened', {}), ('support', {'kind': 'transcript'}),
+                                ('answer', {'answers': {}, 'submission_id': 'other-course'})]:
+            denied = self.b.post(path + '/' + operation, base_url=self.base, headers=other_headers, json=data)
+            self.assertEqual(denied.status_code, 404, denied.text)
+
+        listened = post(path + '/listened', {})
+        self.assertTrue(listened['listened'])
+        hint = post(path + '/support', {'kind': 'hint', 'question_id': attempt['questions'][0]['id']})
+        self.assertTrue(hint['support_used'])
+        self.assertIn('hint', hint['questions'][0])
+        self.assertNotIn('hint', hint['questions'][1])
+        self.assertNotIn('transcript', hint['listening'])
+        supported = post(path + '/support', {'kind': 'transcript'})
+        self.assertIn('transcript', supported['listening'])
+        self.assertNotIn('result', supported)
+        self.assertNotIn('selected_answer', json.dumps(supported))
+
+        for number in (1, 2):
+            with transaction(self.app.config['DB_PATH']) as conn:
+                frozen = json.loads(conn.execute('SELECT frozen_json FROM course_checkpoint_attempts WHERE id=?',
+                                                 (attempt['id'],)).fetchone()[0])
+            answers = {item['id']: item['answer'] for item in frozen['variant']['questions']}
+            result = post(path + '/answer', {'answers': answers, 'submission_id': f'demo-course-{number}'})
+            self.assertEqual(result['result']['score'], result['result']['total'])
+            self.assertTrue(result['result']['essential_passed'])
+            self.assertEqual({item['question_id']: item['selected_answer'] for item in result['result']['feedback']}, answers)
+            self.assertEqual(self.a.get(path, base_url=self.base).json, result)
+            if number == 1:
+                self.assertEqual(result['status'], 'retry')
+                self.assertFalse(result['result']['passed'])
+                retry = post(start_path, {'request_id': 'demo-course-retry', 'challenge': True})
+                self.assertNotEqual(retry['letter'], attempt['letter'])
+                self.assertFalse(retry['support_used'])
+                attempt = retry
+                path = '/api/v1/course/checkpoints/' + attempt['id']
+                post(path + '/listened', {})
+            else:
+                self.assertEqual(result['status'], 'passed')
+                self.assertTrue(result['result']['passed'])
+                self.assertEqual(result['course']['chapters'][0]['status'], 'passed')
+                self.assertEqual(result['course']['current_chapter_id'], course['chapters'][1]['id'])
+        provider.assert_not_called()
+
     def test_advertised_samples_are_playable_without_providers_and_owned(self):
         import json
         from repositories.learning_repository import transaction

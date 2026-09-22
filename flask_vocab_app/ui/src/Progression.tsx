@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { api, ApiError } from './learning-api';
 import type { Language } from './review-types';
 import type { SkillProgressData } from './SkillProgress';
+import type { CourseData } from './CourseJourney';
 import {GameCatalogue} from './JourneyGames';
 import './styles/progression.css';
 
@@ -10,7 +11,7 @@ type World={id:string;title:string;title_ru:string;threshold:number;unlocked:boo
 export type ProgressionData={profile_id:string;balance:number;earned_total:number;legacy_balance:number;preferred_level:PracticeLevel;
   levels:{id:PracticeLevel;label:string;label_ru:string}[];policy:{activity_coins:number;activity_daily_cap:number;review_coins:number;review_daily_cap:number};
   recent_rewards:{id:string;amount:number;activity:string;title:string;created_at:number}[];
-  journey:{worlds:World[];next_world:World|null};skill:SkillProgressData};
+  journey:{worlds:World[];next_world:World|null};skill:SkillProgressData;course?:CourseData};
 export type ProgressionState={data?:ProgressionData;error:string;loading:boolean;refresh:()=>void};
 type Scene={world:World;scene:{title:string;title_ru:string;intro:string;intro_ru:string;prompt:string;prompt_ru:string;choices:{id:string;text:string;text_ru:string}[];
   feedback?:{correct:boolean;text:string;text_ru:string};completed:boolean};progression:ProgressionData;coins_earned?:number};

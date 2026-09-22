@@ -261,6 +261,9 @@ class StepConversationService:
             saved['current_index'] += 1
             if saved['current_index'] == len(dialogue['turns']):
                 saved['state'] = 'completed'
+                # Save the completed evidence before the shared course adapter
+                # reads it, inside this same transaction.
+                conn.execute("UPDATE step_conversation_sessions SET state='completed' WHERE id=?", (sid,))
                 scenario = json.loads(saved['scenario_json'])
                 saved['reward_amount'] = award(conn, saved['profile_id'], activity='speaking_step',
                     content_key=saved['variant_id'], source_key=sid, title='Step-through · ' + scenario['title'],

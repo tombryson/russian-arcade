@@ -14,7 +14,7 @@ python scripts/release_snapshot.py \
 
 The report lists added, changed and omitted paths, plus file sizes and SHA256 hashes. It includes tracked and untracked source files so new migrations, tests and assets are not missed. Ignored runtime data is not included. Files are checked against source locations and a separate exclusion policy even if they were accidentally tracked.
 
-The export excludes Git history, environment files other than `.env.example`, credentials, databases, backups, tutor documents, uploads, learner recordings, generated learning media, dependency folders, build output and `.codex`. Bundled application artwork and authored delivery audio remain part of the source release. A path allowlist is not a substitute for reviewing the content of newly added files.
+The export excludes Git history, environment files other than `.env.example`, credentials, databases, backups, tutor documents, uploads, learner recordings, generated learning media, dependency folders, build output and `.codex`. Bundled application artwork, authored delivery audio and the authored course recordings in `flask_vocab_app/static/audio/course/` remain part of the source release. Include the course audio manifest and verify that the exported source and deployment build contain every checkpoint clip. A path allowlist is not a substitute for reviewing the content of newly added files.
 
 Review the report before copying anything into the public checkout. Check omitted paths as carefully as new files. Read the README and changed feature guides against the actual implementation. Future work must not be described as already enabled in the hosted demo.
 

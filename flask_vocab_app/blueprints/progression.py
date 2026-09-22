@@ -3,18 +3,26 @@ from flask import Blueprint, jsonify, request
 from contracts.learning import fields
 from repositories.learning_repository import LearningError, require_access, timestamp, transaction
 from services.progression import LEVELS, snapshot, journey_read, journey_answer
+from services.course_progression import (course_snapshot, checkpoint_start, checkpoint_read,
+                                        checkpoint_answer, checkpoint_support, checkpoint_listened)
 from utils.household_access import access_id, access_policy, csrf_token
 
 
 def create_progression_blueprint(db_path):
     bp = Blueprint('progression', __name__, url_prefix='/api/v1')
 
-    def body(required):
+    def body(required, optional=()):
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
             raise LearningError('invalid_input','Send a JSON object.')
-        fields(data, required)
+        fields(data, required, optional)
         return data
+
+    def course_profile(conn):
+        profile = require_access(conn, access_id(), timestamp())
+        if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='course_evidence'").fetchone():
+            raise LearningError('course_unavailable', 'The course is temporarily unavailable.', 503)
+        return profile
 
     @bp.get('/progression')
     @access_policy('child')
@@ -48,5 +56,53 @@ def create_progression_blueprint(db_path):
         with transaction(db_path,write=True) as conn:
             profile = require_access(conn,access_id(),timestamp())
             return jsonify(journey_answer(conn,profile['id'],world_id,data['answer'],data['submission_id']))
+
+    @bp.get('/course')
+    @access_policy('child')
+    def course():
+        with transaction(db_path) as conn:
+            profile = course_profile(conn)
+            return jsonify(course_snapshot(conn, profile['id']) | {'csrf_token': csrf_token()})
+
+    @bp.post('/course/chapters/<chapter_id>/checkpoint')
+    @access_policy('child')
+    def start_checkpoint(chapter_id):
+        data = body({'request_id'}, {'challenge'})
+        with transaction(db_path, write=True) as conn:
+            profile = course_profile(conn)
+            return jsonify(checkpoint_start(conn, profile['id'], chapter_id, data['request_id'], data.get('challenge', False)))
+
+    @bp.get('/course/checkpoints/<attempt_id>')
+    @access_policy('child')
+    def read_checkpoint(attempt_id):
+        with transaction(db_path) as conn:
+            profile = course_profile(conn)
+            return jsonify(checkpoint_read(conn, profile['id'], attempt_id))
+
+    @bp.post('/course/checkpoints/<attempt_id>/answer')
+    @access_policy('child')
+    def answer_checkpoint(attempt_id):
+        data = body({'answers', 'submission_id'})
+        with transaction(db_path, write=True) as conn:
+            profile = course_profile(conn)
+            return jsonify(checkpoint_answer(conn, profile['id'], attempt_id, data['answers'], data['submission_id']))
+
+    @bp.post('/course/checkpoints/<attempt_id>/support')
+    @access_policy('child')
+    def support_checkpoint(attempt_id):
+        data = body({'kind'}, {'question_id'})
+        if 'question_id' in data and not isinstance(data['question_id'], str):
+            raise LearningError('invalid_input', 'Question ID must name an existing checkpoint question.')
+        with transaction(db_path, write=True) as conn:
+            profile = course_profile(conn)
+            return jsonify(checkpoint_support(conn, profile['id'], attempt_id, data['kind'], data.get('question_id')))
+
+    @bp.post('/course/checkpoints/<attempt_id>/listened')
+    @access_policy('child')
+    def listened_checkpoint(attempt_id):
+        body(set())
+        with transaction(db_path, write=True) as conn:
+            profile = course_profile(conn)
+            return jsonify(checkpoint_listened(conn, profile['id'], attempt_id))
 
     return bp

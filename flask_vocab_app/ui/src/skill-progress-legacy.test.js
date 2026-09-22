@@ -6,11 +6,11 @@ const script=readFileSync('../static/js/progression.js','utf8');
 const template=readFileSync('../templates/_skill_progress.html','utf8');
 let dom;
 afterEach(()=>dom?.window.close());
-const skill=(patch={})=>({id:'reading',label:'Reading',label_ru:'Чтение',status:'provisional',rating:1040,stage:1,stage_end:1200,progress:.2,observations:3,points_to_next:160,...patch});
-const data=(patch={})=>({profile_id:'personal',balance:42,skill:{status:'provisional',policy_version:'practice-elo-v1',active_skill:'reading',skills:[skill()]},...patch});
-const rated=(patch={},extra={})=>data({skill:{status:'provisional',policy_version:'practice-elo-v1',active_skill:'reading',skills:[skill(patch)]},...extra});
+const course=(patch={})=>({version:'a1-v1',profile_id:'personal',current_chapter_id:'first',completed:false,chapters:[{id:'first',number:1,title:'A small message',title_ru:'Короткое сообщение',progress:.2},...Array.from({length:3},(_,i)=>({id:`chapter-${i+2}`,number:i+2,title:'Next',title_ru:'Дальше',progress:0}))],...patch});
+const data=(patch={})=>({profile_id:'personal',balance:42,skill:{active_skill:'reading',skills:[{rating:1040,observations:3,progress:.9}]},course:course(),...patch});
+const rated=(patch={},extra={})=>data({course:course({chapters:[{...course().chapters[0],...patch},...course().chapters.slice(1)]}),...extra});
 async function setup(initial=data(),{household=false,language='en',layout='top',width=1200,coins=true}={}) {
-  const markup=template.replace(/\{%[\s\S]*?%\}/g,'').replace(/\{\{[\s\S]*?\}\}/g,expression=>expression.includes('household_enabled') ? household ? '/post/household#skill-progress' : '/post/profiles#skill-progress' : language);
+  const markup=template.replace(/\{%[\s\S]*?%\}/g,'').replace(/\{\{[\s\S]*?\}\}/g,expression=>expression.includes('household_enabled') ? '/#journey' : language);
   const badge=coins ? `<a data-progression-badge data-language="${language}"><strong data-progression-balance>—</strong></a>` : '';
   const navigation=layout==='sidebar' ? `<nav id="sidebar"><div class="sidebar-brand-row"></div><button class="navbar-toggler"></button><div id="sidebarNav"><div class="sidebar-footer">${badge}${markup}</div></div></nav>` : `<header class="arcade-header">${badge}${markup}</header>`;
   dom=new JSDOM(`${navigation}<textarea aria-label="Draft">Я читаю.</textarea>`,{url:'http://localhost/writing',runScripts:'outside-only'});
@@ -64,12 +64,12 @@ describe('Shared progress in existing activities',()=>{
     expect(rail.style.getPropertyValue('--skill-progress')).toBe('0.2');
   });
 
-  it.each([false,true])('links the uncluttered rail to the profile skill section (household=%s)',async household=>{
+  it.each([false,true])('links the uncluttered rail to the chapter journey (household=%s)',async household=>{
     const {rail,link}=await setup(data(),{household});
     expect(rail.tagName).toBe('DIV');expect(link.tagName).toBe('A');
-    expect(link.getAttribute('href')).toBe(household ? '/post/household#skill-progress' : '/post/profiles#skill-progress');
+    expect(link.getAttribute('href')).toBe('/#journey');
     expect(link.getAttribute('hx-boost')).toBe('false');
-    expect(link.getAttribute('aria-label')).toBe('Reading · Stage 1. 1,040 provisional Elo; next stage at 1,200. View your profile and skill progress');
+    expect(link.getAttribute('aria-label')).toBe('Chapter 1 of 4 · A small message · 20% complete. Open your journey');
     expect(rail.textContent.trim()).toBe('');
     expect(rail.querySelector('summary,details,.skill-rail-caption,.skill-progress-panel,[data-skill-content]')).toBeNull();
     expect(rail.getAttribute('open')).toBeNull();
@@ -88,15 +88,15 @@ describe('Shared progress in existing activities',()=>{
     expect([draft.selectionStart,draft.selectionEnd]).toEqual([2,5]);
     expect(rail.style.getPropertyValue('--skill-progress')).toBe('0.25');
     expect(rail.querySelector('[data-skill-bar]').getAttribute('aria-valuenow')).toBe('25');
-    expect(link.getAttribute('aria-label')).toContain('1,050 provisional Elo');
+    expect(link.getAttribute('aria-label')).toContain('25% complete');
     expect(rail.classList.contains('is-moving')).toBe(true);
     document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape'}));
     expect(document.activeElement).toBe(draft);
   });
 
   it('shows an unmeasured start without empty-state copy or a made-up rating',async()=>{
-    const {document,rail,link}=await setup(rated({rating:null,observations:0,progress:0}));
-    expect(link.getAttribute('aria-label')).toContain('no checked activities yet');
+    const {document,rail,link}=await setup(data({course:undefined}));
+    expect(link.getAttribute('aria-label')).toBe('Open your journey');
     expect(link.getAttribute('aria-label')).not.toContain('1,000');
     expect(rail.style.getPropertyValue('--skill-progress')).toBe('0');
     expect(document.querySelector('[data-skill-bar]').hidden).toBe(true);
@@ -115,13 +115,13 @@ describe('Shared progress in existing activities',()=>{
     const {state,document,rail,link,refresh}=await setup();
     state.fail=true;
     await refresh();
-    expect(link.getAttribute('aria-label')).toContain('1,040 provisional Elo');
+    expect(link.getAttribute('aria-label')).toContain('20% complete');
     expect(link.getAttribute('aria-label')).toContain('Showing your last saved progress');
     expect(rail.style.getPropertyValue('--skill-progress')).toBe('0.2');
     expect(rail.querySelector('.skill-rail-runner').hidden).toBe(false);
     state.status=403;
     await refresh();
-    expect(link.getAttribute('aria-label')).toContain('Skill progress unavailable');
+    expect(link.getAttribute('aria-label')).toContain('Chapter progress unavailable');
     expect(link.getAttribute('aria-label')).not.toContain('1,040');
     expect(rail.style.getPropertyValue('--skill-progress')).toBe('0');
     expect(rail.querySelector('.skill-rail-runner').hidden).toBe(true);
@@ -140,28 +140,26 @@ describe('Shared progress in existing activities',()=>{
   });
 
   it.each([
-    ['profile',rated({rating:1050,progress:.25},{profile_id:'different'})],
-    ['policy',data({skill:{status:'provisional',policy_version:'practice-elo-v2',active_skill:'reading',skills:[skill({rating:1050,progress:.25})]}})],
-    ['skill',data({skill:{status:'provisional',policy_version:'practice-elo-v1',active_skill:'writing',skills:[skill({id:'writing',label:'Writing',rating:1050,progress:.25})]}})],
-    ['stage',rated({rating:1205,stage:2,stage_end:1400,progress:.025})],
-    ['lower rating',rated({rating:1020,progress:.1})],
+    ['profile',rated({progress:.25},{profile_id:'different'})],
+    ['version',data({course:course({version:'a1-v2',chapters:[{...course().chapters[0],progress:.25},...course().chapters.slice(1)]})})],
+    ['chapter',data({course:course({current_chapter_id:'chapter-2'})})],
+    ['lower progress',rated({progress:.1})],
   ])('does not animate a %s change as earned progress',async(_change,next)=>{
     const {state,rail,refresh}=await setup();state.data=next;await refresh();
-    expect(rail.style.getPropertyValue('--skill-progress')).toBe(String(next.skill.skills[0].progress));
     expect(rail.classList.contains('is-moving')).toBe(false);
   });
 
-  it('sets skill names as accessible text rather than executable markup',async()=>{
-    const {link,rail}=await setup(rated({label:'<img src=x onerror=alert(1)>'}));
+  it('sets chapter names as accessible text rather than executable markup',async()=>{
+    const {link,rail}=await setup(rated({title:'<img src=x onerror=alert(1)>'}));
     expect(link.getAttribute('aria-label')).toContain('<img src=x onerror=alert(1)>');
     expect(rail.querySelectorAll('img')).toHaveLength(1);
     expect(rail.querySelector('img').getAttribute('src')).toBe('/static/images/barsik-progress-run-v1.webp');
   });
 
-  it('provides the rating and profile destination in Russian',async()=>{
+  it('provides the chapter and journey destination in Russian',async()=>{
     const {link}=await setup(data(),{language:'ru'});
-    expect(link.getAttribute('aria-label')).toContain('Чтение · Этап 1');
-    expect(link.getAttribute('aria-label')).toContain('предварительный рейтинг Эло');
-    expect(link.getAttribute('aria-label')).toContain('Открыть профиль и прогресс навыков');
+    expect(link.getAttribute('aria-label')).toContain('Глава 1 из 4');
+    expect(link.getAttribute('aria-label')).toContain('20% пройдено');
+    expect(link.getAttribute('aria-label')).toContain('Открыть путешествие');
   });
 });

@@ -11,7 +11,7 @@ from services.first_steps import chapter_content
 from services.game_access import access_state, purchase, wallet_balance
 from services.progression import award, reverse, snapshot
 from services.scene_builder import build_content, options as scene_options
-from tests.support import isolated_app, select_test_profile, latest_schema_version
+from tests.support import isolated_app, select_test_profile, latest_schema_version, strip_course_progression
 from tests import test_first_steps
 
 
@@ -255,6 +255,7 @@ class GameAccessTests(unittest.TestCase):
             session_id, saved_content = self.saved_scene(conn, sample=sample)
             self.receipt(conn, 100, 'first_steps')
             before_ledger = [tuple(row) for row in conn.execute('SELECT rowid,* FROM progression_entries')]
+            strip_course_progression(conn)
             conn.execute('DROP TABLE journey_game_purchases')
             conn.execute('DROP TABLE journey_game_access')
             conn.execute('DROP TABLE step_conversation_answers')

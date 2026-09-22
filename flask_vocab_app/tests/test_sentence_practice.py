@@ -12,7 +12,7 @@ import openai
 
 from migrations import upgrade_database
 from services.word_jumble_service import WordJumbleService, AssessmentUnavailable, DraftConflict
-from tests.support import isolated_app, strip_progression_and_levels
+from tests.support import isolated_app, strip_course_progression, strip_progression_and_levels
 from tests.test_activity_cleanup import Document
 
 
@@ -356,6 +356,7 @@ class SentencePracticeTests(unittest.TestCase):
     def test_curriculum_migration_preserves_legacy_game_and_saved_draft(self):
         self.service.save_draft(self.id, 'Сохранить мой черновик.', 0)
         with sqlite3.connect(self.service.db_path) as conn:
+            strip_course_progression(conn)
             conn.execute('DROP TABLE step_conversation_answers')
             conn.execute('DROP TABLE step_conversation_sessions')
             conn.execute('ALTER TABLE word_jumble_games DROP COLUMN task_json')

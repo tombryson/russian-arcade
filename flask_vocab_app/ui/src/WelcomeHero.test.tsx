@@ -25,7 +25,7 @@ describe('Saved First steps home ticket',()=>{
     vi.stubGlobal('fetch',vi.fn(()=>response({profile_id:'p',lessons,next_lesson:null,complete:true,completed_count:5})));
     render(<WelcomeHero headingRef={createRef()} profileKey="p" nextDestination={{title:'The market town',href:'#journey/market-town'}}/>);
     expect(await screen.findByText('The market town')).toBeTruthy();
-    expect(screen.getByRole('link',{name:/First chapter complete/}).getAttribute('href')).toBe('#journey/market-town');
+    expect(screen.getByRole('link',{name:/Introduction complete/}).getAttribute('href')).toBe('#journey/market-town');
   });
   it('refreshes the next lesson after another activity updates progress',async()=>{
     let next=lessons[1];

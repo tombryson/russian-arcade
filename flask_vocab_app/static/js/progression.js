@@ -30,27 +30,30 @@
   function renderSkill(data,error=false) {
     document.querySelectorAll('[data-skill-rail]').forEach(rail=>{
       const t=(en,ru)=>rail.dataset.language==='ru' ? ru : en;
-      const number=value=>Math.round(value).toLocaleString(rail.dataset.language==='ru' ? 'ru-RU' : 'en-AU');
-      const skill=data?.skill;
-      const candidate=skill?.skills?.find(item=>item.id===skill.active_skill);
-      const active=candidate && Number.isFinite(candidate.rating) && candidate.observations>0 ? candidate : null;
-      const progress=active && Number.isFinite(active.progress) ? Math.max(0,Math.min(1,active.progress)) : 0;
+      const course=data?.course;
+      const chapter=course?.chapters?.find(item=>item.id===course.current_chapter_id) || (course?.completed ? course.chapters.at(-1) : null);
+      const preview=new URLSearchParams(window.location.search).get('progress-preview')==='50';
+      const progress=preview ? .5 : chapter && Number.isFinite(chapter.progress) ? Math.max(0,Math.min(1,chapter.progress)) : 0;
       const previous=railStates.get(rail);
-      const key=active ? `${data.profile_id}:${skill.policy_version}:${active.id}` : '';
-      const moving=!!(active && previous?.key===key && active.rating>previous.rating && active.stage===previous.stage);
+      const key=chapter ? `${data.profile_id}:${course.version}:${chapter.id}` : '';
+      const moving=!!(!preview && chapter && previous?.key===key && progress>previous.progress);
       if (previous?.timer) clearTimeout(previous.timer);
       rail.classList.toggle('is-moving',moving);
-      rail.classList.toggle('is-unavailable',!data);
+      rail.classList.toggle('is-unavailable',!data && !preview);
       rail.style.setProperty('--skill-progress',String(progress));
-      const rating=active ? `${t(active.label,active.label_ru)} · ${t('Stage','Этап')} ${active.stage}. ${number(active.rating)} ${t('provisional Elo; next stage at','— предварительный рейтинг Эло; следующий этап —')} ${number(active.stage_end)}` : data ? t('Skill progress has no checked activities yet','Пока нет проверенных заданий для оценки навыков') : t('Skill progress unavailable','Прогресс навыков недоступен');
-      const stale=data && error ? t(' Showing your last saved progress.',' Показан последний сохранённый прогресс.') : '';
-      rail.querySelector('.skill-rail-link').setAttribute('aria-label',`${rating}.${stale} ${t('View your profile and skill progress','Открыть профиль и прогресс навыков')}`);
-      rail.querySelector('.skill-rail-runner').hidden=!data;
+      const chapterLabel=chapter ? t(`Chapter ${chapter.number} of ${course.chapters.length} · ${chapter.title}`,`Глава ${chapter.number} из ${course.chapters.length} · ${chapter.title_ru}`) : '';
+      const label=preview ? t('50% layout preview; saved progress unchanged','Предпросмотр 50%; сохранённый прогресс не изменён') : chapter ? `${chapterLabel} · ${Math.round(progress*100)}% ${t('complete','пройдено')}` : data ? '' : t('Chapter progress unavailable','Прогресс главы недоступен');
+      const stale=data && error ? t('Showing your last saved progress','Показан последний сохранённый прогресс') : '';
+      const link=rail.querySelector('.skill-rail-link');
+      link.setAttribute('href','/#journey');
+      link.setAttribute('aria-label',[label,stale,t('Open your journey','Открыть путешествие')].filter(Boolean).join('. '));
+      rail.querySelector('.skill-rail-runner').hidden=!data && !preview;
       const bar=rail.querySelector('[data-skill-bar]');
-      bar.hidden=!active;
-      if (active) {bar.setAttribute('aria-valuenow',String(Math.round(progress*100)));bar.setAttribute('aria-valuetext',`${number(active.rating)} ${t('Elo; next stage at','Эло; следующий этап —')} ${number(active.stage_end)}`);}
+      bar.setAttribute('aria-label',t('Progress through this chapter','Прогресс этой главы'));
+      bar.hidden=!chapter && !preview;
+      if (chapter || preview) {bar.setAttribute('aria-valuenow',String(Math.round(progress*100)));bar.setAttribute('aria-valuetext',preview ? label : `${chapterLabel} · ${Math.round(progress*100)}%`);}
       else {bar.removeAttribute('aria-valuenow');bar.removeAttribute('aria-valuetext');}
-      railStates.set(rail,{key,rating:active?.rating,stage:active?.stage,timer:moving ? setTimeout(()=>rail.classList.remove('is-moving'),800) : null});
+      railStates.set(rail,{key,progress,timer:moving ? setTimeout(()=>rail.classList.remove('is-moving'),800) : null});
     });
   }
   async function refresh() {

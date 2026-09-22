@@ -13,7 +13,7 @@ from services.first_delivery import GUEST_ATTEMPT_KEY
 from services.first_steps import chapter_content
 from services.journey_games import GAMES, _content, assess_answer, movement_path, sync_unlocks, _snapshot_legacy_unlocks
 from services.progression import award, snapshot
-from tests.support import isolated_app, select_test_profile, latest_schema_version
+from tests.support import isolated_app, select_test_profile, latest_schema_version, strip_course_progression
 from tests import test_first_steps as first_steps_tests
 from tests.game_fixtures import grant_earned_game_access
 
@@ -230,6 +230,7 @@ class JourneyGamesTests(unittest.TestCase):
         with transaction(self.db, write=True) as conn:
             before = [tuple(row) for row in conn.execute('SELECT * FROM first_steps_attempts ORDER BY id')]
             ledger = [tuple(row) for row in conn.execute('SELECT * FROM progression_events')]
+            strip_course_progression(conn)
             for table in ('step_conversation_answers', 'step_conversation_sessions', 'journey_game_purchases', 'journey_game_access', 'journey_route_audio_cache', 'journey_route_preparations', 'journey_route_actions', 'journey_route_state', 'journey_game_corrections', 'journey_game_preparations', 'journey_game_examples', 'journey_game_media', 'journey_game_sessions', 'journey_game_unlocks'):
                 conn.execute('DROP TABLE ' + table)
             conn.execute('ALTER TABLE word_jumble_games DROP COLUMN task_json')
@@ -506,6 +507,7 @@ class JourneyGamesTests(unittest.TestCase):
             unlock_columns = [row[1] for row in conn.execute('PRAGMA table_info(journey_game_unlocks)')]
             unlocks = conn.execute("SELECT rowid," + ','.join(unlock_columns) + " FROM journey_game_unlocks WHERE game_id IN ('pack-bag','directions') ORDER BY rowid").fetchall()
             events = conn.execute('SELECT * FROM progression_events ORDER BY rowid').fetchall()
+            strip_course_progression(conn)
             conn.execute('DROP TABLE step_conversation_answers')
             conn.execute('DROP TABLE step_conversation_sessions')
             conn.executescript('DROP TABLE journey_game_purchases; DROP TABLE journey_game_access; DROP TABLE journey_route_audio_cache; DROP TABLE journey_route_preparations; DROP TABLE journey_route_actions; DROP TABLE journey_route_state; DROP TABLE journey_game_corrections; DROP TABLE journey_game_preparations; DROP TABLE journey_game_examples; DROP TABLE journey_game_sessions; DROP TABLE journey_game_unlocks;')

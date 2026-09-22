@@ -1,16 +1,22 @@
 # The header progress line
 
-Implemented 15 September 2026. This extends [levels and progression](levels-and-progression.md) with a visible, provisional practice rating. It does not revive the old additive `users.elo_rating`.
+Introduced 15 September 2026; course display updated 22 September 2026. The header now shows guided chapter preparation. Separate provisional practice ratings remain available under [levels and progression](levels-and-progression.md), without reviving the old additive `users.elo_rating`.
+
+## Current chapter coverage — 22 September 2026
+
+The header line now represents preparation for the current [guided A1 chapter](course-chapters.md), independently of Elo. It combines successful distinct task coverage for every chapter topic with the requirement for two activity families. Completing preparation opens the checkpoint; passing the checkpoint advances the course. A lower historical skill estimate does not reduce this coverage or remove a pass.
+
+The separate provisional skill histories and their evidence policy remain available. The rating formula and dated verification receipts below describe that separate model; they do not define the header’s fill or destination. Coins and FSRS remain separate.
 
 ## Experience
 
-A thin line spans the bottom of the sticky header in both the main app and the older activity pages. A small running Barsik sits at its leading edge. The header contains no visible caption or dropdown card. Selecting Barsik or the line opens **Skill progress** in the selected learner's profile, where separate skill ratings, stages and checked-attempt counts are listed. The link's accessible name identifies the current skill, stage and provisional rating when measured.
+A thin line spans the bottom of the sticky header in both the main app and the older activity pages. A small running Barsik sits at its leading edge. Selecting Barsik or the line opens the **guided course** for the selected learner. The link's accessible name identifies the current chapter and preparation progress.
 
-The header shows the most recently assessed skill. It does not combine unrelated scores into an overall Russian rating. With no qualifying assessments, Barsik stays at the beginning of the line. Unmeasured skills in the profile show a dash and **Not started**, without an introductory card or **Getting started** heading. A starting prior is not displayed as a measured ability score.
+The header shows the current chapter’s topic coverage and activity-family requirement. With no qualifying preparation, Barsik stays at the beginning. Passing a checkpoint advances to the next chapter, whose own coverage determines the new fill. Completing all four chapters shows the completed course. Separate unmeasured skills in the profile still show a dash and **Not started**.
 
-Barsik moves briefly when the same learner's displayed skill improves. Reloading, changing learners or switching between skills must not look like earned progress. He stays still between updates, and reduced-motion preferences disable animation. His feet stay aligned with the line, including at either edge on a narrow screen.
+Barsik moves briefly when the same learner’s preparation improves within the current chapter. Reloading, changing learners or advancing to a different chapter must not look like newly earned preparation. He stays still between updates, and reduced-motion preferences disable animation. His feet stay aligned with the line, including at either edge on a narrow screen.
 
-Lingo coins still recognise participation and open permanent journey stops. The rating estimates performance within a particular activity. Neither the rating nor this line locks ordinary activities, assigns a TORFL qualification, changes card schedules or spends coins. A lower rating can reduce the line's fill; it cannot remove a completed journey stop.
+Lingo coins still recognise participation and buy optional games. Historical journey receipts are preserved. A separate skill rating estimates performance within a particular activity; it cannot reduce the course line’s fill or remove a checkpoint pass. Neither system assigns a TORFL qualification or changes FSRS schedules, and ordinary practice stays accessible.
 
 ## Separate evidence
 
@@ -73,13 +79,13 @@ The shared header illustration is `flask_vocab_app/static/images/barsik-running-
 - Expand Speaking variations and evaluate repeated exposure. Same-day repetition remains useful even when it no longer supplies another rating observation.
 - Introduce evaluated difficulty recommendations only after the evidence supports them. Keep recommendations optional and retain independent card scheduling and journey progression.
 
-## Local verification
+## Historical rating verification — 15 September 2026
 
 The backend passed 67 focused model, activity, progression, Reading and Speaking checks, followed by 32 affected tests after adding the legacy Translation exclusion. The UI passed 35 focused tests; TypeScript, JavaScript syntax validation and the production build passed. Browser checks covered both header shells, a narrow phone viewport, keyboard dismissal, sticky positioning and preservation of a Writing draft while the panel was open. A scrollbar-related panel overflow found during this check was fixed.
 
 Seven synthetic first assessments on an isolated database produced a rating of 1146 and a 73% Stage 1 fill, with Barsik aligned at the leading edge. The real preview received no test assessments. The preview was restarted on port 5052 with the same configuration and schema 24; the QA server was stopped. Protected configuration/key files and the separate canonical database matched their recorded hashes. The preview backup and verification receipt are under `instance/skill-rail-20260915/`.
 
-## Profile placement update
+## Historical profile placement update
 
 The caption and header popup were removed after review. Skill details now live in the selected profile, for both personal and optional household modes, and stay hidden until the progress introduction. Validation passed 49 focused UI tests, 27 backend tests, TypeScript and the production build. Browser checks covered both header shells, the profile link and the narrow profile layout. No stored ratings or balances were changed.
 

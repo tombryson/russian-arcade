@@ -11,7 +11,7 @@ from repositories.learning_repository import transaction, timestamp
 from services.ai_trial_budget import TrialDenied
 from services.speech_provider import SpeechError
 from services.step_conversation import StepConversationService
-from tests.support import isolated_app, latest_schema_version
+from tests.support import isolated_app, latest_schema_version, strip_course_progression
 from tests.test_conversation import FakeSpeech
 from tests.test_step_conversation_ai import dialogue, dialogue_for_scenario
 
@@ -159,6 +159,13 @@ class StepConversationTests(unittest.TestCase):
             for row in rows:
                 self.assertNotIn('_skill', json.loads(row['evidence_json']))
                 self.assertEqual(json.loads(row['evidence_json'])['basis'], 'guided_step_completion')
+                coverage = json.loads(row['evidence_json'])['_course']
+                self.assertEqual(coverage['topic_id'], 'places')
+                self.assertTrue(coverage['assisted'])
+            from services.course_progression import course_snapshot
+            course = course_snapshot(conn, self.headers['X-Profile-ID'])
+            places = next(topic for chapter in course['chapters'] for topic in chapter['topics'] if topic['id'] == 'places')
+            self.assertEqual(places['successful_tasks'], 1)
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM progression_events WHERE activity='speaking'").fetchone()[0], 0)
 
     def test_start_prepares_only_opening_audio_and_playback_is_owned_and_cached(self):
@@ -333,6 +340,7 @@ class StepConversationTests(unittest.TestCase):
     def test_migration_adds_relations_without_rewriting_existing_records(self):
         self.start()
         with sqlite3.connect(self.db) as conn:
+            strip_course_progression(conn)
             before = conn.execute('SELECT * FROM words ORDER BY id').fetchall()
             profiles = conn.execute('SELECT * FROM learning_profiles ORDER BY id').fetchall()
             conn.execute('DROP TABLE step_conversation_answers')

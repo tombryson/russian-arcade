@@ -60,7 +60,7 @@ The vocabulary database keeps its lemma/form relationships and numeric difficult
 - Reuse earlier vocabulary and grammar in later topics. Increase the communicative demand without filling every sentence with rare words.
 - Assess the stated objectives. Completing a topic, earning coins or gaining a skill rating does not itself assign a proficiency level.
 
-The curriculum specifies what to teach and how to practise it. It does not yet store per-topic mastery, provide a placement examination or replace the separate journey story. Those features need their own assessment and completion rules.
+The [guided A1 course](word-post/course-chapters.md) groups the ten A1 topics into four chapters and records successful practice coverage separately from independent checkpoint passes. Readiness needs two distinct tasks per topic at 70% or higher and two activity families across the chapter; supported practice is allowed. A checkpoint requires 80% or higher, both essential details, listening playback and no revealed hints or transcript. Learners may challenge the current chapter early. These are application pilot rules, not a CEFR placement examination or certification. All four passes unlock the A2 guided level; authored A2 chapters remain future content and higher-level free practice stays available.
 
 ## Topic reference
 

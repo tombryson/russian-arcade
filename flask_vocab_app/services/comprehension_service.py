@@ -408,7 +408,36 @@ class ComprehensionService:
                     continue
                 raise ValueError('The answers could not be checked. Please try again.') from None
 
-    def save_story(self, title, topic, difficulty, text, audio_url, image_url, questions, answers, feedback, score, story_id=None, title_en="", assessed=False, progression_result=None, fresh_assessment=False):
+    def course_task_context(self, story_id, trusted, text, topic, difficulty, questions):
+        """Pin the original server question set before a feedback save can edit it.
+
+        Saved story text/topic/difficulty are immutable on the check routes. The
+        question set is editable, so its first course-era receipt is authoritative
+        even if that first submitted set did not match. Scope receipts to the
+        current activity owner and never read these values from form fields.
+        """
+        from repositories.learning_repository import payload_hash
+        identity_matches = bool(trusted and
+            (trusted.get('text'), trusted.get('topic'), trusted.get('difficulty')) == (text, topic, difficulty))
+        expected_hash = payload_hash(trusted['questions']) if identity_matches and trusted.get('questions') else None
+        if story_id is not None:
+            with connect_db(self.db_path) as conn:
+                owner = activity_profile_id(conn)
+                rows = conn.execute("""SELECT e.evidence_json FROM progression_events e
+                    JOIN saved_stories s ON e.content_key='story:' || s.id
+                    WHERE s.id=? AND COALESCE(s.owner_profile_id,'personal-learning')=?
+                    AND e.profile_id=? AND e.activity='reading'
+                    ORDER BY e.created_at,e.rowid""", (story_id, owner, owner)).fetchall()
+                for row in rows:
+                    previous = json.loads(row[0])
+                    if 'course_task_questions_hash' in previous:
+                        # A null pin records that the first task had no trusted
+                        # generated/saved context; saving it cannot manufacture one.
+                        expected_hash = previous['course_task_questions_hash']
+                        break
+        return bool(identity_matches and expected_hash and expected_hash == payload_hash(questions)), expected_hash
+
+    def save_story(self, title, topic, difficulty, text, audio_url, image_url, questions, answers, feedback, score, story_id=None, title_en="", assessed=False, progression_result=None, fresh_assessment=False, course_task_context_matches=False, course_task_questions_hash=None):
         title = validate_story_title(title)
         title_en = validate_story_title(title_en) if title_en else ""
         if assessed and (not isinstance(questions, list) or not questions
@@ -508,7 +537,9 @@ class ComprehensionService:
                     coins = award(conn, profile_id, activity='reading', content_key=f'story:{story_id}',
                                   source_key=f'story-check:{answer_key}:{day}', title=title_en or title,
                                   evidence={'score': score, 'score_max': 10, 'answered_questions': len(answers),
-                                            'first_fresh_assessment': bool(first_fresh_assessment)})
+                                            'first_fresh_assessment': bool(first_fresh_assessment),
+                                            'course_task_context_matches': course_task_context_matches is True,
+                                            'course_task_questions_hash': course_task_questions_hash})
             conn.commit()
             if progression_result is not None:
                 progression_result['coins_earned'] = coins

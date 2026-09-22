@@ -80,6 +80,10 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
         return bool(trusted and (trusted.get('text'), trusted.get('topic'), trusted.get('difficulty'), trusted.get('questions'))
                     == (story_text, topic, difficulty, questions))
 
+    def course_context(story_id, story_text, topic, difficulty, questions):
+        trusted = story_repository.load(story_id) if story_id else session.get('reading_rating_context', {})
+        return comprehension_service.course_task_context(story_id, trusted, story_text, topic, difficulty, questions)
+
     @blueprint.route("/comprehension", methods=["GET", "POST"])
     def comprehension():
         topics, saved_stories = topics_and_stories()
@@ -227,6 +231,7 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
         try:
             user_id = None  # Historical reward compatibility resolves the activity owner.
             story_id, title, title_en = submitted_story(story_text, topic, difficulty)
+            course_matches, course_questions_hash = course_context(story_id, story_text, topic, difficulty, questions)
             feedback, scores, total_score, can_reward = comprehension_service.evaluate_answers(
                 story_text, questions, answers, user_id, story_id, topic, difficulty
             )
@@ -260,6 +265,8 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
                 answers=answers, feedback=feedback, score=total_score,
                 assessed=True, progression_result=progression_result,
                 fresh_assessment=scores is not None and rating_context_matches(story_id, story_text, topic, difficulty, questions),
+                course_task_context_matches=course_matches,
+                course_task_questions_hash=course_questions_hash,
             )
             if story_id_new:
                 if progression_result.get('coins_earned') and onboarding_state()['coins_introduced']:
@@ -300,6 +307,7 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
             questions = json.loads(base64.b64decode(questions_b64).decode("utf-8")) if questions_b64 else []
 
             story_id, title, title_en = submitted_story(story_text, topic, difficulty)
+            course_matches, course_questions_hash = course_context(story_id, story_text, topic, difficulty, questions)
             feedback, scores, total_score, can_reward = comprehension_service.evaluate_answers(
                 story_text, questions, answers, user_id, story_id, topic, difficulty
             )
@@ -319,6 +327,8 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
                 score=total_score,
                 assessed=True,
                 fresh_assessment=scores is not None and rating_context_matches(story_id, story_text, topic, difficulty, questions),
+                course_task_context_matches=course_matches,
+                course_task_questions_hash=course_questions_hash,
             )
             if story_id_new:
                 logger.debug("Story saved with id %s", story_id_new)

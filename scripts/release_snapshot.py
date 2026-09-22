@@ -92,6 +92,10 @@ def exclusion(path: str) -> str | None:
         r'flask_vocab_app/static/audio/deliveries/[0-9a-f]{24}\.mp3', path
     ):
         return None
+    if path == 'flask_vocab_app/static/audio/course/manifest.json' or re.fullmatch(
+        r'flask_vocab_app/static/audio/course/a1-(?:post-office|home|market|delivery)-v[1-9][0-9]*\.mp3', path
+    ):
+        return None
     return 'outside reviewed source locations'
 
 

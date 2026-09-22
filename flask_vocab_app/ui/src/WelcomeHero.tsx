@@ -31,7 +31,7 @@ export function WelcomeHero({ headingRef, profileKey, nextDestination }: { headi
   const complete=chapter?.complete;
   const title=complete ? nextDestination?.title ?? 'Barsik’s journey' : next?.title ?? 'First steps with Barsik';
   const href=complete ? nextDestination?.href ?? '#journey' : next?.href ?? '#first-steps';
-  const label=complete ? 'First chapter complete · the journey continues' : next ? `First steps · ${next.position} of ${chapter!.lessons.length}` : 'Five short lessons to get started';
+  const label=complete ? 'Introduction complete · the journey continues' : next ? `First steps · ${next.position} of ${chapter!.lessons.length}` : 'Five short lessons to get started';
   const action=complete ? 'Continue the journey' : !next ? 'Open first steps' : next.status==='active' ? 'Continue' : next.position>1 ? 'Next lesson' : 'Let’s begin';
   return <section class="hero" aria-labelledby="welcome-title">
     <div class="hero-copy">

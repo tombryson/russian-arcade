@@ -31,7 +31,8 @@ Google Drive and SQLite have separate roles. Drive supports quick word capture, 
 | **Speaking** | Talk freely in a scenario, or choose replies one exchange at a time in Step-through mode. Live conversations receive an audio review; Step-through offers optional hints and explanations. |
 | **Tutor lessons** | Upload a PDF or image, save revisions, and practise with exercises based on the document. Select words on its pages for flashcards. |
 | **My words** | Browse words, forms and grammatical details. See card counts and manage saved vocabulary. |
-| **Barsik’s journey** | Learn your first words through a five-lesson introduction, discover games, earn Lingocoins and follow progress through story stops. |
+| **Guided A1 course** | Complete four [chapters](docs/word-post/course-chapters.md) covering all ten A1 topics. Help Barsik with new notes, separate listening updates and checkpoint replies, then open your letter. |
+| **Barsik’s journey** | Learn your first words through the introduction, earn Lingocoins and choose optional games while following the guided course. |
 | **Anki tools** | Use the existing automated card-generation workflow when you prefer to study in Anki. Native and Anki review schedules remain separate. |
 
 The appearance icon switches between top navigation and a left sidebar, saving the choice in this browser. The top Activities menu lists the main activities. Sidebar mode places the profile, language, coins and library shortcuts at the bottom and removes the top banner.
@@ -58,6 +59,8 @@ Each game prepares the media it needs. Text activities do not require pictures. 
 The [curriculum](docs/curriculum.md) defines **50 topics from A1 to C2**, with target vocabulary, grammar and practical learning objectives. Its 856 distinct target lemmas are organised into five course bands. C1 and C2 share topics but use different task demands.
 
 Reading, Writing, Translation and Word Jumble draw from this shared material. A topic has a default course level; learners can choose another level when revisiting it. Word and form difficulty remain separate vocabulary filters.
+
+The guided course adds four authored A1 chapters and independent checkpoints to the catalogue. Passing all four unlocks the A2 guided level; this release does not include authored A2 chapters or award a proficiency qualification. Higher-level free practice remains accessible. See [chapter content and progression](docs/word-post/course-chapters.md).
 
 The [course catalogue](https://russian-arcade.fly.dev/curriculum) lists the topics and opens practice for each one. It does not add words automatically. Saving vocabulary still uses the existing lemma, form, topic and mnemonic pipeline.
 
@@ -169,11 +172,11 @@ Audio jobs choose a voice from the configured list and keep it for retries. This
 
 - **Lingocoins** reward completed practice, subject to earning limits. Hints and mistakes do not automatically prevent rewards.
 - **Game ownership** records permanent purchases from the shop.
-- **Journey progress** records opened destinations and completed story stops.
-- **Skill estimates** use assessed practice. Barsik’s progress bar displays this progress.
+- **Guided course progress** records topic preparation and independent chapter passes. Barsik’s header bar shows current-chapter preparation. Earlier journey receipts remain saved separately.
+- **Skill estimates** retain separate assessed-practice histories; they do not control the course bar or chapter access.
 - **Flashcard schedules** determine when each card returns.
 
-A1–C2 describe curriculum task levels. They are not qualifications awarded by the app. The live Speaking catalogue currently has authored A1/A2 variations. The old Elo total remains in historical records; it does not determine current skill estimates. Coins buy optional games, while eligible earned coins open journey destinations. Spending does not reduce journey or skill progress. Ordinary practice remains available. See [levels and progression](docs/word-post/levels-and-progression.md).
+A1–C2 describe curriculum task levels. They are not qualifications awarded by the app. The live Speaking catalogue currently has authored A1/A2 variations. The old Elo total remains in historical records; it does not determine current skill estimates. Coins buy optional games. The four-chapter course advances through independent checkpoints; coin earnings and spending do not change chapter access or skill estimates. Ordinary practice remains available. See [levels and progression](docs/word-post/levels-and-progression.md).
 
 ## Architecture and technology stack
 
@@ -215,7 +218,7 @@ The application is under active development, with local individual and household
 - Background work uses threads within the application. Running multiple instances requires changes to storage and worker coordination.
 - OCR, generated content and automated assessment can contain errors.
 - Lesson selections feed cards and games. Broader lesson-based writing and speaking integration remains planned.
-- The 50-topic curriculum is defined. Additional journey stories, live Speaking scenarios and the final-letter assessment remain planned.
+- The 50-topic curriculum and four guided A1 chapters, including the final-letter checkpoint, are implemented. Authored A2 chapters, additional later stories and more live Speaking scenarios remain future work.
 
 The [product backlog](docs/word-post/product-backlog.md) and [migration strategy](docs/word-post/migration-strategy.md) record plans and earlier decisions. They are not inventories of completed features.
 
@@ -331,7 +334,7 @@ Historical scripts may retain machine-specific assumptions; read them before run
 - [Tutor lessons](docs/word-post/lessons-companion.md) and [lesson-driven practice](docs/word-post/lesson-driven-practice.md)
 - [Speaking scenarios](docs/word-post/speaking-scenarios.md) and [assessment](docs/word-post/speaking-assessment.md)
 - [Describe the scene](docs/word-post/scene-builder.md), [Journey games](docs/word-post/journey-games.md) and [mixed vocabulary / Radio](docs/word-post/mixed-vocabulary-and-radio.md)
-- [Levels and rewards](docs/word-post/levels-and-progression.md), [skill progress](docs/word-post/skill-progress.md) and [Barsik’s story](docs/word-post/barsik-journey.md)
+- [Guided A1 chapters](docs/word-post/course-chapters.md), [levels and rewards](docs/word-post/levels-and-progression.md), [skill progress](docs/word-post/skill-progress.md) and [Barsik’s story](docs/word-post/barsik-journey.md)
 - [Design system](docs/word-post/design-system.md) and [hosting runbook](docs/operations-fly.md)
 - [Public release procedure](docs/release-process.md) and [game shop](docs/word-post/game-access.md)
 

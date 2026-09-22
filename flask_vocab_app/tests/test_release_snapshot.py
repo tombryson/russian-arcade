@@ -18,6 +18,7 @@ class ReleaseSnapshotTests(unittest.TestCase):
                      'scripts/API_key.py', 'flask_vocab_app/credentials.json',
                      'flask_vocab_app/vocab.db', 'flask_vocab_app/vocab.db-wal',
                      'flask_vocab_app/static/media/sentence_1.mp3',
+                     'flask_vocab_app/static/audio/course/learner-recording.mp3',
                      'flask_vocab_app/static/uploads/lesson.png', 'docs/tutor.pdf',
                      'flask_vocab_app/ui/node_modules/source.js', 'instance/config.py'):
             with self.subTest(path=path):
@@ -28,6 +29,8 @@ class ReleaseSnapshotTests(unittest.TestCase):
                      'scripts/release_snapshot.py', 'flask_vocab_app/migrations/039_game_shop.sql',
                      'flask_vocab_app/ui/src/assets/barsik-shop-v1.png',
                      'flask_vocab_app/content/deliveries/map-blocks.json',
+                     'flask_vocab_app/static/audio/course/manifest.json',
+                     'flask_vocab_app/static/audio/course/a1-post-office-v1.mp3',
                      'flask_vocab_app/static/audio/deliveries/0123456789abcdef01234567.mp3'):
             with self.subTest(path=path):
                 self.assertIsNone(release.exclusion(path))

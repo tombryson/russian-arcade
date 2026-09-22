@@ -1,8 +1,18 @@
 # Barsik's journey: a small letter, a big adventure
 
-Status: **narrative direction approved by the owner, 9 September 2026; implementation boundary updated 15 September 2026**. This is the canonical campaign brief. Shared Lingocoins, saved post-office/market unlocks and the first-delivery lesson are implemented. The [five-lesson First steps opening](first-steps.md) supplies the post-office curriculum. Later worlds and the final-letter assessment remain planned.
+Status: **narrative direction approved by the owner, 9 September 2026; implementation boundary updated 22 September 2026**. This is the canonical campaign brief. Shared Lingocoins, saved post-office/market unlocks and the first-delivery lesson are implemented. The earlier [five-lesson First steps opening](first-steps.md) remains saved; the current course prepares all ten A1 topics. The four-chapter A1 route and its final-letter checkpoint now supersede the earlier planned worlds below.
 
 This brief supersedes the previous invitation-at-your-door introduction, the Nina side-delivery pilot and the recommendation to restrict coins to cosmetics. It preserves individual use by default, optional household controls, direct access to existing activities and the removal of the passport.
+
+## Current authored route — 22 September 2026
+
+The [guided A1 course](course-chapters.md) has four chapters: the little post office; a stop at home; the market; and the delivery. They cover all ten A1 curriculum topics once, while reusing earlier language. Each checkpoint has three prepared variants with a written message, a separate spoken update and eight comprehension/response questions.
+
+Early checkpoints are notes for Barsik. The learner’s original letter remains sealed until Chapter 4, where it invites the learner to meet the friends helping Barsik. The ending resolves a familiar place, route, weather plan and suitable reply. Selecting a reply checks intent; it does not certify speaking ability.
+
+Chapter readiness uses two successful distinct tasks per topic at 70% or higher plus two activity families across the chapter. A current-chapter challenge permits early testing. An independent checkpoint pass needs 80%, both essential details, audio playback and no hints or transcript. Supported practice is welcome, but a supported checkpoint needs a new unassisted attempt using another variant to unlock progress. These pilot rules replace coin thresholds for the main guided route. Coins, game purchases, old journey receipts and FSRS remain intact.
+
+The five-world route, coin thresholds and proposed final-letter design below are historical planning context. Where they differ, the authored four-chapter content and current course rules take precedence. Completing all four chapters unlocks the A2 guided level; no authored A2 chapters or CEFR qualification are claimed.
 
 ## 1. The product promise
 
@@ -12,7 +22,7 @@ Barsik carries the letter and travels; the learner guides his choices through th
 
 Barsik is curious, friendly and determined. He can demonstrate Russian, ask for help with a decision and react to what happens. He has an immediate objective in each scene: find a street, follow a sign or catch a boat. Each activity used within a scene must help resolve that objective. His personality comes through small actions and dialogue, rather than explanatory lore.
 
-The letter remains sealed during the journey. Familiar places and people establish why the message matters; its full contents are the ending. A working content proposal is an invitation from friends encountered along the route, containing a place, time and something to bring. The exact sender and message will be written with the pilot curriculum.
+The letter remains sealed during the journey. Familiar places and people establish why the message matters; its full contents are the ending. The three authored final variants are invitations from friends helping Barsik along the route, containing a place, time and practical arrangement. Their content and answer keys are in the [chapter catalogue](course-chapters.md).
 
 ## 2. Agreed welcome and copy
 
@@ -27,13 +37,13 @@ The letter remains sealed during the journey. Familiar places and people establi
 
 Working scene dialogue: “Привет! I'm Barsik. This letter has a long way to go. Will you help me?”
 
-The opening introduces Lingocoins and then Barsik’s skill-progress line, revealing each header control when its explanation is reached. The saved first lesson teaches three Russian words before asking the learner to recall them. Its completed activity earns the lifetime welcome bonus. Four further short lessons prepare the bag, directions and clerk exchange that give Barsik his route from the post office.
+The opening introduces Lingocoins and then Barsik’s chapter-progress line, revealing each header control when its explanation is reached. The saved first lesson teaches three Russian words before asking the learner to recall them. Its completed activity earns the lifetime welcome bonus. Four further short lessons prepare the bag, directions and clerk exchange that give Barsik his route from the post office.
 
-Home retains a spacious hero and practice choices below it. Returning users can resume their actual next first-steps lesson or available journey stop. Activities and My words remain direct alternatives. The first-delivery lesson has real saved answers and rewards; repeating the introduction or viewing old feedback does not issue another award.
+Home retains a spacious hero and practice choices below it. Returning users can continue their current guided chapter or saved checkpoint. Activities and My words remain direct alternatives. The first-delivery lesson has real saved answers and rewards; repeating the introduction or viewing old feedback does not issue another award.
 
-## 3. One letter, several worlds
+## 3. Historical five-world proposal
 
-The following route is the agreed working structure; destination names and individual scenes can change during content development. These are story chapters, not claims of CEFR proficiency.
+The following table records the earlier five-world proposal. The current release uses the four A1 chapters described above. Neither sequence claims CEFR proficiency.
 
 | World | Immediate objective | Language to introduce and revisit | Observable resolution |
 |---|---|---|---|
@@ -55,17 +65,19 @@ Ordinary practice can contribute coins without being rewritten as a fictional en
 
 ## 4. Lingocoins and access
 
-**Approved direction:** eligible practice earns Lingocoins; accumulated earnings unlock successive worlds. Practice in the application's different activities should contribute through the same reward system.
+**Current direction:** eligible practice earns Lingocoins under the shared reward policy. Coins buy optional games. Guided chapters advance through preparation and independent checkpoints, separately from currency.
 
-Use total eligible coins earned for unlock thresholds, separately from a spendable balance. Buying a future cosmetic must not reduce journey progress or relock a destination. The implemented pilot gives ordinary activities up to 3 coins within a shared 12-coin daily allowance, native review up to 1 per card within 10 daily review coins, and a separate lifetime 3-coin first-delivery bonus. The market threshold is 12 eligible coins plus the completed post-office scene. These pilot values still need calibration; [levels and progression](levels-and-progression.md) records the current policy.
+The earlier two-stop pilot used total eligible coins earned for unlock thresholds, separately from the spendable balance. Its saved receipts and unlocks remain intact. The implemented pilot gives ordinary activities up to 3 coins within a shared 12-coin daily allowance, native review up to 1 per card within 10 daily review coins, and a separate lifetime 3-coin first-delivery bonus. The historical market threshold was 12 eligible coins plus the completed post-office scene; it does not gate the current course. [Levels and progression](levels-and-progression.md) records the current policy.
 
-The post office is the starting world. Later available worlds show a clear destination and progress towards its threshold, for example “18 more coins to reach the harbour.” Only show actual saved values and destinations that exist. Unlocking a world makes it available; visiting it does not fabricate completed scenes or language mastery.
+The little post office is Chapter 1. The course shows actual saved topic preparation and checkpoint status. It does not use coin-distance messages or treat opening a chapter as completing it.
 
 Individual users manage their own experience. Household roles and restrictions apply only when explicitly enabled. Flashcards, the vocabulary library and ordinary activities remain available outside the campaign. New campaign content does not require a second account, a PIN or another person's approval in individual mode.
 
 Native review and supported activity completions use the shared reward ledger. Imported historical balances are preserved with their declared eligibility rather than treated as fresh learning evidence. Retries, refreshes and wrapping an activity inside a story must not issue duplicate rewards. Established unlocks are saved milestones; a later coin correction or spending action does not silently remove access.
 
-## 5. The final letter: an assessment with a story payoff
+## 5. Historical final-letter design brief
+
+The following design brief records the earlier proposal. The implemented [chapter contract](course-chapters.md) fixes the current content, eight-question format, support policy and pass rules; broader production and personalised lexical coverage remain future extensions.
 
 ### Purpose and sequence
 
@@ -116,7 +128,7 @@ The final screen can say **“You read your letter.”** when that outcome is su
 |---|---|---|
 | BJ-01 | Maintain one clear delivery to the learner | Opening, every chapter and final arrival refer to the same objective |
 | BJ-02 | Use language to resolve meaningful scene tasks | A learner can explain what they did and how it helped Barsik |
-| BJ-03 | Unlock worlds through eligible earned Lingocoins | Threshold crossing opens the correct world once; spending does not relock it |
+| BJ-03 | Advance guided chapters through independent checkpoints | A valid pass opens the next chapter once; coin earnings and spending do not change access |
 | BJ-04 | Keep individual use and direct practice available | Start/resume and edit work without household setup; activities work outside the story |
 | BJ-05 | Persist route and assessment state | Reload/server restart restores the correct world, scene and exam responses |
 | FL-01 | Test covered language in a new letter | Every scored target maps to prior introduction/practice and a pinned content version |
@@ -126,11 +138,13 @@ The final screen can say **“You read your letter.”** when that outcome is su
 | FL-05 | Preserve honest retries and recoverable data | Repeat submissions do not duplicate grades/rewards; new attempts retain earlier results |
 | FL-06 | Keep grading stable and inspectable | A saved rubric explains the result; provider failure does not erase or fabricate it |
 
-## 7. Integration and implementation order
+## 7. Integration and historical implementation order
 
 Keep the current Flask, SQLite and Preact stack. Compose the existing learning activities, vocabulary, card versions and attempt records. This brief does not introduce a second reward currency, a separate learning database or a replacement flashcard generator.
 
-The eventual implementation needs versioned campaign/world definitions, saved per-user position/unlocks, and saved final-letter attempts with their content, rubric, coverage snapshot, answers and support events. Reuse existing persistence/command conventions and add only the missing records. An exam result does not automatically reschedule every mentioned card or become an Elo score; those consumers need their own defined evidence rules.
+The implementation now stores versioned course definitions, per-profile chapter passes and checkpoint attempts with frozen content/rubrics, answers and support state. It reuses the existing persistence and command conventions. An exam result does not automatically reschedule every mentioned card or become an Elo score; those consumers need their own defined evidence rules.
+
+The table records the original implementation plan, including the superseded coin-gated route.
 
 | Order | Slice | Why it comes here |
 |---|---|---|
@@ -141,10 +155,10 @@ The eventual implementation needs versioned campaign/world definitions, saved pe
 | 5 | Expand the route with the required vocabulary and scenes; run a complete pilot | Verify that the ending is understandable from what was taught and that each chapter follows on |
 | 6 | Add more letters, optional replies and richer art/audio | Expand from the observed learning experience |
 
-Pilot reward amounts and the first market threshold are implemented. Later world thresholds, the letter’s sender/message and its reading range/rubric remain content-design decisions. Design the final letter alongside its coverage manifest before producing the full campaign.
+Pilot rewards remain implemented. The four A1 chapters now include authored senders, letters, topic mappings, separate audio and a fixed checkpoint rubric. Authored A2 and later guided chapters remain future content.
 
 ## 8. Current implementation boundary
 
 The welcome, saved first-delivery word lesson, direct activity navigation and native flashcards exist. The hero headline and agreed supporting line are applied. Named local profiles keep their practice, rewards and introduction milestones separate. The first lesson teaches Russian before recall and earns a one-time welcome reward; its earlier versions remain preserved.
 
-The post office and market are the two implemented journey stops, with saved eligible-coin unlocks and scene milestones. First steps gives the opening a finite five-lesson curriculum and establishes the post-office checkpoint through its taught route clue. Existing scene answers remain intact. It does not finish the market, forest, harbour or doorstep, and no final-letter exam exists yet. Individual mode, existing Anki data and the local-first hosting direction remain unchanged. [The backlog](product-backlog.md) owns programme priority; [shared progression](progression.md) owns reward/assessment evidence boundaries; [implementation progress](implementation-progress.md) records shipped behaviour.
+The guided route has four implemented A1 chapters with three checkpoint variants each, ending at the learner’s doorstep with the original letter. Passing all four unlocks the A2 guided level. The earlier post-office/market scene receipts and First steps answers remain intact, but they do not substitute for independent chapter passes. Individual mode, existing Anki data and the local-first hosting direction remain unchanged. [The backlog](product-backlog.md) owns programme priority; [shared progression](progression.md) owns reward/assessment evidence boundaries; [implementation progress](implementation-progress.md) records shipped behaviour.

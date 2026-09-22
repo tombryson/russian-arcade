@@ -128,9 +128,13 @@ def award(conn, profile_id, *, activity, content_key, source_key, title, now=Non
     if activity == 'speaking':
         evidence = dict(evidence or {}) | {'study_day': day}
     evidence = freeze_evidence(conn, activity, content_key, source_key, target_level, evidence)
+    from services.course_evidence import freeze_course_evidence
+    evidence = freeze_course_evidence(conn, profile_id, activity, content_key, source_key, evidence)
     event_id = identifier()
     conn.execute('INSERT INTO progression_events VALUES (?,?,?,?,?,?,?,?,?,?,NULL)',
         (event_id,profile_id,activity,str(source_key),str(content_key),title,category,target_level,encoded(evidence or {}),now))
+    from services.course_progression import record_evidence
+    record_evidence(conn, profile_id, event_id, activity, content_key, target_level, evidence, now)
     claim_key = activity+':'+str(content_key)
     old = conn.execute('SELECT amount FROM progression_claims WHERE profile_id=? AND category=? AND content_key=? AND study_day=?',(profile_id,category,claim_key,day)).fetchone()
     if old and old[0]:
@@ -163,6 +167,12 @@ def award_first_delivery(conn, profile_id, attempt_id, answers, *, now=None, con
     evidence = {'basis': 'first_unassisted_answers', 'attempt_id': attempt_id,
                 'question_count': len(answers), 'unassisted_count': len(unassisted),
                 'correct_unassisted': sum(answer['correct'] for answer in unassisted)}
+    greetings = [answers.get(qid) for qid in ('word-hello', 'word-thanks')]
+    if content_version == 'first-delivery-v2' and all(greetings):
+        evidence['_course'] = {'topic_id': 'greetings', 'level': 'A1',
+                               'score': sum(bool(a['correct']) for a in greetings) / 2,
+                               'assisted': any(a['hint_used'] for a in greetings),
+                               'basis': 'taught_greetings_recall'}
     if unassisted:
         evidence['_skill'] = {'policy_version': skill_policy, 'task_rating': PRIOR,
                               'task_difficulty': 'first-delivery',
@@ -172,6 +182,8 @@ def award_first_delivery(conn, profile_id, attempt_id, answers, *, now=None, con
     conn.execute('INSERT INTO progression_events VALUES (?,?,?,?,?,?,?,?,?,?,NULL)',
                  (event_id, profile_id, 'first_delivery', source, content_version, title,
                   'activity', 'A1', encoded(evidence), now))
+    from services.course_progression import record_evidence
+    record_evidence(conn, profile_id, event_id, 'first_delivery', content_version, 'A1', evidence, now)
     conn.execute('INSERT INTO progression_entries VALUES (?,?,?,?,?,?,?,?,?,?,?)',
                  (identifier(), profile_id, event_id, 'first-delivery-welcome:' + profile_id,
                   WELCOME_COINS, 1, 'activity', day, title, WELCOME_POLICY, now))
@@ -224,6 +236,7 @@ def award_speaking(conn, session, report):
 
 def snapshot(conn, profile_id):
     from services.skill_progress import snapshot as skill_snapshot
+    from services.course_progression import course_snapshot
     conn.row_factory = sqlite3.Row
     row=conn.execute('SELECT preferred_level FROM progression_preferences WHERE profile_id=?',(profile_id,)).fetchone()
     totals=conn.execute('SELECT COALESCE(SUM(amount),0),COALESCE(SUM(CASE WHEN eligible=1 THEN amount ELSE 0 END),0),COALESCE(SUM(CASE WHEN category=\'legacy\' THEN amount ELSE 0 END),0) FROM progression_entries WHERE profile_id=?',(profile_id,)).fetchone()
@@ -234,7 +247,7 @@ def snapshot(conn, profile_id):
     return {'profile_id':profile_id,'balance':totals[0],'earned_total':max(0,totals[1]),'legacy_balance':totals[2],
         'preferred_level':row[0] if row else 'A1','levels':LEVELS,'policy':RULES,'recent_rewards':rewards,
         'journey':{'worlds':worlds,'next_world':next((w for w in worlds if not w['completed']),None)},
-        'skill':skill_snapshot(conn, profile_id)}
+        'skill':skill_snapshot(conn, profile_id), 'course':course_snapshot(conn, profile_id)}
 
 
 def journey_read(conn, profile_id, world_id):

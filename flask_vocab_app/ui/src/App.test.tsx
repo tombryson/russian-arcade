@@ -13,6 +13,18 @@ beforeEach(()=>vi.spyOn(window,'scrollTo').mockImplementation(()=>{}));
 afterEach(() => {vi.unstubAllGlobals();vi.restoreAllMocks();});
 
 describe('Russian Arcade activity home', () => {
+  it('opens a direct chapter link and early test-out for a learner before any coin introduction',async()=>{
+    window.history.replaceState(null,'','/#journey/chapter/first');
+    const course={version:1,profile_id:'personal',band:'A1',unlocked_levels:['A1'],current_chapter_id:'first',progress:0,completed:false,chapters:[{id:'first',number:1,title:'The little post office',title_ru:'Маленькая почта',intro:'Your original letter stays sealed.',intro_ru:'Письмо закрыто.',status:'practice',progress:0,topics:[],activity_count:0,required_activity_count:2,last_attempt_id:null}]};
+    const fetch=vi.fn((url:string)=>response(url==='/api/v1/course' ? course : {profile_id:'personal',balance:0,course,skill:{status:'not_calibrated'}}));
+    vi.stubGlobal('fetch',fetch);render(<App initialProfile={{id:'personal',display_name:'Learner'}} initialOnboarding={{profile_id:'personal',coins_introduced:false,progress_introduced:false}}/>);
+    expect(await screen.findByRole('heading',{name:'The little post office',level:1})).toBeTruthy();
+    expect(screen.getByRole('button',{name:'Test out of this chapter →'})).toBeTruthy();
+    expect(screen.queryByRole('heading',{name:'Your first delivery'})).toBeNull();
+    expect(fetch.mock.calls.some(([url])=>url==='/api/v1/course')).toBe(true);
+    expect(fetch.mock.calls.some(([url])=>url.startsWith('/api/v1/journey'))).toBe(false);
+  });
+
   it('opens the Games catalogue from navigation without starting or purchasing a game',async()=>{
     window.history.replaceState(null,'','/#home');
     const fetch=vi.fn((url:string)=>response(url==='/api/v1/games'?{profile_id:null,games:[]}:{profile_id:null,lessons:[],completed_count:0,complete:false,next_lesson:null}));
@@ -287,7 +299,7 @@ describe('Stepwise header introduction',()=>{
     expect(document.querySelector('.skill-rail')).toBeNull();
     fireEvent.click(screen.getByRole('button',{name:'Continue'}));
     await vi.waitFor(()=>expect(document.querySelector('.skill-rail')).not.toBeNull());
-    expect(screen.getByRole('heading',{name:'Watch your Russian improve.'})).toBeTruthy();
+    expect(screen.getByRole('heading',{name:'Help Barsik reach the next stop.'})).toBeTruthy();
     await vi.waitFor(()=>expect(calls).toEqual(['coins','progress']));
     await navigate('home');
     expect(screen.getByRole('link',{name:'Lingo coins: 42'})).toBeTruthy();

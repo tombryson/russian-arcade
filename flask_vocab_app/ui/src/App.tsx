@@ -14,6 +14,7 @@ import { NativeReview } from './NativeReview';
 import { Conversation } from './Conversation';
 import { LiveConversation } from './LiveConversation';
 import { Journey, ProgressionBadge, useProgression, type PracticeLevel } from './Progression';
+import { CourseJourney } from './CourseJourney';
 import { SkillProgress } from './SkillProgress';
 import { UserSessionLink, type UserProfile, type AccountMode } from './UserSessionLink';
 import {useOnboarding, type OnboardingState} from './Onboarding';
@@ -27,7 +28,7 @@ import sleepingBarsik from './assets/barsik-sleeping-v1.webp';
 import './styles/lesson-player.css';
 
 type Page = 'home' | 'activities' | 'words' | 'practice' | 'first-delivery' | 'first-steps' | 'flashcards' | 'review' | 'generate' | 'conversation' | 'speech-lab' | 'speaking' | 'journey' | 'game' | 'games' | 'shop';
-type Route = { page: Page; gameId?:string; sessionId?: string; worldId?:string; wordId?: number; lessonId?: string; topic?:string; scenarioId?:string; speakingLevel?:PracticeLevel; speakingMode?:'fluent'|'step'; canonicalHash?: string };
+type Route = { page: Page; gameId?:string; sessionId?: string; worldId?:string; chapterId?:string; checkpointId?:string; wordId?: number; lessonId?: string; topic?:string; scenarioId?:string; speakingLevel?:PracticeLevel; speakingMode?:'fluent'|'step'; canonicalHash?: string };
 function route(): Route {
   const hash = window.location.hash.slice(1);
   const gameSession=/^games\/session\/([A-Za-z0-9_-]+)$/.exec(hash);
@@ -37,6 +38,8 @@ function route(): Route {
   const firstSteps=/^first-steps(?:\/([a-z-]+))?$/.exec(hash);
   if (firstSteps) return {page:'first-steps',lessonId:firstSteps[1]};
   if (hash === 'journey/post-office') return {page:'first-steps',canonicalHash:'#first-steps'};
+  const course=/^journey\/(chapter|checkpoint)\/([A-Za-z0-9_-]+)$/.exec(hash);
+  if (course) return {page:'journey', ...(course[1]==='chapter' ? {chapterId:course[2]} : {checkpointId:course[2]})};
   const journey=/^journey(?:\/([A-Za-z0-9_-]+))?$/.exec(hash);
   if (journey) return {page:'journey',worldId:journey[1]};
   const conversation = /^(?:conversation|speaking\/recorded)\/([A-Za-z0-9_.:-]+)$/.exec(hash);
@@ -220,11 +223,11 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
   const appearanceControl = <AppearancePicker language={language} navigationLayout={navigationLayout} csrfToken={csrfToken} />;
   const coinBalance = onboarding.state.coins_introduced && <ProgressionBadge progression={progression} language={language} introductory={signedOut || householdEnabled && !profile} />;
   const languageControl = <details class="post-language"><summary aria-label={language === 'ru' ? 'Язык интерфейса' : 'Interface language'}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h12M9 3v2M12 5c-1 5-4 8-8 10M5 8c1 3 4 6 7 7M13 21l4.5-11L22 21M15 17h5"/></svg></summary><form method="post" action="/ui-language"><input type="hidden" name="csrf_token" value={csrfToken} /><input type="hidden" name="next" value={`/${window.location.hash}`} /><button name="lang" value="en" lang="en" aria-current={language === 'en' ? 'true' : undefined}>English</button><button name="lang" value="ru" lang="ru" aria-current={language === 'ru' ? 'true' : undefined}>Русский</button></form></details>;
-  const skillProgress = onboarding.state.progress_introduced && <SkillProgress progression={progression} language={language} introductory={signedOut || householdEnabled && !profile} profileHref={householdEnabled ? "/post/household#skill-progress" : "/post/profiles#skill-progress"} />;
+  const skillProgress = onboarding.state.progress_introduced && <SkillProgress progression={progression} language={language} introductory={signedOut || householdEnabled && !profile} profileHref="/#journey" />;
   const ready = state.home?.content.filter(item => item.kind === 'activity') ?? [];
   const nativeReady = nativeEnabled && state.home?.content.some(item => item.kind === 'deck');
   const resumable = state.home?.sessions.find(item => item.status === 'active' && item.content_status === 'published');
-  const nextWorld=progression.data?.journey?.worlds.find(world=>world.unlocked && !world.completed);
+  const nextChapter=progression.data?.course?.chapters.find(chapter=>chapter.id===progression.data?.course?.current_chapter_id);
   const tutorialNext = {
     href: '#first-steps/bag', label: 'What’s in the bag?',
     description: 'Next, help Barsik check his bag before he sets off.',
@@ -272,8 +275,8 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
         : location.page === 'shop' ? <GameShop key={profile?.id ?? state.mode} profileHref={householdEnabled ? '/post/household' : '/post/profiles'} />
         : location.page === 'games' ? <section class="page activity-entry games-page"><div class="activity-entry-content"><ActivityHeader title={language === 'ru' ? 'Игры' : 'Games'} description={language === 'ru' ? 'Выберите игру. Новые игры можно открыть в магазине.' : 'Choose a game to play. Unlock more in the shop.'} headingRef={heading} headingTabIndex={-1} actions={<a class="text-link" href="#shop">{language === 'ru' ? 'Магазин' : 'Shop'} <span aria-hidden="true">→</span></a>} /><GameCatalogue key={profile?.id ?? state.mode} context="games" /></div></section>
         : location.page === 'first-delivery' ? <><FirstDelivery key={state.home?.profile.id ?? state.mode} next={tutorialNext} onIntroduce={onboarding.introduce} profileHref={householdEnabled ? "/post/household" : "/post/profiles"} />{onboarding.error && <div class="page onboarding-save-note" role="status"><p>{language==='ru' ? 'Не удалось сохранить знакомство с приложением.' : 'Your introduction could not be saved.'} {onboarding.error}</p><button class="text-link" onClick={()=>void onboarding.retry()}>{language==='ru' ? 'Попробовать ещё раз' : 'Try saving again'}</button></div>}</>
-        : location.page === 'journey' && !onboarding.state.coins_introduced ? <section class="page"><h1>Your first delivery</h1><p>Meet Barsik and see how your practice helps his journey.</p><a class="cta" href="#first-delivery">Let’s begin</a></section>
-        : location.page === 'journey' ? <Journey key={`${state.home?.profile.id ?? state.mode}:${location.worldId ?? 'map'}`} worldId={location.worldId} language={language} progression={progression} />
+        : location.page === 'journey' && location.worldId && !onboarding.state.coins_introduced ? <section class="page"><h1>Your first delivery</h1><p>Meet Barsik and see how your practice helps his journey.</p><a class="cta" href="#first-delivery">Let’s begin</a></section>
+        : location.page === 'journey' ? location.worldId ? <Journey key={`${profile?.id ?? state.mode}:${location.worldId}`} worldId={location.worldId} language={language} progression={progression} /> : <CourseJourney key={`${profile?.id ?? state.mode}:${location.chapterId ?? location.checkpointId ?? 'overview'}`} chapterId={location.chapterId} attemptId={location.checkpointId} language={language} progression={progression} />
         : location.page === 'speaking' ? location.speakingMode==='step' && location.sessionId
           ? <StepThroughConversation key={`${state.home?.profile.id}:${location.sessionId}`} sessionId={location.sessionId} language={language} />
           : <LiveConversation key={`${state.home?.profile.id}:${location.sessionId ?? location.scenarioId ?? 'new'}:${location.speakingLevel ?? 'A1'}`} sessionId={location.sessionId} initialScenarioId={location.scenarioId} initialLevel={location.speakingLevel} language={language} />
@@ -286,7 +289,7 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
         : location.page === 'practice' ? state.mode === 'child' && state.home && location.sessionId ? <Practice key={`${state.home.profile.id}:${location.sessionId}`} sessionId={location.sessionId} profileId={state.home.profile.id} onFinish={() => { window.location.hash = 'activities'; setRefresh(value => value + 1); }} />
           : <section class="page"><h1 ref={heading} tabIndex={-1}>Choose a learner to continue.</h1><p>Your practice belongs to the learner who started it.</p><a class="text-link" href="/post/household">Choose a learner</a></section>
         : location.page === 'home' ? <>
-          <WelcomeHero key={profile?.id ?? state.mode} headingRef={heading} profileKey={profile?.id} nextDestination={nextWorld ? {title:nextWorld.title,href:nextWorld.id==='post-office' ? '#first-steps' : `#journey/${nextWorld.id}`} : undefined} />
+          <WelcomeHero key={profile?.id ?? state.mode} headingRef={heading} profileKey={profile?.id} nextDestination={nextChapter ? {title:language==='ru' ? nextChapter.title_ru : nextChapter.title,href:`#journey/chapter/${nextChapter.id}`} : undefined} />
           <section class="home-section" aria-labelledby="choose-practice">
             <div>
             <div class="section-heading"><div><h2 id="choose-practice" ref={practiceHeading} tabIndex={-1}>Choose what to practise</h2>{legacy && <p>Read a story, try a game or spend some time with your words.</p>}</div></div>

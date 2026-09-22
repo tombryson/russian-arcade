@@ -71,7 +71,7 @@ describe('Your first words',()=>{
     expect(onIntroduce.mock.calls).toEqual([['coins']]);
     fireEvent.click(screen.getByRole('button',{name:'Continue',exact:true}));
     expect(onIntroduce.mock.calls).toEqual([['coins'],['progress']]);
-    expect(document.activeElement).toBe(screen.getByRole('heading',{name:'Watch your Russian improve.'}));
+    expect(document.activeElement).toBe(screen.getByRole('heading',{name:'Help Barsik reach the next stop.'}));
     expect(screen.queryByText('Which word means “hello”?')).toBeNull();
     await waitFor(()=>expect(api.fetch).toHaveBeenCalledOnce());expect(api.posts()).toHaveLength(0);
   });

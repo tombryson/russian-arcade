@@ -10,6 +10,7 @@ from repositories.speaking_repository import catalogue, choose_variant
 from repositories.learning_repository import LearningError
 from services.curriculum import generation_context
 from services.speaking_curriculum import _check_facts, _content, scenario_for_topic
+from tests.support import strip_course_progression
 
 
 class SpeakingCurriculumTests(unittest.TestCase):
@@ -116,6 +117,7 @@ class SpeakingCurriculumTests(unittest.TestCase):
 
     def test_migration_preserves_attempts_and_custom_variants_without_inserting_words(self):
         # Recreate catalogue data before 042, with a historical immutable attempt.
+        strip_course_progression(self.conn)
         self.conn.execute('DELETE FROM speaking_scenario_variants WHERE id LIKE ? ',('%-v2',))
         self.conn.execute('UPDATE speaking_scenario_variants SET enabled=1')
         self.conn.execute('DELETE FROM speaking_scenario_levels')

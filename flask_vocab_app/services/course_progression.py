@@ -1,0 +1,396 @@
+"""Authored A1 course gates, independent of coins and provisional skill ratings.
+
+Evidence is accepted only at the time a saved progression event is awarded.
+Snapshots ignore reversed receipts, but passing a checkpoint is permanent.
+Every checkpoint freezes its content and rubric and returns only public fields.
+"""
+from copy import deepcopy
+from functools import lru_cache
+import json
+import math
+from pathlib import Path
+import re
+import sqlite3
+from urllib.parse import urlencode
+
+from contracts.learning import key
+from repositories.learning_repository import LearningError, encoded, identifier, payload_hash, timestamp
+from services.curriculum import curriculum
+from services.speaking_curriculum import scenario_for_topic
+
+DATA_FILE = Path(__file__).resolve().parents[1] / 'data' / 'course_chapters.json'
+PRACTICE_POLICY = 'a1-course-practice-v1'
+REQUIRED_TASKS = 2
+REQUIRED_ACTIVITIES = 2
+ACTIVITIES = ('reading', 'writing', 'translation', 'word_jumble', 'speaking')
+ACTIVITY_FAMILIES = {'speaking_step': 'speaking', 'first_delivery': 'reading'}
+RUBRIC = {'minimum_score': 0.8, 'require_essential': True, 'require_listened': True,
+          'require_independent': True}
+
+
+def _execute(conn, statement, values=()):
+    cursor = conn.cursor()
+    cursor.row_factory = sqlite3.Row
+    return cursor.execute(statement, values)
+
+
+def _nonempty(value):
+    return isinstance(value, str) and bool(value.strip()) and '\x00' not in value
+
+
+def _content_key(value):
+    return isinstance(value, str) and bool(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}', value))
+
+
+def validate_course(data):
+    """Reject incomplete teaching content before it can become an assessment."""
+    def require(condition, message):
+        if not condition:
+            raise ValueError(message)
+
+    require(isinstance(data, dict) and type(data.get('version')) is int and data['version'] == 1,
+            'Course content must use version 1.')
+    require(data.get('band') == 'A1' and _nonempty(data.get('rubric_version')),
+            'Course content needs its A1 band and rubric version.')
+    chapters = data.get('chapters')
+    require(isinstance(chapters, list) and len(chapters) == 4, 'A1 requires four ordered chapters.')
+    expected_topics = {topic['id'] for topic in curriculum()['topics'] if topic['band'] == 'A1'}
+    seen_topics, chapter_ids, variant_ids = [], set(), set()
+    for number, chapter in enumerate(chapters, 1):
+        require(isinstance(chapter, dict) and _content_key(chapter.get('id')),
+                'Every chapter needs a stable ID.')
+        require(chapter['id'] not in chapter_ids and type(chapter.get('number')) is int and chapter['number'] == number,
+                'Chapter IDs must be distinct and chapter numbers sequential.')
+        chapter_ids.add(chapter['id'])
+        for field in ('title', 'title_ru', 'intro', 'intro_ru'):
+            require(_nonempty(chapter.get(field)), 'Every chapter needs nonempty bilingual titles and introductions.')
+        topics = chapter.get('topic_ids')
+        require(isinstance(topics, list) and topics and all(isinstance(t, str) and t in expected_topics for t in topics),
+                'Chapters must use known A1 curriculum topics.')
+        seen_topics.extend(topics)
+        objectives = chapter.get('objectives', [])
+        require(isinstance(objectives, list) and all(isinstance(item, dict) and _nonempty(item.get('en'))
+                and _nonempty(item.get('ru')) for item in objectives), 'Chapter objectives require both languages.')
+        preparation = chapter.get('preparation', [])
+        require(isinstance(preparation, list), 'Chapter preparation must be a list.')
+        for item in preparation:
+            require(isinstance(item, dict) and item.get('topic_id') in topics
+                    and all(_nonempty(item.get(field)) for field in ('title', 'title_ru', 'explanation', 'explanation_ru')),
+                    'Preparation needs a chapter topic and bilingual teaching content.')
+            examples = item.get('examples')
+            require(isinstance(examples, list) and examples and all(isinstance(example, dict)
+                    and _nonempty(example.get('ru')) and _nonempty(example.get('en')) for example in examples),
+                    'Preparation needs translated Russian examples.')
+        variants = chapter.get('variants')
+        require(isinstance(variants, list) and len(variants) >= 2, 'Every checkpoint needs at least two equivalent variants.')
+        variant_shapes = []
+        for variant in variants:
+            require(isinstance(variant, dict) and _content_key(variant.get('id'))
+                    and variant['id'] not in variant_ids, 'Checkpoint variant IDs must be distinct.')
+            variant_ids.add(variant['id'])
+            for field in ('letter', 'letter_title', 'letter_title_ru'):
+                require(_nonempty(variant.get(field)), 'Every checkpoint needs a letter and bilingual title.')
+            listening = variant.get('listening')
+            require(isinstance(listening, dict) and _nonempty(listening.get('transcript'))
+                    and listening.get('audio_url') == '/static/audio/course/' + variant['id'] + '.mp3',
+                    'Every checkpoint needs its own bundled listening clip and transcript.')
+            glossary = variant.get('glossary', [])
+            require(isinstance(glossary, list), 'The glossary must be a list.')
+            for item in glossary:
+                require(isinstance(item, dict) and _nonempty(item.get('ru')) and _nonempty(item.get('en')),
+                        'Glossary entries require both languages.')
+            questions = variant.get('questions')
+            require(isinstance(questions, list) and len(questions) >= 5, 'A checkpoint requires at least five questions.')
+            question_ids, kinds, essential_count = set(), [], 0
+            for question in questions:
+                require(isinstance(question, dict) and _content_key(question.get('id'))
+                        and question['id'] not in question_ids, 'Question IDs must be distinct within a variant.')
+                question_ids.add(question['id'])
+                require(question.get('kind') in ('reading', 'listening', 'response'), 'Unknown checkpoint question kind.')
+                kinds.append(question['kind'])
+                for field in ('prompt', 'prompt_ru', 'hint', 'hint_ru', 'explanation', 'explanation_ru'):
+                    require(_nonempty(question.get(field)), 'Questions need bilingual prompts, hints and explanations.')
+                require(type(question.get('essential')) is bool, 'Questions must explicitly mark essential decisions.')
+                essential_count += question['essential']
+                choices = question.get('choices')
+                require(isinstance(choices, list) and 2 <= len(choices) <= 6, 'Each question needs 2–6 choices.')
+                choice_ids, choice_texts = set(), set()
+                for choice in choices:
+                    require(isinstance(choice, dict) and _content_key(choice.get('id')) and _nonempty(choice.get('text')),
+                            'Every choice needs an ID and text.')
+                    require(choice['id'] not in choice_ids and choice['text'] not in choice_texts,
+                            'Choice IDs and texts must be distinct.')
+                    choice_ids.add(choice['id']); choice_texts.add(choice['text'])
+                require(isinstance(question.get('answer'), str) and question['answer'] in choice_ids,
+                        'Correct answers must reference offered choices.')
+            require(set(kinds) == {'reading', 'listening', 'response'} and essential_count > 0,
+                    'Each checkpoint must assess reading, listening and a response, including essential decisions.')
+            variant_shapes.append((sorted(kinds), essential_count))
+        require(all(shape == variant_shapes[0] for shape in variant_shapes),
+                'Equivalent variants must cover the same question kinds and essential decision count.')
+    require(len(seen_topics) == len(set(seen_topics)) and set(seen_topics) == expected_topics,
+            'The four chapters must cover each existing A1 topic exactly once.')
+    return data
+
+
+@lru_cache(maxsize=1)
+def _catalogue():
+    return validate_course(json.loads(DATA_FILE.read_text(encoding='utf-8')))
+
+
+def course_catalogue():
+    return deepcopy(_catalogue())
+
+
+def _chapter(chapter_id):
+    chapter = next((item for item in _catalogue()['chapters'] if item['id'] == chapter_id), None)
+    if chapter is None:
+        raise LearningError('chapter_not_found', 'That course chapter does not exist.', 404)
+    return chapter
+
+
+def record_evidence(conn, profile_id, event_id, activity, content_key, target_level, evidence, now):
+    """Receive trusted, server-frozen task metadata after its event is saved.
+
+    Supported practice can satisfy coverage; independence is checked separately
+    by the checkpoint. Unsupported and unsuccessful tasks do not count here.
+    Repeated events for the same activity/content never become distinct tasks.
+    """
+    metadata = evidence.get('_course') if isinstance(evidence, dict) else None
+    if not isinstance(metadata, dict) or activity not in (*ACTIVITIES, *ACTIVITY_FAMILIES):
+        return False
+    if not _execute(conn, "SELECT 1 FROM sqlite_master WHERE type='table' AND name='course_evidence'").fetchone():
+        return False
+    score = metadata.get('score')
+    if (metadata.get('level') != 'A1' or target_level not in (None, 'A1')
+            or type(metadata.get('assisted')) is not bool
+            or type(score) not in (int, float) or not math.isfinite(score) or not 0.7 <= score <= 1):
+        return False
+    topic_ids = {topic for chapter in _catalogue()['chapters'] for topic in chapter['topic_ids']}
+    if metadata.get('topic_id') not in topic_ids:
+        return False
+    # Bind all attributes to the saved event, including its selected learner.
+    event = _execute(conn, 'SELECT profile_id,activity,content_key,target_level,reversed_at FROM progression_events WHERE id=?',
+                         (event_id,)).fetchone()
+    if (not event or tuple(event[:4]) != (profile_id, activity, str(content_key), target_level)
+            or event['reversed_at'] is not None):
+        return False
+    cursor = _execute(conn, 'INSERT OR IGNORE INTO course_evidence VALUES (?,?,?,?,?,?,?,?,?)',
+                         (event_id, profile_id, metadata['topic_id'], ACTIVITY_FAMILIES.get(activity, activity), str(content_key), 'A1', score, PRACTICE_POLICY, now))
+    return cursor.rowcount == 1
+
+
+def _links(topic_id):
+    query = urlencode({'topic': topic_id, 'level': 'A1'})
+    result = [
+        {'activity': activity, 'label': label, 'label_ru': label_ru, 'href': path + '?' + query}
+        for activity, label, label_ru, path in (
+            ('reading', 'Reading', 'Чтение', '/comprehension'),
+            ('writing', 'Writing', 'Письмо', '/writing'),
+            ('translation', 'Translation', 'Перевод', '/sentences'),
+            ('word_jumble', 'Word Jumble', 'Составь предложение', '/word_jumble'))]
+    scenario = scenario_for_topic(topic_id, 'A1')
+    if scenario:
+        result.append({'activity': 'speaking', 'label': 'Speaking', 'label_ru': 'Разговорная практика',
+                       'href': '/#speaking/scenario/' + scenario + '?level=A1'})
+    return result
+
+
+def course_snapshot(conn, profile_id):
+    """Project current preparation and permanent passes without writing state."""
+    if not _execute(conn, "SELECT 1 FROM sqlite_master WHERE type='table' AND name='course_evidence'").fetchone():
+        return None
+    catalogue = _catalogue()
+    topics = {topic['id']: topic for topic in curriculum()['topics']}
+    passed = {row['chapter_id'] for row in _execute(conn, 'SELECT chapter_id FROM course_chapter_passes WHERE profile_id=?', (profile_id,))}
+    evidence = _execute(conn,
+        'SELECT DISTINCT c.topic_id,c.activity,c.content_key FROM course_evidence c '
+        'JOIN progression_events e ON e.id=c.event_id AND e.profile_id=c.profile_id '
+        'WHERE c.profile_id=? AND e.reversed_at IS NULL', (profile_id,)).fetchall()
+    chapters, current_id = [], None
+    for chapter in catalogue['chapters']:
+        rows = [row for row in evidence if row['topic_id'] in chapter['topic_ids']]
+        projected_topics = []
+        for topic_id in chapter['topic_ids']:
+            topic = topics[topic_id]
+            count = sum(row['topic_id'] == topic_id for row in rows)
+            projected_topics.append({'id': topic_id, 'title': topic['title_en'], 'title_ru': topic['title_ru'],
+                                     'objectives': topic['objectives'], 'completed': count >= REQUIRED_TASKS,
+                                     'successful_tasks': count, 'required_tasks': REQUIRED_TASKS, 'links': _links(topic_id)})
+        activity_count = len({row['activity'] for row in rows})
+        task_fraction = sum(min(item['successful_tasks'], REQUIRED_TASKS) for item in projected_topics) / (len(projected_topics) * REQUIRED_TASKS)
+        preparation = min(task_fraction, activity_count / REQUIRED_ACTIVITIES, 1.0)
+        if chapter['id'] in passed:
+            status, progress = 'passed', 1.0
+        elif current_id is None:
+            current_id = chapter['id']
+            status, progress = ('ready' if preparation == 1 else 'practice'), preparation
+        else:
+            status, progress = 'locked', preparation
+        last = _execute(conn, 'SELECT id FROM course_checkpoint_attempts WHERE profile_id=? AND chapter_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1',
+                            (profile_id, chapter['id'])).fetchone()
+        chapters.append({name: chapter[name] for name in ('id', 'number', 'title', 'title_ru', 'intro', 'intro_ru')} | {
+            'status': status, 'progress': progress, 'topics': projected_topics, 'activity_count': activity_count,
+            'required_activity_count': REQUIRED_ACTIVITIES, 'last_attempt_id': last['id'] if last else None,
+            'objectives': deepcopy(chapter.get('objectives', [])), 'preparation': deepcopy(chapter.get('preparation', []))})
+    completed = all(chapter['status'] == 'passed' for chapter in chapters)
+    active_progress = next((chapter['progress'] for chapter in chapters if chapter['id'] == current_id), 0)
+    return {'version': catalogue['version'], 'profile_id': profile_id, 'band': 'A1',
+            'unlocked_levels': ['A1', 'A2'] if completed else ['A1'], 'current_chapter_id': current_id,
+            'progress': 1.0 if completed else active_progress,
+            'completed': completed, 'chapters': chapters}
+
+
+def _attempt(conn, profile_id, attempt_id):
+    key(attempt_id, 'Attempt ID')
+    row = _execute(conn, 'SELECT * FROM course_checkpoint_attempts WHERE id=? AND profile_id=?', (attempt_id, profile_id)).fetchone()
+    if not row:
+        raise LearningError('checkpoint_not_found', 'That checkpoint was not found for this learner.', 404)
+    return row
+
+
+def _public_attempt(conn, profile_id, row):
+    frozen = json.loads(row['frozen_json'])
+    variant = frozen['variant']
+    support = json.loads(row['support_json'])
+    finished = row['status'] != 'active'
+    listening = {'audio_url': variant['listening']['audio_url']}
+    if finished or 'transcript' in support:
+        listening['transcript'] = variant['listening']['transcript']
+    questions = []
+    for question in variant['questions']:
+        item = {field: deepcopy(question[field]) for field in ('id', 'kind', 'prompt', 'prompt_ru', 'choices')}
+        if finished or 'hint:' + question['id'] in support:
+            item.update(hint=question['hint'], hint_ru=question['hint_ru'])
+        questions.append(item)
+    result = {field: frozen[field] for field in ('chapter_id', 'chapter_number', 'title', 'title_ru')}
+    result.update(id=row['id'], letter=variant['letter'], letter_title=variant['letter_title'],
+                  letter_title_ru=variant['letter_title_ru'], glossary=deepcopy(variant.get('glossary', [])),
+                  listening=listening, questions=questions, status=row['status'], support_used=bool(support),
+                  listened=row['listened_at'] is not None, course=course_snapshot(conn, profile_id))
+    if finished and row['result_json']:
+        result['result'] = json.loads(row['result_json'])
+        answers = json.loads(row['answers_json'])
+        for item in result['result']['feedback']:
+            item['selected_answer'] = answers[item['question_id']]
+    return result
+
+
+def checkpoint_read(conn, profile_id, attempt_id):
+    return _public_attempt(conn, profile_id, _attempt(conn, profile_id, attempt_id))
+
+
+def checkpoint_start(conn, profile_id, chapter_id, request_id, challenge=False, now=None):
+    key(request_id, 'Request ID')
+    if type(challenge) is not bool:
+        raise LearningError('invalid_input', 'Challenge must be true or false.')
+    fingerprint = payload_hash({'chapter_id': chapter_id, 'challenge': challenge})
+    previous = _execute(conn, 'SELECT payload_hash,response_json FROM course_checkpoint_requests WHERE profile_id=? AND request_id=?',
+                            (profile_id, request_id)).fetchone()
+    if previous:
+        if previous['payload_hash'] != fingerprint:
+            raise LearningError('idempotency_conflict', 'This request ID was already used for different checkpoint choices.', 409)
+        return json.loads(previous['response_json'])
+    chapter = _chapter(chapter_id)
+    state = course_snapshot(conn, profile_id)
+    projected = next(item for item in state['chapters'] if item['id'] == chapter_id)
+    if projected['status'] == 'locked':
+        raise LearningError('chapter_locked', 'Complete the previous chapter checkpoint first.', 403)
+    if projected['status'] == 'passed':
+        raise LearningError('chapter_passed', 'This chapter is already complete. Continue to the next chapter.', 409)
+    active = _execute(conn, "SELECT * FROM course_checkpoint_attempts WHERE profile_id=? AND chapter_id=? AND status='active'", (profile_id, chapter_id)).fetchone()
+    if active:
+        result = _public_attempt(conn, profile_id, active)
+    else:
+        if projected['status'] != 'ready' and not challenge:
+            raise LearningError('practice_required', 'Complete this chapter’s practice or choose to test out.', 403)
+        previous_variants = [row['variant_id'] for row in _execute(conn,
+            'SELECT variant_id FROM course_checkpoint_attempts WHERE profile_id=? AND chapter_id=? ORDER BY created_at,rowid', (profile_id, chapter_id))]
+        variants = chapter['variants']
+        # Prefer unseen parallel forms, then rotate without repeating the last.
+        variant = next((item for item in variants if item['id'] not in previous_variants), None)
+        if variant is None:
+            last_index = next((index for index, item in enumerate(variants) if item['id'] == previous_variants[-1]), -1)
+            variant = variants[(last_index + 1) % len(variants)]
+        now = timestamp() if now is None else now
+        attempt_id = identifier()
+        frozen = {'chapter_id': chapter_id, 'chapter_number': chapter['number'], 'title': chapter['title'],
+                  'title_ru': chapter['title_ru'], 'variant': variant, 'rubric': deepcopy(RUBRIC)}
+        _execute(conn, 'INSERT INTO course_checkpoint_attempts(id,profile_id,chapter_id,chapter_number,variant_id,content_version,rubric_version,frozen_json,status,created_at) '
+                     "VALUES (?,?,?,?,?,?,?,?,'active',?)", (attempt_id, profile_id, chapter_id, chapter['number'], variant['id'],
+                      _catalogue()['version'], _catalogue()['rubric_version'], encoded(frozen), now))
+        result = checkpoint_read(conn, profile_id, attempt_id)
+    _execute(conn, 'INSERT INTO course_checkpoint_requests VALUES (?,?,?,?,?)',
+                 (profile_id, request_id, fingerprint, result['id'], encoded(result)))
+    return result
+
+
+def checkpoint_answer(conn, profile_id, attempt_id, answers, submission_id, now=None):
+    key(submission_id, 'Submission ID')
+    if not isinstance(answers, dict) or not all(isinstance(qid, str) and isinstance(choice, str) for qid, choice in answers.items()):
+        raise LearningError('invalid_input', 'Send all checkpoint answers as question IDs and choice IDs.')
+    fingerprint = payload_hash({'attempt_id': attempt_id, 'answers': answers})
+    previous = _execute(conn, 'SELECT payload_hash,response_json FROM course_checkpoint_submissions WHERE profile_id=? AND submission_id=?',
+                            (profile_id, submission_id)).fetchone()
+    if previous:
+        if previous['payload_hash'] != fingerprint:
+            raise LearningError('idempotency_conflict', 'This submission ID was already used for different answers.', 409)
+        return json.loads(previous['response_json'])
+    row = _attempt(conn, profile_id, attempt_id)
+    if row['status'] != 'active':
+        raise LearningError('checkpoint_completed', 'This checkpoint is already checked. Start the next attempt to practise again.', 409)
+    frozen = json.loads(row['frozen_json'])
+    questions, rubric = frozen['variant']['questions'], frozen['rubric']
+    if set(answers) != {question['id'] for question in questions}:
+        raise LearningError('invalid_input', 'Answer every checkpoint question before checking your work.')
+    for question in questions:
+        if answers[question['id']] not in {choice['id'] for choice in question['choices']}:
+            raise LearningError('invalid_input', 'Choose one of the offered answers for each question.')
+    if rubric['require_listened'] and row['listened_at'] is None:
+        raise LearningError('listening_required', 'Listen to the message before checking your answers.', 409)
+    feedback = [{'question_id': question['id'], 'correct': answers[question['id']] == question['answer'],
+                 'answer': question['answer'], 'explanation': question['explanation'], 'explanation_ru': question['explanation_ru']}
+                for question in questions]
+    score = sum(item['correct'] for item in feedback)
+    essential = all(answers[question['id']] == question['answer'] for question in questions if question['essential'])
+    independent = not json.loads(row['support_json'])
+    passed = (score / len(questions) >= rubric['minimum_score'] and (essential or not rubric['require_essential'])
+              and (independent or not rubric['require_independent']))
+    result = {'score': score, 'total': len(questions), 'passed': passed,
+              'essential_passed': essential, 'feedback': feedback}
+    now = timestamp() if now is None else now
+    _execute(conn, 'UPDATE course_checkpoint_attempts SET status=?,answers_json=?,result_json=?,completed_at=? WHERE id=?',
+                 ('passed' if passed else 'retry', encoded(answers), encoded(result), now, attempt_id))
+    if passed:
+        _execute(conn, 'INSERT OR IGNORE INTO course_chapter_passes VALUES (?,?,?,?)', (profile_id, row['chapter_id'], attempt_id, now))
+    response = checkpoint_read(conn, profile_id, attempt_id)
+    _execute(conn, 'INSERT INTO course_checkpoint_submissions VALUES (?,?,?,?,?)',
+                 (profile_id, submission_id, fingerprint, attempt_id, encoded(response)))
+    return response
+
+
+def checkpoint_support(conn, profile_id, attempt_id, kind, question_id=None):
+    row = _attempt(conn, profile_id, attempt_id)
+    if kind not in ('hint', 'transcript'):
+        raise LearningError('invalid_input', 'Choose hint or transcript support.')
+    variant = json.loads(row['frozen_json'])['variant']
+    if kind == 'hint':
+        if not isinstance(question_id, str) or question_id not in {question['id'] for question in variant['questions']}:
+            raise LearningError('invalid_input', 'Choose an existing question for the hint.')
+        marker = 'hint:' + question_id
+    else:
+        if question_id is not None:
+            raise LearningError('invalid_input', 'Transcript support does not take a question ID.')
+        marker = 'transcript'
+    if row['status'] == 'active':
+        support = json.loads(row['support_json'])
+        if marker not in support:
+            _execute(conn, 'UPDATE course_checkpoint_attempts SET support_json=? WHERE id=?', (encoded(support + [marker]), attempt_id))
+    return checkpoint_read(conn, profile_id, attempt_id)
+
+
+def checkpoint_listened(conn, profile_id, attempt_id, now=None):
+    row = _attempt(conn, profile_id, attempt_id)
+    if row['status'] == 'active' and row['listened_at'] is None:
+        _execute(conn, 'UPDATE course_checkpoint_attempts SET listened_at=? WHERE id=?', (timestamp() if now is None else now, attempt_id))
+    return checkpoint_read(conn, profile_id, attempt_id)

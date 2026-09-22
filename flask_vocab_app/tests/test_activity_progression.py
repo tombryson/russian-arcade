@@ -99,6 +99,24 @@ class ActivityProgressionTests(unittest.TestCase):
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM reward_events').fetchone()[0], 0)
             self.assertTrue(all(row[0] is None for row in conn.execute('SELECT target_level FROM progression_events')))
 
+    def test_saved_a1_assessments_contribute_to_course_topic_practice(self):
+        sentence = self.translations.save_content('Привет, Анна!', 'Hello, Anna!', 'greetings', 1)[0]
+        self.translations.save_check(sentence, 'Привет, Анна!', 0, ASSESSMENT | {'score':4}, 'en')
+        writing = self.writing.create({'title':'Моя семья','title_en':'My family',
+            'task':'Напишите о семье.','task_en':'Write about your family.',
+            'required_words':['мама','папа','семья']}, 'family', 'A1', 30)
+        self.writing.save(writing, 'Это моя мама. Это мой папа.', 0, ASSESSMENT | {'score':8})
+        with patch.object(self.jumble, 'get_words', return_value=['один','два','час','день','утро','вечер']):
+            game = self.jumble.create_game('numbers', 'A1')
+        self.jumble._assess.return_value['score'] = 3
+        self.jumble.mark_response(game['id'], 'Сейчас два часа.', 0)
+        course = self.progress()['course']
+        chapter = course['chapters'][0]
+        self.assertEqual({t['id']:t['successful_tasks'] for t in chapter['topics']},
+                         {'greetings':1,'numbers':1,'family':1})
+        self.assertEqual(chapter['activity_count'], 3)
+        self.assertAlmostEqual(chapter['progress'], .5)
+
     def test_repeat_check_is_capped_per_content_and_a_new_day_can_earn_again(self):
         sid = self.sentence()
         current = timestamp()

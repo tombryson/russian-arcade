@@ -24,11 +24,14 @@ READ_ENDPOINTS = frozenset({
     'step_conversation.options', 'step_conversation.history',
     'onboarding.read', 'onboarding.practice_read', 'first_steps.chapter', 'first_steps.lesson',
     'progression.read', 'progression.world', 'native_review.overview', 'native_review.read',
+    'progression.course', 'progression.read_checkpoint',
     'native_review.history', 'journey_games.catalogue', 'journey_games.read',
 })
 WRITE_ENDPOINTS = frozenset({
     'onboarding.introduce', 'onboarding.practice_write', 'first_steps.command',
     'progression.preferences', 'progression.answer', 'native_review.start',
+    'progression.start_checkpoint', 'progression.answer_checkpoint',
+    'progression.support_checkpoint', 'progression.listened_checkpoint',
     'native_review.command', 'native_review.suspension', 'set_ui_language',
     'ui_preferences.set_navigation',
     'journey_games.start', 'journey_games.command', 'journey_games.route_command',

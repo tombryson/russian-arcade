@@ -2,6 +2,14 @@
 
 Progression decision: 15 September 2026. Game-shop update: 17 September 2026. This document records the approved direction and the scope of the first integrated release. It supersedes earlier proposals to turn the legacy Elo total into distance, or to charge coins for access to ordinary practice.
 
+## Current guided-course rules — 22 September 2026
+
+The [four authored A1 chapters](course-chapters.md) now govern the main route. This section supersedes the older coin-unlock and header-rating descriptions below. Each chapter requires two successful distinct A1 tasks per topic at 70% or higher and at least two activity families across that chapter to open its normal checkpoint. Supported practice counts towards coverage; a current-chapter challenge can test out early.
+
+A checkpoint pass requires at least 80%, both essential message details, playback of the separate listening clip and no revealed question hints or transcript. Supported attempts provide feedback; a new unassisted attempt using another variant is required to pass. All four passes unlock the A2 guided level, with no authored A2 chapters claimed. Higher-level free practice stays available. These are pilot course rules, not CEFR certification.
+
+The header line shows current-chapter coverage independently of Elo. Historical skill estimates remain separate. Coins, shop ownership and FSRS scheduling retain their existing contracts; they do not gate chapter progression. Earlier journey receipts stay saved.
+
 ## Curriculum update
 
 The [full curriculum](../curriculum.md) now formalises fifty topics across A1, A2, B1, B2 and C1–C2. Reading, Writing, Translation and Word Jumble use shared topic and task-level guidance. The numeric difficulty estimates for words and forms are unchanged. The Speaking table below describes the existing live scenario catalogue, not the limit of the wider course.
@@ -24,8 +32,8 @@ Learners can freely select a practice target. Core activities have no coin requi
 ## Three distinct kinds of progress
 
 1. **Lingo coins recognise participation.** Successful saving of meaningful practice earns a bounded reward; high marks are not required. Coins are shared across activities, including native flashcards.
-2. **Barsik’s route records completed story stops.** Eligible practice earnings open the next stop. Completed stops and unlocked destinations remain available after a later review undo. Opening a stop does not spend coins.
-3. **Learning evidence describes what happened.** Grammar, fluency, task completion and assisted recall remain separate evidence. FSRS controls card scheduling. The header now shows a provisional estimate for each assessed skill; no global proficiency estimate is calibrated. Difficulty recommendations remain future work.
+2. **Barsik’s guided route records chapter preparation and passes.** Topic coverage opens the normal checkpoint; an independent pass advances to the next chapter. Early challenges are available. Historical story-stop receipts remain saved separately, and course progression does not spend or require coins.
+3. **Learning evidence describes what happened.** Grammar, fluency, task completion and assisted recall remain separate evidence. FSRS controls card scheduling. The profile retains provisional estimates for assessed skills; the header shows current-chapter coverage, and no global proficiency estimate is calibrated. Difficulty recommendations remain future work.
 
 Freeze the legacy additive Elo calculation. Preserve its historical value and receipts, but remove it from prominent statistics and do not use it for access, distance, CEFR placement or coin calculation. A number that rises for adding vocabulary is not an ability measure. The [Russian L2 learner modelling paper](https://aclanthology.org/W19-4451.pdf) supports investigating concept-specific adaptation; it does not validate our old points formula.
 
@@ -41,9 +49,9 @@ The selected variation and contract are copied into the session at creation. Cha
 
 The agent’s language complexity, question load, follow-ups and support follow the contract. Independent audio assessment uses those objectives while accepting valid simpler replies. Its grammar and fluency scores describe the attempt. New eligible first assessments can update separate provisional skill ratings; neither the attempt score nor that estimate assigns a CEFR level. Short valid replies can fulfil a goal even when there is too little speech for a fluency score. Russian errors are preserved for feedback.
 
-### Visible skill progress
+### Visible course progress
 
-A thin progress line spans the bottom of both application headers after its introduction, with a miniature running Barsik at its leading edge. It has no visible caption or popup; selecting it opens Skill progress in the current profile. Skills without evidence show a dash and “Not started”. Only fresh qualifying assessments update the versioned provisional model; the legacy Elo remains frozen. Coins, journey stops and FSRS remain separate. See [the header and rating contract](skill-progress.md) for evidence exclusions, stage rules, fixed pilot priors and limits.
+A thin progress line spans the bottom of both application headers after its introduction, with a miniature running Barsik at its leading edge. Selecting it opens the guided course. Its fill shows preparation for the current chapter and is independent of Elo. Separate profile skill estimates retain their existing evidence policy; the legacy Elo remains frozen. Coins, historical journey receipts and FSRS remain separate. See [the header and rating contract](skill-progress.md).
 
 ### Shared rewards
 
@@ -69,13 +77,11 @@ The review reward does not depend on the selected rating, so there is no incenti
 
 Migration 025 assigns saved reading, writing, translation and Word Jumble work to a profile. Their adapters reward the selected profile in personal mode; historical work stays with “Me”. In optional household mode they do **not** attribute work from the shared adult workspace to whichever child happens to be selected. Native review, Speaking, lesson practice and journey rewards also remain profile-scoped. See [local user sessions](user-sessions.md) for the shared-library boundary and browser lifecycle.
 
-### Journey pilot
+### Guided route and historical pilot
 
-The first two stops are the little post office and the market town. A short reading choice at the post office establishes where Barsik goes first. Completing it and earning 12 eligible practice coins opens the market town. There, another direction advances his route. These are small narrative checkpoints, not claims of passing A1 or delivering the final letter.
+The guided route now contains four A1 chapters and three authored checkpoint variants per chapter. Chapter 4 delivers the learner’s original letter and assesses its invitation alongside a separate spoken update. The [chapter contract](course-chapters.md) defines preparation, independent passes, support and retries.
 
-The coin badge and journey link appear in both the React app and legacy activity headers. Updating the badge does not reload an activity or reconnect the microphone. The journey shows available/completed stops and the coins needed for the next stop. Ordinary activities remain accessible while a story stop is locked.
-
-The eventual final letter remains a larger authored assessment tied to learned vocabulary and forms. Its content, evidence coverage, support rules and outcome must be designed before it is presented as an ending; see [the narrative contract](barsik-journey.md).
+The earlier post-office and market-town scenes used eligible-coin thresholds. Their stored unlocks, answers and rewards remain preserved, but they do not establish chapter coverage or a course pass. The main journey view and header link now open the guided course. Updating the coin badge still does not reload an activity or reconnect the microphone, and ordinary practice remains available.
 
 ## Data migration and API
 
@@ -87,7 +93,7 @@ Migration 024 adds variation/session target levels and applies the authored cont
 
 | API | Purpose |
 |---|---|
-| `GET /api/v1/progression` | Selected profile’s wallet, preference, policy, receipts, route and provisional skill summaries |
+| `GET /api/v1/progression` | Selected profile’s wallet, preference, policy, receipts, guided course, historical route and provisional skill summaries |
 | `POST /api/v1/progression/preferences` | Save A1/A2/B1/B2 preference |
 | `GET /api/v1/journey/:world` | Read an unlocked scene without awarding coins |
 | `POST /api/v1/journey/:world/answer` | Idempotent answer, reward and completion transaction |
@@ -103,7 +109,7 @@ Regression coverage includes independent profiles, simultaneous duplicate writes
 
 The original release integrated the participation/progression system and A1/A2 Speaking contracts. The later [curriculum pass](../curriculum.md) gives Reading, Writing, Word Jumble and Translation explicit A1–C2 task levels, fifty topic briefs and shared grammar objectives. Their historical records keep their saved values; legacy inputs remain accepted through compatibility mappings. New curriculum labels are not a certification of proficiency.
 
-Still to build: authored B1/B2 content, independent curriculum review of band assignments, further story destinations and the final-letter assessment, learner ownership for old shared activities in household mode, and evaluated skill recommendations. Coins do not solve those curriculum or measurement problems. The later game-shop update adds spending with permanent ownership; it does not introduce a calibrated Elo model. The visible practice rating is explicitly provisional and does not yet choose tasks for the learner.
+Still to build: authored A2 and later guided chapters, further live Speaking content, independent curriculum review of band assignments, learner ownership for old shared activities in household mode, and evaluated skill recommendations. The four A1 chapter checkpoints, including the final letter, are implemented. Coins do not solve those curriculum or measurement problems. The later game-shop update adds spending with permanent ownership; it does not introduce a calibrated Elo model. The visible practice rating is explicitly provisional and does not yet choose tasks for the learner.
 
 Operational rollout: back up the configured SQLite store; run `db-upgrade` explicitly; verify foreign keys and preserved historical row counts; build the React bundle; restart the local server against the same configuration. Retain the pre-migration backup. To roll back, stop the app and restore a matching code/database backup together; do not downgrade a database in place or discard subsequent practice silently.
 
