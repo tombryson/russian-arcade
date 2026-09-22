@@ -17,7 +17,7 @@ Postcard Pairs could often be solved by recognising one noun in each unrelated s
 | Who does what | The noun forms identifying the participants | Which person acts and which person receives the action |
 | Mixed practice | Questions from several sets | The same evidence as each individual set |
 
-The question bank contains 80 authored questions, including 40 motion questions across A1, A2 and B1. The activity offers five or ten questions. Choice banks retain their authored order. Learners can change their selection before checking. Every blank must be filled before submission.
+The question bank contains 108 authored questions, including 68 motion questions across A1, A2 and B1. The activity offers five or ten questions. Choice banks retain their authored order. Learners can change their selection before checking. Every blank must be filled before submission.
 
 A photo cannot establish that a trip happens every day, or that an arrival has just been completed. The short situation supplies those facts. It must not leave the learner guessing what the illustration was intended to mean.
 
@@ -25,15 +25,19 @@ A photo cannot establish that a trip happens every day, or that an arrival has j
 
 Motion practice has three task levels. These are authored curriculum targets, independent of the numeric difficulty stored against a word. The level selector appears for **Verbs of motion** and **Mixed practice**; in mixed practice it changes the motion questions only. The other grammar sets do not yet have graded banks.
 
-| Level | Bank | Choices per verb | Task |
-|---|---:|---:|---|
-| A1 | 12 situations | 2 | Distinguish a journey on foot from a journey by transport. Separate sets describe a current journey or repeated trips. |
-| A2 | 16 situations | 4 | Distinguish arrival, departure, entering, leaving, approaching, crossing and going around an obstacle. |
-| B1 | 12 situations | 6 | Combine stages of a route, or distinguish carrying an object, transporting it and accompanying someone on foot. Some sentences contain two independently marked verbs. |
+| Level | Bank | Coverage |
+|---|---:|---|
+| A1 | 28 situations | `идти / ходить` and `ехать / ездить`: travel mode, directionality, present, past and future. Setting off with `пойти / поехать`. |
+| A2 | 30 situations | Prefixed motion and aspect, including `входить / войти`, `приходить / прийти` and `уходить / уйти`. Carrying, transporting and accompanying someone with `нести / носить`, `везти / возить` and `вести / водить`. |
+| B1 | 10 situations | Combine the earlier material in multi-part routes and decisions about people and cargo. Each sentence contains two independently marked verbs. |
 
-A1 uses `идёт / едет` for current journeys and `ходит / ездит` for explicit repeated trips. It does not reject `идёт` just because the caption says “every morning”: a regular outward journey can also be described that way. A2 keeps endpoint verbs such as `пришёл` separate from boundary verbs such as `вошёл`. The same event can otherwise make both answers reasonable.
+A1 begins with mode of travel, then contrasts a journey in progress with repeated or multidirectional movement. Past examples distinguish a journey in progress from a whole visit. Future examples include `будет идти / будет ходить` and `пойдёт / поедет`. Both members of the unprefixed pairs are imperfective. Directionality and aspect are separate features.
 
-B1 introduces `несёт / носит`, `ведёт / водит` and `везёт / возит`, plus route contrasts such as `прошёл / перешёл / обошёл`. The situation establishes whether a parcel is in someone's hands or in a vehicle, or whether a companion is walking. Choice banks use the same tense and person so mismatched conjugations do not give away the answer.
+A2 introduces prefixed aspect pairs through regular actions, planned arrivals and future constructions. For example, after `будет`, learners choose `входить` rather than the perfective infinitive `войти`. The bank avoids treating imperfective past as inherently wrong when describing a completed visit: `приходил` can have a general-factual meaning. Carrying and accompanying are introduced here; B1 combines them with another action.
+
+Choice banks contain two to six alternatives according to the contrast being tested. A level is defined by its grammatical coverage, not its button count. There is no rule that carrying verbs first become available at B1. Course boundaries vary; these levels describe the application's teaching progression.
+
+A caption saying “every morning” does not, by itself, make `идёт` wrong. A regular outward journey can also use the directed verb. Pacing, repeated return trips and explicit journey stages establish the distinction. Likewise, `пойти` can mean going to an event without specifying transport; mode contrasts therefore give a clear walking or transport context.
 
 Settings include `motion_level` (`A1`, `A2` or `B1`), defaulting to A1. Unsupported levels are rejected rather than silently substituting easier material. Each start gets a new seed. Selection covers different grammatical contrasts before repeating one, then varies the context within each contrast. Five and ten-round games use distinct questions; these are sampled authored situations, not newly generated AI stories.
 
@@ -67,7 +71,11 @@ The new game has the stable ID `scene-builder`. Its saved question payload inclu
 
 `scene_motion.py` owns the motion bank and grammatical contrasts. `scene_builder.py` validates settings, selects a balanced set and freezes its content. Both verbs from a two-part sentence are retained for the existing vocabulary and card-generation pipeline.
 
-The activity uses the existing `journey_game_sessions` storage for ownership, frozen questions, first attempts, hints and completion. It uses the existing correction records and reward ledger. It does not need a separate vocabulary database or a database migration. Version 1 sessions keep their original questions and answer history. Version 2 starts use the new bank. Changing levels, seeds or content versions does not reset the daily reward identity for a grammar focus.
+Every answer has explicit lexical morphology. Past forms carry gender and number; present and synthetic future forms carry person and number. The perfective future `пойдёт` is linked to lemma `пойти`, not `идти`.
+
+Analytical future is kept separate from lexical morphology. An option can display `будет идти`, while its vocabulary reference retains `идти`, part of speech `INFN` and imperfective aspect. The separate `construction` field records the full phrase and its future tense, person and number. This prevents `будет идти` from being inserted as one word variation, or future tense from being falsely assigned to an infinitive. The same rule applies when the exercise supplies `будет` and the learner chooses the infinitive.
+
+The activity uses the existing `journey_game_sessions` storage for ownership, frozen questions, first attempts, hints and completion. It uses the existing correction records and reward ledger. It does not need a separate vocabulary database or a database migration. Version 1 and 2 sessions keep their original questions and answer history. Version 3 starts use the expanded bank. Changing levels, seeds or content versions does not reset the daily reward identity for a grammar focus.
 
 Bundled illustrations load immediately. Reusing a cat, table and book allows consistent spatial scenes without generating another picture for every round. The asset prompts and output files are recorded in [the artwork notes](scene-builder-artwork.md).
 
@@ -90,3 +98,5 @@ The automated checks cover slot validation, saved attempts, corrections, profile
 [Direction and location](https://www.pelister.org/russian/tutorials/0061.html) explains the accusative/prepositional contrast with `в` and `на`. [OpenRussian's verbs of motion reference](https://en.openrussian.org/grammar/verbs-of-motion) describes travel mode, directionality and motion prefixes. These are reference aids; each exercise still needs contextual review.
 
 The [TSU Russian grammar reference](https://vital.lib.tsu.ru/vital/access/services/Download/koha%3A000846498/SOURCE1), page 93, includes a regular unidirectional journey. The [Rostov State Medical University motion-verbs manual](https://rostgmu.ru/wp-content/uploads/2023/04/%D0%93%D0%BB%D0%B0%D0%B3%D0%BE%D0%BB%D1%8B-%D0%B4%D0%B2%D0%B8%D0%B6%D0%B5%D0%BD%D0%B8%D1%8F.pdf) provides further teaching contexts for motion verbs and their complements. These references inform the task design; the levels here are application curriculum targets, not an official TORFL examination syllabus.
+
+The Pushkin Institute's references on [unprefixed motion](https://courses.pushkininstitute.ru/guide_pages/590) and [по- forms](https://courses.pushkininstitute.ru/guide_pages/596) explain these contrasts. Its guide includes some material earlier than this application's sequence. The [Complete Russian Language Course explanation](https://completerussianlanguagecourse.com/russian-verbs-of-motion-explained/) also distinguishes directionality from aspect. These references support the grammar; they do not establish one exclusive A1/A2 boundary for every course.

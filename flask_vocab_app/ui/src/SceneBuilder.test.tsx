@@ -39,17 +39,17 @@ describe('Describe the scene',()=>{
   });
   it.each([['Verbs of motion','motion'],['Mixed practice','mixed']])('sends the chosen motion level for %s',async(topic,focus)=>{
     const api=service();render(<JourneyGame gameId="scene-builder"/>);
-    await click(topic);await click('B1 Routes and connections');
-    expect(screen.getByRole('button',{name:'B1 Routes and connections'}).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByText(/6 choices per blank/)).toBeTruthy();
+    await click(topic);await click('B1 Complex journeys');
+    expect(screen.getByRole('button',{name:'B1 Complex journeys'}).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('Combine movements in longer routes and situations with more than one action.')).toBeTruthy();
     await click('Let’s play');
     expect(JSON.parse(api.posts()[0][1]!.body as string).options).toEqual({grammar_focus:focus,rounds:5,motion_level:'B1'});
   });
   it('keeps the chosen motion level when changing topics and omits it from other practice',async()=>{
     const api=service();render(<JourneyGame gameId="scene-builder"/>);
-    await click('Verbs of motion');await click('A2 Arriving and leaving');await click('Location');
+    await click('Verbs of motion');await click('A2 Arriving, leaving and carrying');await click('Location');
     expect(screen.queryByRole('group',{name:'Motion level'})).toBeNull();
-    await click('Mixed practice');expect(screen.getByRole('button',{name:'A2 Arriving and leaving'}).getAttribute('aria-pressed')).toBe('true');
+    await click('Mixed practice');expect(screen.getByRole('button',{name:'A2 Arriving, leaving and carrying'}).getAttribute('aria-pressed')).toBe('true');
     await click('Agreement');await click('Let’s play');
     expect(JSON.parse(api.posts()[0][1]!.body as string).options).toEqual({grammar_focus:'agreement',rounds:5});
   });
@@ -113,9 +113,9 @@ describe('Describe the scene',()=>{
   it('localizes the motion level controls',async()=>{
     service();render(<GameLanguage.Provider value="ru"><JourneyGame gameId="scene-builder"/></GameLanguage.Provider>);
     await click('Глаголы движения');expect(screen.getByRole('group',{name:'Уровень глаголов движения'})).toBeTruthy();
-    await click('A2 Прибытие и отправление');
-    expect(screen.getByText(/4 варианта для каждого пропуска/)).toBeTruthy();
-    expect(screen.queryByText('Arriving and leaving')).toBeNull();
+    await click('A2 Приходить, уходить, нести');
+    expect(screen.getByText('Приходить или прийти, уходить или уйти. Входить, пересекать улицу, нести вещи и вести людей.')).toBeTruthy();
+    expect(screen.queryByText('Arriving, leaving and carrying')).toBeNull();
   });
   it('does not put the completed Russian answer or dictionary links on the unchecked scene',()=>{
     render(<SceneBuilder round={round} selected={[]} disabled={false} onChange={()=>{}}/>);

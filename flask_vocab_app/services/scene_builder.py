@@ -13,7 +13,7 @@ from flask import current_app
 
 from repositories.learning_repository import LearningError, encoded, identifier, timestamp, transaction
 
-VERSION = 'scene-builder-v2'
+VERSION = 'scene-builder-v3'
 REWARD_VERSION = 'scene-builder-v1'
 GAME = {'id': 'scene-builder', 'title': 'Describe the scene', 'lesson_id': 'bag',
         'lesson_title': 'What’s in the bag?',
@@ -248,7 +248,8 @@ def _motion_sequence(rows, rng):
 
 def build_content(seed, settings):
     rng=random.Random(seed)
-    families={family:[round for round in curriculum() if round['scene_builder']['family']==family
+    bank=curriculum()
+    families={family:[round for round in bank if round['scene_builder']['family']==family
                       and (family!='motion' or round['scene_builder']['level']==settings.get('motion_level','A1'))]
               for family in FAMILIES}
     for family, rounds in families.items():

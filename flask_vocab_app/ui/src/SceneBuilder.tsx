@@ -12,9 +12,9 @@ const topics = [
 ] as const;
 
 const motionLevels = [
-  ['A1', 'Everyday journeys', 'Повседневные поездки', 'On foot or by transport; one trip or regular journeys. 2 choices per blank.', 'Пешком или на транспорте; сейчас или регулярно. 2 варианта для каждого пропуска.'],
-  ['A2', 'Arriving and leaving', 'Прибытие и отправление', 'Arrive, leave, enter, approach and cross. 4 choices per blank.', 'Прибыть, уйти, войти, подойти и перейти. 4 варианта для каждого пропуска.'],
-  ['B1', 'Routes and connections', 'Маршруты и связи', 'Longer routes, carrying and accompanying someone. 6 choices per blank.', 'Длинные маршруты, переноска вещей и сопровождение людей. 6 вариантов для каждого пропуска.'],
+  ['A1', 'Everyday journeys', 'Повседневные маршруты', 'Walking or travelling, regular trips and setting off. Present, past and future.', 'Пешком или на транспорте, регулярные поездки и начало пути. Настоящее, прошедшее и будущее время.'],
+  ['A2', 'Arriving, leaving and carrying', 'Приходить, уходить, нести', 'Arrive, leave, enter or cross. Practise verb pairs such as приходить / прийти, and learn to carry things or lead someone.', 'Приходить или прийти, уходить или уйти. Входить, пересекать улицу, нести вещи и вести людей.'],
+  ['B1', 'Complex journeys', 'Сложные маршруты', 'Combine movements in longer routes and situations with more than one action.', 'Несколько действий в одном маршруте: пройти мимо, обойти препятствие и продолжить путь.'],
 ] as const;
 
 export function SceneBuilderOptions({options, onChange, disabled}: {
