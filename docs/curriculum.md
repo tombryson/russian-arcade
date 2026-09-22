@@ -62,6 +62,8 @@ The vocabulary database keeps its lemma/form relationships and numeric difficult
 
 The [guided A1 course](word-post/course-chapters.md) groups the ten A1 topics into four chapters and records successful practice coverage separately from independent checkpoint passes. Readiness needs two distinct tasks per topic at 70% or higher and two activity families across the chapter; supported practice is allowed. A checkpoint requires 80% or higher, both essential details, listening playback and no revealed hints or transcript. Learners may challenge the current chapter early. These are application pilot rules, not a CEFR placement examination or certification. All four passes unlock the A2 guided level; authored A2 chapters remain future content and higher-level free practice stays available.
 
+The [journey and milestones build plan](word-post/journey-milestones-build-plan.md) describes the next course revision. It groups A1 into Home, Post office, Market and Leaving town, adds stable objective-level evidence, and defines a cumulative received-letter assessment. These are planned changes; the shipped chapter rules above remain in effect.
+
 ## Topic reference
 
 Each section lists core vocabulary, useful expressions, learning objectives and grammar. The activity briefs provide concrete starting points for generation. They are not fixed stories that every learner must repeat.
