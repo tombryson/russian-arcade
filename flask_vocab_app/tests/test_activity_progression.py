@@ -1,4 +1,5 @@
 """Legacy activities join the shared ledger without rewriting old points."""
+import json
 import sqlite3
 import unittest
 from unittest.mock import Mock, patch
@@ -117,12 +118,34 @@ class ActivityProgressionTests(unittest.TestCase):
                          {'greetings':1,'family':1,'home':0})
         self.assertEqual(chapter['activity_count'], 2)
         post_office = course['chapters'][1]
-        self.assertEqual({t['id']:t['successful_tasks'] for t in post_office['topics']},
-                         {'numbers':1,'daily_activities':0})
-        self.assertEqual(post_office['activity_count'], 1)
+        self.assertEqual(post_office['status'], 'locked')
+        self.assertEqual(post_office['topics'], [])
+        self.assertEqual(post_office['title'], '')
         # Aggregate activity scores remain useful topic evidence; they do not
         # claim that each new preparation target was taught and attempted.
         self.assertEqual(chapter['progress'], 0)
+        # Later-topic work is hidden, not discarded. Complete the preceding
+        # authored checkpoint and verify the saved task becomes visible.
+        from services.course_progression import checkpoint_start, checkpoint_listened, checkpoint_answer
+        with transaction(self.db, write=True) as conn:
+            recorded = conn.execute('''SELECT c.activity,c.content_key,c.score,c.target_level
+                FROM course_evidence c JOIN progression_events e ON e.id=c.event_id
+                WHERE c.profile_id=? AND e.profile_id=c.profile_id AND c.topic_id='numbers'
+                AND e.reversed_at IS NULL''', ('personal-learning',)).fetchall()
+            self.assertEqual([tuple(row) for row in recorded],
+                             [('word_jumble', 'word-jumble:' + game['id'], .75, 'A1')])
+            attempt = checkpoint_start(conn, 'personal-learning', 'home', 'unlock-saved-topic', True)
+            frozen = json.loads(conn.execute('SELECT frozen_json FROM course_checkpoint_attempts WHERE id=?',
+                                             (attempt['id'],)).fetchone()[0])
+            checkpoint_listened(conn, 'personal-learning', attempt['id'])
+            passed = checkpoint_answer(conn, 'personal-learning', attempt['id'],
+                {question['id']: question['answer'] for question in frozen['variant']['questions']}, 'pass-saved-topic')
+        self.assertTrue(passed['result']['passed'])
+        post_office = self.progress()['course']['chapters'][1]
+        self.assertEqual(post_office['status'], 'practice')
+        self.assertEqual({topic['id']: topic['successful_tasks'] for topic in post_office['topics']},
+                         {'numbers': 1, 'daily_activities': 0})
+        self.assertEqual(post_office['activity_count'], 1)
 
     def test_repeat_check_is_capped_per_content_and_a_new_day_can_earn_again(self):
         sid = self.sentence()
