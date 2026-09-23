@@ -2,7 +2,7 @@
 
 This guide records the [curriculum uplift plan](curriculum-uplift-plan.md) implementation on `codex/curriculum-priorities`, built from `5932faf`. It adds teaching and diagnostic evidence. It does not replace the published A1 journey or introduce a new level gate.
 
-**Verification status:** component checks have run during development. Final combined regression tests and browser checks for this pass are pending. No qualified human language review or learner trial is recorded.
+**Verification status:** the production UI build, focused backend/frontend checks, migration/import rehearsals, coverage checks, reviewer-packet checks and secret scan pass. Browser checks confirm the new unit layout, transcript disclosure, saved answers, inherited support and word lookup after additional questions. The full local backend run exercised 1,657 tests; one outdated heading assertion was corrected and its 15-test module passed on rerun. Full CI results are tracked in [PR #3](https://github.com/tombryson/russian-arcade/pull/3). Native audio playback still needs a clean browser check after an in-app browser crash. No qualified human language review, learner trial or paid model evaluation is recorded.
 
 ## Available teaching units
 
@@ -134,7 +134,7 @@ The packet includes recoverable case and conjugation mistakes, partial communica
 | CU-03: release identity | Routing and preservation for retained releases | Rehearse each future release and its new component types. |
 | CU-04: morphology | Forward import and constrained selection | Reviewed backfill of older incomplete tags. |
 | CU-05: teaching sequences | Four A1 units; the location unit includes prepared listening | Language and learner review; appropriate audio and transfer tasks for the new units. |
-| CU-06: Comprehension | Generated reading/listening contracts and disclosure receipts | Final combined/browser checks, real audio review, question validity and human marking comparison. |
+| CU-06: Comprehension | Generated reading/listening contracts and disclosure receipts | A clean native-audio browser playback check, real audio review, question validity and human marking comparison. |
 | CU-07: controlled production | Typed units plus narrow Translation/Word Jumble reports | Validate natural alternatives and whether each generated focus is actually elicited. |
 | CU-08: Writing | Diagnostic integration | Human comparison of judgement quality and level demands. |
 | CU-09: Speaking | Narrow A1 directions diagnostic | Broader scenario mapping and real acoustic/linguistic validation. |
@@ -142,4 +142,4 @@ The packet includes recoverable case and conjugation mistakes, partial communica
 | CU-11–14: assessment and release | Shared foundations; offline review packet prepared | Five-domain pilot, qualified review, learner trial, justified pass policy and migration rehearsal. |
 | CU-15–17: A2–B2 courses | References and ordinary practice exist | Full reviewed teaching, assessment, regions and retry routes for each level. |
 
-Next, finish the combined technical and browser checks, then use the reviewer packet to correct ambiguous language and marking expectations. Broader A1 teaching and media can follow the gap inventory in parallel. A full A1–B2 reference catalogue is present; a complete, validated A1–B2 course is not.
+Next, use the reviewer packet to correct ambiguous language and marking expectations, finish the outstanding playback check, and prepare the missing unit audio. Broader A1 teaching can follow the gap inventory in parallel. A full A1–B2 reference catalogue is present; a complete, validated A1–B2 course is not.
