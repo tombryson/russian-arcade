@@ -22,6 +22,11 @@
         {% if milestone.status == 'locked' %}
         <div class="curriculum-milestone is-locked" id="milestone-{{ milestone.id }}" role="group" aria-label="{% if russian %}Этап {{ milestone.number }}, пока недоступен{% else %}Milestone {{ milestone.number }}, locked{% endif %}">
           <span class="curriculum-milestone-number" aria-hidden="true">{{ milestone.number }}</span>
+          <span class="curriculum-milestone-mystery" aria-hidden="true">
+            <span class="curriculum-milestone-mystery-title"></span>
+            <span class="curriculum-milestone-mystery-line"></span>
+            <span class="curriculum-milestone-mystery-line"></span>
+          </span>
         </div>
         {% else %}
         <details class="curriculum-milestone" id="milestone-{{ milestone.id }}"{% if course_progress and course_progress.current_chapter_id == milestone.id %} open{% endif %}>

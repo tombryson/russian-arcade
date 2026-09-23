@@ -29,12 +29,15 @@ class CurriculumMilestoneTests(unittest.TestCase):
                 label = (f"Этап {chapter['number']}, пока недоступен" if russian
                          else f"Milestone {chapter['number']}, locked")
                 self.assertIn(f'aria-label="{label}"', markup)
+                self.assertIn('class="curriculum-milestone-mystery" aria-hidden="true"', markup)
+                self.assertIn('class="curriculum-milestone-mystery-title"', markup)
+                self.assertEqual(markup.count('class="curriculum-milestone-mystery-line"'), 2)
                 self.assertNotRegex(markup, r'<(?:a|button|details|summary|h3)\b|tabindex=')
                 self.assertNotIn(f'/#journey/chapter/{chapter["id"]}', html)
                 if chapter.get('intro'):
                     self.assertNotIn(chapter['intro'], html)
 
-    def test_locked_milestones_are_numbers_only_and_topics_remain_available(self):
+    def test_locked_milestones_have_blurred_placeholders_and_topics_remain_available(self):
         html = self.client.get('/curriculum').text
         self.assert_locked_placeholders(html, self.state['chapters'][1:])
         first = self.state['chapters'][0]

@@ -13,7 +13,7 @@ Key sections: [A1 sequence](#4-revised-a1-sequence) · [Assessment](#6-received-
 | Curriculum targets | 110 target definitions; 32 required targets with short preparation tasks. Saved individual decisions carry support and source evidence. Aggregate activity scores remain topic evidence. |
 | A1 content | Home, Post office, Market and Leaving town; three variants each, 120 scored decisions and separate recorded updates. Final variants sample all ten topics. |
 | Assessment flow | Received-letter opening, grouped final assessment, revision-checked drafts, support tracking, feedback and permanent milestones. |
-| Shared presentation | Curriculum, Journey, Home, header and Profile use the same course projection. Future milestones show only grey numbers until unlocked. Standalone topics stay available. New learners complete one welcome before entering Home. |
+| Shared presentation | Curriculum, Journey, Home, header and Profile use the same course projection. Future milestone cards have blurred content shapes and a clear grey number until unlocked. Standalone topics stay available. New learners complete one welcome before entering Home. |
 | Content reuse | Shared vocabulary enrichment, 22 authored native cloze candidates and optional saved Writing replies. Existing media generation and FSRS are reused. |
 | Release checks | Deterministic content validation, model peer review, migration rehearsal and application tests. Recording failures offer playback retry or transcript support; listening saves can be retried without replay. A human learner pilot remains outstanding. |
 
@@ -263,7 +263,7 @@ Choosing a supplied sentence must never be labelled independent writing or fluen
 
 ### Curriculum
 
-Curriculum is the structural home of the milestones. Under A1, show four compact milestone rows with their topics nested beneath them. Each row has a title, a short purpose, current status and one primary action.
+Curriculum is the structural home of the milestones. Under A1, show four compact milestone rows. Available rows have a title, a short purpose, current status and one primary action. Future rows retain blurred shapes where content will appear, with only their numbers clear. The decoration contains no future story text and has no controls; assistive technology identifies the milestone number and locked state.
 
 Expand a row to show its learning objectives, useful practice links and any specific gap. Keep the full vocabulary and grammar reference available through disclosure. Do not put a wall of metadata above the next useful action.
 
