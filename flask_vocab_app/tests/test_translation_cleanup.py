@@ -433,7 +433,10 @@ class TranslationProviderTests(unittest.TestCase):
         self.assertNotIn('temperature', kwargs)
 
     def test_c2_generation_uses_topic_objectives_and_legacy_levels_still_work(self):
-        self.output({'sentence': 'Право нуждается в толковании.', 'english': 'The law needs interpretation.'})
+        self.output({'sentence': 'Право нуждается в толковании.', 'english': 'The law needs interpretation.',
+                     'topic_id': 'law', 'language_focus': {'requirement_id': 'a1.language.neutral-word-order',
+                     'english_excerpt': 'The law needs interpretation.', 'russian_excerpt': 'Право нуждается в толковании.',
+                     'expectation': 'Preserve what needs interpretation, accepting natural Russian word order.'}})
         for selected, expected in ((1, 'A1'), ('5', 'C1'), (6, 'C2'), ('C2', 'C2')):
             with self.subTest(selected=selected):
                 self.service.get_sentence('law', selected)
@@ -477,7 +480,10 @@ class TranslationProviderTests(unittest.TestCase):
         captured = []
         def handler(request):
             payload = json.loads(request.content); captured.append(payload)
-            value = self.good if payload['text']['format']['name'] == 'translation_feedback' else {'sentence':'Кот дома.','english':'The cat is at home.'}
+            value = self.good if payload['text']['format']['name'] == 'translation_feedback' else {'sentence':'Кот дома.','english':'The cat is at home.',
+                'topic_id': 'home', 'language_focus': {'requirement_id': 'a1.language.neutral-word-order',
+                'english_excerpt': 'The cat is at home.', 'russian_excerpt': 'Кот дома.',
+                'expectation': 'State where the cat is, accepting natural Russian word order.'}}
             return httpx.Response(200, json={'id':'resp_translation', 'object':'response','created_at':0,'model':'gpt-5-mini','status':'completed',
                 'output':[{'id':'msg_translation','type':'message','role':'assistant','status':'completed',
                 'content':[{'type':'output_text','text':json.dumps(value),'annotations':[]}]}]})

@@ -324,6 +324,10 @@ class SentencePracticeTests(unittest.TestCase):
         game = self.service.create_game('any', 'A2')
         snapshot = game['task_contract']
         self.assertIsNotNone(snapshot)
+        self.service.client.responses.create.return_value.output_text = json.dumps({**self.evaluation,
+            'criterion_report': {'contract_sha256': game['curriculum_contract']['contract_sha256'],
+                'judgements': [{'criterion_id': 'language-focus', 'outcome': 'insufficient_evidence',
+                    'score': None, 'feedback': 'This response does not show a time or reason link.', 'evidence': []}]}})
         with patch('services.word_jumble_service.generation_context', side_effect=AssertionError('Rebuilt a saved task')):
             self.assertEqual(self.service.get_game(game['id'])['task_contract'], snapshot)
             self.service.mark_response(game['id'], 'Семья дома, и кофе готов.', 0)
@@ -543,8 +547,8 @@ class SentencePracticeTests(unittest.TestCase):
         self.assertEqual(version, latest_schema_version())
         with sqlite3.connect(self.service.db_path) as conn, sqlite3.connect(backup) as old:
             after = conn.execute('SELECT * FROM word_jumble_attempts').fetchall()
-            self.assertEqual([row[:-1] for row in after], before)
-            self.assertTrue(all(row[-1] is None for row in after))
+            self.assertEqual([row[:-3] for row in after], before)
+            self.assertTrue(all(value is None for row in after for value in row[-3:]))
             self.assertEqual(old.execute('SELECT * FROM word_jumble_attempts').fetchall(), before)
         self.assertEqual(upgrade_database(self.service.db_path), (latest_schema_version(), None))
 

@@ -1,6 +1,6 @@
 # Comprehension task evidence
 
-New A1–B2 stories save their passage, questions and reading criteria before the learner answers. The existing story library remains the entry point. Existing stories, titles, images and audio are preserved; historical feedback is not converted into new curriculum evidence.
+New A1–B2 stories save their passage, questions and reading or listening criteria before the learner answers. The existing story library remains the entry point. Existing stories, titles, images and audio are preserved; historical feedback is not converted into new curriculum evidence.
 
 ## Reading criteria
 
@@ -25,21 +25,33 @@ The shared `activity_task_contracts` and `activity_criterion_reports` tables hol
 
 Repeated requests reuse the saved result. Checking unchanged answers also reuses feedback without another provider call. Short operation leases prevent duplicate assessment and extra-question calls across tabs. Each provider attempt has its own token, so an expired request cannot clear or commit a replacement request. Failed requests release the lease; an interrupted process leaves a lease that expires after three minutes.
 
-Adding questions creates a new task version. The four original reading criteria are reissued against that question set; extra questions receive ordinary feedback only. Earlier contracts and attempts remain unchanged. An older open form cannot overwrite the newer question set. Feedback exposure carries forward as `model_answer` support.
+Adding questions creates a new task version. The four original criteria are reissued against that question set; extra questions receive ordinary feedback only. Earlier contracts and attempts remain unchanged. An older open form cannot overwrite the newer question set. Feedback exposure carries forward as `model_answer` support.
 
 All reads and writes check the current profile and story ownership. Editable hidden fields cannot replace a contracted passage, questions, level or media. Removing the task identity from a new form does not permit a fallback write through the older story path.
 
 The existing Journey preparation and skill-estimate adapters read the saved attempt. They derive the topic, score and earlier-feedback exposure from that record, not from event claims. Corrections can still contribute topic preparation; they do not create another first-check Elo result. Daily coin caps do not stop eligible practice evidence. These compatibility adapters do not turn a reading criterion into a course pass.
 
-## Support and listening
+## Reading and listening
 
-Later checks record that earlier feedback was available. Word-translation use is not yet recorded for these generated tasks, so an empty support list does **not** establish independence.
+New A1–B2 tasks offer Reading or Listening. Reading shows the passage. Listening starts with the recording and questions; the transcript, story title, picture and word markup stay out of the rendered page until the learner chooses to reveal the text. Reading remains the default. Existing tasks keep their original mode and criteria.
 
-The ordinary Comprehension page shows the passage and offers audio of the same text. These checks therefore produce reading evidence only. Listening evidence requires an audio-first task with tracked transcript, translation and playback support. The authored teaching-unit listening player already supplies that foundation; the generated-story adapter remains future work.
+Listening criteria assess the meaning of the recording, not the grammar of a written answer. The saved contract contains the recording's URL, byte length and SHA-256 hash. The owned audio endpoint verifies those bytes before playback. Missing or changed audio cannot be silently replaced. A transcript remains available as a fallback. When no recording was prepared, listening judgements must remain unscored.
+
+The player enables answers after playback finishes or the transcript is disclosed. Playback is a browser receipt, not proof that the learner paid attention. Word help and transcript support remain available; using them changes how the response is interpreted, not whether practice is allowed. A pasted passage starts as transcript-assisted because its text was already visible to the learner.
+
+## Support receipts
+
+Migration `052` adds `comprehension_support_receipts` and a receipt-ID list to each saved attempt. A receipt belongs to a profile, task and revision. It records playback, transcript disclosure, word help or translation support. Disclosure saves before the server returns the content; failed requests do not silently reveal it.
+
+The current word popup provides lemmas, morphology and memory hints. It therefore records `hint`, rather than claiming that an English translation was shown. It uses the existing vocabulary lookup and enrichment pipeline. Saving a word still creates or reuses the lemma and its related form. It does not create a second vocabulary store.
+
+Each answer retains the support available at submission. Later help cannot rewrite an earlier result. Further checks record `model_answer`, since feedback was already available. Additional question sets inherit the original disclosures. Old tasks without this tracking keep their historical policy; an empty support list there does not establish independence.
+
+Listening Elo requires verified playback and an unassisted first check. Transcript, word-help and earlier-feedback attempts do not add Listening Elo, and listening results never add Reading Elo. Participation rewards and topic preparation retain their existing rules. None of these observations awards a course pass.
 
 ## Migration and limits
 
-Account import preserves frozen payloads and UUIDs, remaps the story's relational ID where necessary, and validates task ownership, question criteria, attempts, reports and revision history. An imported in-flight check lease is cleared so it cannot block practice in the destination. Source databases remain unchanged.
+Account import preserves frozen payloads and UUIDs, remaps the story's relational ID where necessary, and validates task ownership, question criteria, attempts, support receipts, reports and revision history. Importing the database does not copy generated media: the matching media files must also be transferred. A retained audio hash identifies the original recording; it does not claim that the file has been copied. An imported in-flight check lease is cleared so it cannot block practice in the destination. Source databases remain unchanged.
 
 Legacy stories and C1/C2 generation retain their existing feedback path. There is no retrospective marking, new level gate, vocabulary insertion or change to the generation model, voice selection, account controls or demo spending limits.
 

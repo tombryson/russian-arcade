@@ -1,6 +1,7 @@
 """Saved translations, explicit drafts, and atomic checks/rewards for the local user."""
 from datetime import datetime, timezone
 import sqlite3
+import json
 
 from models.database import connect_db
 from services.progression import award, legacy_profile
@@ -42,9 +43,17 @@ class TranslationRepository:
             result['attempts'] = [dict(row) for row in conn.execute(
                 'SELECT * FROM translation_attempts WHERE sentence_id=? ORDER BY id DESC', (sentence_id,))]
             result['checked_response'] = result['attempts'][0]['response'] if result['attempts'] else None
+            from services.activity_evidence import load_contract, reports_for_task
+            owner = activity_profile_id(conn)
+            result['curriculum_contract'] = load_contract(conn, owner, 'translation', str(sentence_id))
+            reports = reports_for_task(conn, owner, 'translation', str(sentence_id))
+            for attempt in result['attempts']:
+                if str(attempt['id']) in reports:
+                    attempt['criterion_report'] = reports[str(attempt['id'])]['report']
+                    attempt['criterion_support'] = reports[str(attempt['id'])]['support']
             return result
 
-    def save_content(self, sentence, english, topic, difficulty):
+    def save_content(self, sentence, english, topic, difficulty, *, curriculum_contract=None, expected_profile=None):
         """Save an exact pair once per task level, preserving earlier practice."""
         if type(difficulty) is not int or difficulty not in range(1, 7):
             raise ValueError('Invalid level')
@@ -54,12 +63,21 @@ class TranslationRepository:
         with connect_db(self.db_path) as conn:
             conn.execute('BEGIN IMMEDIATE')
             owner = activity_profile_id(conn)
+            if expected_profile is not None and expected_profile != owner:
+                raise TranslationConflict('The selected profile changed during preparation.')
+            if curriculum_contract is not None:
+                from services.production_evidence import check_content
+                check_content({'sentence': sentence, 'english': english, 'topic': topic, 'difficulty': difficulty},
+                              'translation', curriculum_contract)
             row = conn.execute("SELECT id FROM sentences WHERE sentence=? AND english=? AND topic=? AND difficulty=? AND COALESCE(owner_profile_id,'personal-learning')=? ORDER BY id LIMIT 1",
                                (sentence, english, topic, difficulty, owner)).fetchone()
             if row:
                 return row[0], False
             cursor = conn.execute('INSERT INTO sentences(sentence,english,topic,difficulty,score,audio_url,owner_profile_id) VALUES (?,?,?,?,0,?,?)',
                                   (sentence, english, topic, difficulty, '', owner))
+            if curriculum_contract is not None:
+                from services.activity_evidence import save_contract
+                save_contract(conn, owner, 'translation', str(cursor.lastrowid), curriculum_contract)
             return cursor.lastrowid, True
 
     @staticmethod
@@ -101,17 +119,35 @@ class TranslationRepository:
             if not isinstance(assessment.get(key), str) or not assessment[key].strip() or len(assessment[key]) > 1000:
                 raise ValueError('Invalid assessment feedback')
 
-    def save_check(self, sentence_id, response, revision, assessment, language):
+    def save_check(self, sentence_id, response, revision, assessment, language, *, expected_profile=None):
         self.validate_answer(response, checking=True)
         self.validate_assessment(assessment)
         with connect_db(self.db_path) as conn:
             conn.execute('BEGIN IMMEDIATE')
             self.assert_revision(conn, sentence_id, revision)
+            owner = activity_profile_id(conn)
+            if expected_profile is not None and owner != expected_profile:
+                raise TranslationConflict('The selected profile changed during assessment.')
+            from services.activity_evidence import load_contract, save_report
+            from services.production_evidence import attempt_support
+            from contracts.curriculum import validate_judgements
+            contract = load_contract(conn, owner, 'translation', str(sentence_id))
+            report = assessment.get('criterion_report')
+            if contract is not None:
+                validate_judgements(contract, report, response_text=response)
+            elif report is not None:
+                raise ValueError('A legacy task cannot acquire criteria during assessment.')
+            support = attempt_support(conn, 'translation', str(sentence_id)) if contract is not None else None
             self.write_draft(conn, sentence_id, response, revision)
             attempt = conn.execute('''INSERT INTO translation_attempts
-                (sentence_id,response,score,strength,next_step,example,ui_language,created_at,coins_earned,elo_change,already_rewarded)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?)''', (sentence_id, response, assessment['score'], assessment['strength'],
-                assessment['next_step'], assessment['example'], language, timestamp(), 0, 0, 0))
+                (sentence_id,response,score,strength,next_step,example,ui_language,created_at,coins_earned,elo_change,already_rewarded,criterion_report_json,criterion_support_json)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''', (sentence_id, response, assessment['score'], assessment['strength'],
+                assessment['next_step'], assessment['example'], language, timestamp(), 0, 0, 0,
+                json.dumps(report, ensure_ascii=False) if report is not None else None,
+                json.dumps(support) if support is not None else None))
+            if contract is not None:
+                save_report(conn, owner, 'translation', str(sentence_id), str(attempt.lastrowid), report,
+                            response_text=response, support=support)
             profile_id = legacy_profile(conn)
             coins = award(conn, profile_id, activity='translation', content_key=f'translation:{sentence_id}',
                           source_key=f'translation-attempt:{attempt.lastrowid}', title='Sentence practice',
@@ -119,6 +155,21 @@ class TranslationRepository:
             conn.execute('UPDATE translation_attempts SET coins_earned=?,already_rewarded=? WHERE id=?',
                          (coins, int(not coins), attempt.lastrowid))
         return revision + 1
+
+    def record_reference_views(self, sentence_ids):
+        """Record only references actually returned to this profile by Phrasebook."""
+        from services.activity_evidence import load_contract
+        with connect_db(self.db_path) as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            owner = activity_profile_id(conn)
+            for sentence_id in set(sentence_ids):
+                if type(sentence_id) is not int or sentence_id < 1:
+                    raise ValueError('Invalid sentence identity')
+                if load_contract(conn, owner, 'translation', str(sentence_id)) is None:
+                    continue
+                after_id = conn.execute('SELECT MAX(id) FROM translation_attempts WHERE sentence_id=?', (sentence_id,)).fetchone()[0]
+                conn.execute('INSERT OR IGNORE INTO translation_reference_views(sentence_id,profile_id,after_attempt_id) VALUES (?,?,?)',
+                             (sentence_id, owner, after_id))
 
     def save_audio(self, sentence_id, url):
         # Generated media is local. Do not turn model/user output into an external URL.

@@ -11,6 +11,8 @@ from services.curriculum import LEVELS, level_options, normalize_level, topic_op
 from utils.activity_display import topic_label, readable_date
 from utils.i18n import translate_ui
 from utils.shell import render_page
+from utils.activity_owner import activity_profile_id
+from models.database import connect_db
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +40,8 @@ def create_sentences_blueprint(db_path, sentence_service, user_service):
         item.setdefault('saved_draft', item['draft'])
         item['state'] = ('draft' if item.get('draft_saved_at') and item['draft'] != item.get('checked_response')
                          else 'checked' if item.get('checked_response') is not None else 'ready')
+        from services.production_evidence import present_details
+        present_details(item, language())
         return item
 
     def context(active_page='sentences'):
@@ -117,8 +121,11 @@ def create_sentences_blueprint(db_path, sentence_service, user_service):
             topic = request.form.get('topic', 'any')
             if not topic or len(topic) > 100:
                 raise ValueError('Invalid setup')
+            with connect_db(db_path) as conn:
+                owner = activity_profile_id(conn)
             pair = sentence_service.get_sentence(topic, difficulty)
-            sentence_id, _ = repository.save_content(pair['sentence'], pair['english'], topic, difficulty)
+            sentence_id, _ = repository.save_content(pair['sentence'], pair['english'], topic, difficulty,
+                curriculum_contract=pair.get('curriculum_contract'), expected_profile=owner)
         except (ValueError, LookupError, TranslationUnavailable, sqlite3.Error) as error:
             return failure(error, preparing=True)
         target = url_for('sentences.practice', sentence_id=sentence_id)
@@ -136,8 +143,11 @@ def create_sentences_blueprint(db_path, sentence_service, user_service):
             repository.check_revision(sentence_id, revision)
             if checking:
                 # No score, difficulty, prompt or reference answer is accepted from the browser.
-                assessment = sentence_service.assess_translation(item['sentence'], item['english'], response, language())
-                revision = repository.save_check(sentence_id, response, revision, assessment, language())
+                options = {'curriculum_contract': item['curriculum_contract']} if item.get('curriculum_contract') else {}
+                with connect_db(db_path) as conn:
+                    owner = activity_profile_id(conn)
+                assessment = sentence_service.assess_translation(item['sentence'], item['english'], response, language(), **options)
+                revision = repository.save_check(sentence_id, response, revision, assessment, language(), expected_profile=owner)
             else:
                 revision = repository.save_draft(sentence_id, response, revision)
         except (ValueError, LookupError, TranslationUnavailable, sqlite3.Error) as error:
@@ -190,7 +200,9 @@ def create_sentences_blueprint(db_path, sentence_service, user_service):
         except (ValueError, TranslationUnavailable, sqlite3.Error) as error:
             if enhanced():
                 return failure(error, preparing=True)
-            return render_page('saved_sentences.html', **context('sentences_saved'), error=t('add_failed'),
+            library = context('sentences_saved')
+            repository.record_reference_views([item['id'] for item in library['sentences']])
+            return render_page('saved_sentences.html', **library, error=t('add_failed'),
                                added_russian=request.form.get('sentence', ''), added_english=request.form.get('english', ''),
                                added_topic=topic, added_level=difficulty,
                                add_open=True), 400
@@ -202,12 +214,14 @@ def create_sentences_blueprint(db_path, sentence_service, user_service):
         item = repository.load(sentence_id)
         if not item:
             return page(error=t('missing')), 404
+        repository.record_reference_views([sentence_id])
         return render_page('sentence_detail.html', sentence=present(item), active_page='sentences_saved')
 
     @blueprint.get('/sentences/saved')
     def sentences_saved():
         library = context('sentences_saved')
         if request.args.get('fetch_all') == 'true' and enhanced():
+            repository.record_reference_views([item['id'] for item in library['sentences']])
             return jsonify(sentences=library['sentences'], topics=[topic['value'] for topic in library['topics']], error=None)
         selected = request.args.get('topic', '')
         selected_level = request.args.get('level', type=int)
@@ -223,6 +237,7 @@ def create_sentences_blueprint(db_path, sentence_service, user_service):
             library['sentences'] = [item for item in library['sentences']
                                     if query in (item.get('sentence') or '').casefold()
                                     or query in (item.get('english') or '').casefold()]
+        repository.record_reference_views([item['id'] for item in library['sentences']])
         return render_page('saved_sentences.html', **library, selected_topic=selected,
                            selected_level=selected_level, search=search)
 

@@ -21,7 +21,20 @@ The static inventory includes the 32 focused preparation items and target-linked
 
 Shipped target-linked items: {'focused_practice': 32, 'checkpoint': 120}. A further 108 legacy questions or optional writing prompts have no item-level target contract in this inventory.
 
-Runtime-generated activities, source editions beyond those inspected, complete lexical minima, and human assessment validation remain unaudited. Independent production and whole-level assessment coverage must be established separately. Authored unit contracts are listed separately below; they remain practice/diagnostic tasks, not validated level assessments. A task count is never a release-readiness claim.
+Runtime-generated tasks are not part of this static count. Source editions beyond those inspected, complete lexical minima, and human assessment validation remain unaudited. Independent production and whole-level assessment coverage must be established separately. Authored unit contracts are listed separately below; they remain practice/diagnostic tasks, not validated level assessments. A task count is never a release-readiness claim.
+
+## Authored teaching units
+
+| Unit | Contextual choices | Typed forms | Prepared listening items |
+| --- | ---: | ---: | ---: |
+| Where and where to (`location-destination-v1`) | 4 | 3 | 3 |
+| Possession and absence (`possession-absence-v1`) | 6 | 4 | 0 |
+| Objects and recipients (`objects-recipients-v1`) | 6 | 4 | 0 |
+| Time and daily routines (`time-routine-v1`) | 6 | 5 | 0 |
+
+Each unit also opens its own Writing task. A zero listening count means that no listening activity is offered for that unit. Speaking links to existing scenarios do not automatically add a unit-specific Speaking criterion. See [the validation record and reviewer workflow](curriculum-validation.md) for the pending language and learner review.
+
+There are 48 directly authored task definitions linked to 18 reference requirements. These counts include the narrow mapped Speaking diagnostics listed below.
 
 ## Authored reference tasks
 
@@ -38,6 +51,40 @@ Runtime-generated activities, source editions beyond those inspected, complete l
 | `location-destination-v1:listening-v1:after-pharmacy` | `a1.listening.short-message` | unit_listening_choice |
 | `location-destination-v1:listening-v1:inside-museum` | `a1.listening.short-message` | unit_listening_choice |
 | `location-destination-v1:writing:clear-meeting-message` | `a1.writing.personal-message` | unit_writing |
+| `possession-absence-v1:bag-message` | `a1.reading.practical-information` | unit_choice |
+| `possession-absence-v1:present-item` | `a1.language.nominative-existence` | unit_choice |
+| `possession-absence-v1:absent-item` | `a1.language.genitive-absence` | unit_choice |
+| `possession-absence-v1:possessor` | `a1.language.genitive-owner-u` | unit_choice |
+| `possession-absence-v1:owner-form` | `a1.language.genitive-possession` | unit_choice |
+| `possession-absence-v1:borrowed-map` | `a1.reading.narrative-meaning` | unit_choice |
+| `possession-absence-v1:forms-v1:form-owner-u` | `a1.language.genitive-owner-u` | unit_controlled_text |
+| `possession-absence-v1:forms-v1:form-absence` | `a1.language.genitive-absence` | unit_controlled_text |
+| `possession-absence-v1:forms-v1:form-owned` | `a1.language.genitive-possession` | unit_controlled_text |
+| `possession-absence-v1:forms-v1:form-pronoun` | `a1.language.genitive-owner-u` | unit_controlled_text |
+| `possession-absence-v1:writing:clear-packing-message` | `a1.writing.personal-message` | unit_writing |
+| `objects-recipients-v1:delivery-note` | `a1.reading.reference-and-sequence` | unit_choice |
+| `objects-recipients-v1:object-form` | `a1.language.accusative-object` | unit_choice |
+| `objects-recipients-v1:person-object` | `a1.language.accusative-object` | unit_choice |
+| `objects-recipients-v1:recipient-form` | `a1.language.dative-recipient` | unit_choice |
+| `objects-recipients-v1:verb-government` | `a1.language.dative-recipient` | unit_choice |
+| `objects-recipients-v1:recipient-message` | `a1.reading.reference-and-sequence` | unit_choice |
+| `objects-recipients-v1:forms-v1:form-object` | `a1.language.accusative-object` | unit_controlled_text |
+| `objects-recipients-v1:forms-v1:form-person` | `a1.language.accusative-object` | unit_controlled_text |
+| `objects-recipients-v1:forms-v1:form-recipient` | `a1.language.dative-recipient` | unit_controlled_text |
+| `objects-recipients-v1:forms-v1:form-call` | `a1.language.dative-recipient` | unit_controlled_text |
+| `objects-recipients-v1:writing:clear-recipient-message` | `a1.writing.personal-message` | unit_writing |
+| `time-routine-v1:changed-time` | `a1.reading.practical-information` | unit_choice |
+| `time-routine-v1:weekday` | `a1.language.accusative-clock-weekday` | unit_choice |
+| `time-routine-v1:plural-verb` | `a1.language.verb-conjugation` | unit_choice |
+| `time-routine-v1:changed-stem` | `a1.language.verb-conjugation` | unit_choice |
+| `time-routine-v1:past-gender` | `a1.language.verb-tense` | unit_choice |
+| `time-routine-v1:event-order` | `a1.reading.reference-and-sequence` | unit_choice |
+| `time-routine-v1:forms-v1:form-weekday` | `a1.language.accusative-clock-weekday` | unit_controlled_text |
+| `time-routine-v1:forms-v1:form-we` | `a1.language.verb-conjugation` | unit_controlled_text |
+| `time-routine-v1:forms-v1:form-i` | `a1.language.verb-conjugation` | unit_controlled_text |
+| `time-routine-v1:forms-v1:form-past` | `a1.language.verb-tense` | unit_controlled_text |
+| `time-routine-v1:forms-v1:form-future` | `a1.language.verb-tense` | unit_controlled_text |
+| `time-routine-v1:writing:clear-routine-description` | `a1.writing.connected-description` | unit_writing |
 | `directions-a1-park-v2.location-question:ask-location` | `a1.speaking.ask-and-answer` | speaking_audio_diagnostic |
 | `directions-a1-pharmacy-v2.location-question:ask-location` | `a1.speaking.ask-and-answer` | speaking_audio_diagnostic |
 | `directions-a1-post-office-v2.location-question:ask-location` | `a1.speaking.ask-and-answer` | speaking_audio_diagnostic |
@@ -54,23 +101,23 @@ These task definitions use frozen contracts at runtime. They do not establish fu
 | `a1.language.nominative-address` — Addressing someone | Unallocated | 0 / 0 / 0 | 0 |
 | `a1.language.nominative-role` — Describing who someone is | Unallocated | 0 / 0 / 0 | 0 |
 | `a1.language.nominative-event` — Naming an event | Unallocated | 0 / 0 / 0 | 0 |
-| `a1.language.nominative-existence` — Saying what is there | Unallocated | 0 / 0 / 0 | 0 |
-| `a1.language.genitive-possession` — Whose object it is | Unallocated | 0 / 0 / 0 | 0 |
+| `a1.language.nominative-existence` — Saying what is there | Unallocated | 0 / 0 / 0 | 1 |
+| `a1.language.genitive-possession` — Whose object it is | Unallocated | 0 / 0 / 0 | 2 |
 | `a1.language.genitive-part-whole` — Part of a place or thing | Unallocated | 0 / 0 / 0 | 0 |
-| `a1.language.genitive-absence` — Saying something is absent | Unallocated | 0 / 0 / 0 | 0 |
+| `a1.language.genitive-absence` — Saying something is absent | Unallocated | 0 / 0 / 0 | 2 |
 | `a1.language.genitive-quantity` — Nouns after small numbers | `a1.numbers.clock-hour-forms.select` (partial) | 1 / 1 / 6 | 0 |
 | `a1.language.genitive-calendar-month` — The month in a date | Unallocated | 0 / 0 / 0 | 0 |
 | `a1.language.genitive-origin` — Where someone comes from | Unallocated | 0 / 0 / 0 | 0 |
-| `a1.language.genitive-owner-u` — Who has something | `a1.family.possession-pattern.select` (partial) | 0 / 0 / 0 | 0 |
-| `a1.language.dative-recipient` — Who receives the action | Unallocated | 0 / 0 / 0 | 0 |
+| `a1.language.genitive-owner-u` — Who has something | `a1.family.possession-pattern.select` (partial) | 0 / 0 / 0 | 3 |
+| `a1.language.dative-recipient` — Who receives the action | Unallocated | 0 / 0 / 0 | 4 |
 | `a1.language.dative-age` — Saying someone’s age | Unallocated | 0 / 0 / 0 | 0 |
 | `a1.language.dative-need` — Who needs to do something | Unallocated | 0 / 0 / 0 | 0 |
 | `a1.language.dative-person-destination` — Going to a person | Unallocated | 0 / 0 / 0 | 0 |
-| `a1.language.accusative-object` — The object of an action | `a1.food.accusative-object.select` (partial)<br>`a1.clothing.accusative-object.select` (partial) | 0 / 0 / 0 | 0 |
+| `a1.language.accusative-object` — The object of an action | `a1.food.accusative-object.select` (partial)<br>`a1.clothing.accusative-object.select` (partial) | 0 / 0 / 0 | 4 |
 | `a1.language.accusative-name-pattern` — Asking and giving names | `a1.greetings.name-pattern.select` (equivalent) | 0 / 0 / 0 | 0 |
 | `a1.language.accusative-duration` — How long an action lasts | `a1.numbers.time-versus-duration.select` (partial) | 1 / 1 / 3 | 0 |
 | `a1.language.accusative-destination` — Going into or to a place | Unallocated | 0 / 0 / 0 | 2 |
-| `a1.language.accusative-clock-weekday` — At a time or on a weekday | Unallocated | 0 / 0 / 0 | 0 |
+| `a1.language.accusative-clock-weekday` — At a time or on a weekday | Unallocated | 0 / 0 / 0 | 2 |
 | `a1.language.instrumental-activity` — An activity with заниматься | Unallocated | 0 / 0 / 0 | 0 |
 | `a1.language.instrumental-profession` — A profession with быть | Unallocated | 0 / 0 / 0 | 0 |
 | `a1.language.instrumental-company` — Doing something with someone | Unallocated | 0 / 0 / 0 | 0 |
@@ -83,8 +130,8 @@ These task definitions use frozen contracts at runtime. They do not establish fu
 | `a1.language.adjective-agreement` — Describing a noun | `a1.home.adjective-agreement.select` (partial)<br>`a1.colors.gender-agreement.select` (partial)<br>`a1.colors.plural-agreement.select` (partial)<br>`a1.clothing.adjective-agreement.select` (partial) | 1 / 1 / 3 | 0 |
 | `a1.language.adjective-oblique-recognition` — Recognising adjective case forms | Unallocated | 0 / 0 / 0 | 0 |
 | `a1.language.short-adjective-state` — States and obligations | Unallocated | 0 / 0 / 0 | 0 |
-| `a1.language.verb-conjugation` — Matching a verb to its subject | `a1.daily_activities.present-conjugation.select` (partial)<br>`a1.daily_activities.irregular-present.select` (partial)<br>`a1.weather.present-weather-patterns.select` (related) | 1 / 1 / 3 | 0 |
-| `a1.language.verb-tense` — Present, past and future | `a1.daily_activities.subject-verb-time.select` (partial) | 0 / 0 / 0 | 0 |
+| `a1.language.verb-conjugation` — Matching a verb to its subject | `a1.daily_activities.present-conjugation.select` (partial)<br>`a1.daily_activities.irregular-present.select` (partial)<br>`a1.weather.present-weather-patterns.select` (related) | 1 / 1 / 3 | 4 |
+| `a1.language.verb-tense` — Present, past and future | `a1.daily_activities.subject-verb-time.select` (partial) | 0 / 0 / 0 | 3 |
 | `a1.language.verb-aspect` — An action and its completion | Unallocated | 0 / 0 / 0 | 0 |
 | `a1.language.imperative` — Requests and instructions | `a1.places.direction-commands.select` (partial) | 1 / 1 / 3 | 0 |
 | `a1.language.verb-government` — Verb and dependent phrase | `a1.food.want-pattern.select` (partial) | 0 / 0 / 0 | 0 |
@@ -102,14 +149,14 @@ These task definitions use frozen contracts at runtime. They do not establish fu
 | `a1.language.reported-speech` — Reporting a short message | Unallocated | 0 / 0 / 0 | 0 |
 | `a1.language.neutral-word-order` — Sentence structure | Unallocated | 0 / 0 / 0 | 0 |
 | `a1.reading.cyrillic-decoding` — Reading Cyrillic | Unallocated | 0 / 0 / 0 | 0 |
-| `a1.reading.practical-information` — Finding practical information | `a1.greetings.exchange-names.read` (partial)<br>`a1.numbers.recognise-number.read` (partial)<br>`a1.numbers.event-time.read` (partial)<br>`a1.home.identify-rooms-furniture.read` (partial)<br>`a1.home.locate-object.read` (partial)<br>`a1.food.identify-food-drink.read` (partial)<br>`a1.food.make-request.read` (partial)<br>`a1.daily_activities.ask-current-activity.read` (partial)<br>`a1.colors.identify-colour-size.read` (partial)<br>`a1.colors.describe-object.read` (partial)<br>`a1.clothing.identify-clothes.read` (partial)<br>`a1.clothing.identify-clothing-description.read` (partial)<br>`a1.places.ask-location.read` (partial)<br>`a1.weather.understand-weather.read` (partial) | 12 / 12 / 39 | 1 |
-| `a1.reading.narrative-meaning` — Understanding a short account | `a1.daily_activities.describe-routine.read` (partial)<br>`a1.weather.choose-weather-plan.read` (partial) | 2 / 2 / 6 | 0 |
-| `a1.reading.reference-and-sequence` — Following people and events | `a1.family.identify-relatives.read` (partial)<br>`a1.family.describe-family.read` (partial)<br>`a1.places.follow-directions.read` (partial) | 2 / 2 / 9 | 0 |
+| `a1.reading.practical-information` — Finding practical information | `a1.greetings.exchange-names.read` (partial)<br>`a1.numbers.recognise-number.read` (partial)<br>`a1.numbers.event-time.read` (partial)<br>`a1.home.identify-rooms-furniture.read` (partial)<br>`a1.home.locate-object.read` (partial)<br>`a1.food.identify-food-drink.read` (partial)<br>`a1.food.make-request.read` (partial)<br>`a1.daily_activities.ask-current-activity.read` (partial)<br>`a1.colors.identify-colour-size.read` (partial)<br>`a1.colors.describe-object.read` (partial)<br>`a1.clothing.identify-clothes.read` (partial)<br>`a1.clothing.identify-clothing-description.read` (partial)<br>`a1.places.ask-location.read` (partial)<br>`a1.weather.understand-weather.read` (partial) | 12 / 12 / 39 | 3 |
+| `a1.reading.narrative-meaning` — Understanding a short account | `a1.daily_activities.describe-routine.read` (partial)<br>`a1.weather.choose-weather-plan.read` (partial) | 2 / 2 / 6 | 1 |
+| `a1.reading.reference-and-sequence` — Following people and events | `a1.family.identify-relatives.read` (partial)<br>`a1.family.describe-family.read` (partial)<br>`a1.places.follow-directions.read` (partial) | 2 / 2 / 9 | 3 |
 | `a1.listening.sound-contrasts` — Hearing word differences | Unallocated | 0 / 0 / 0 | 0 |
 | `a1.listening.short-message` — Understanding a spoken message | `a1.greetings.exchange-names.listen` (partial)<br>`a1.numbers.recognise-number.listen` (partial)<br>`a1.numbers.event-time.listen` (partial)<br>`a1.family.identify-relatives.listen` (partial)<br>`a1.family.describe-family.listen` (partial)<br>`a1.home.identify-rooms-furniture.listen` (partial)<br>`a1.home.locate-object.listen` (partial)<br>`a1.food.identify-food-drink.listen` (partial)<br>`a1.daily_activities.describe-routine.listen` (partial)<br>`a1.colors.identify-colour-size.listen` (partial)<br>`a1.colors.describe-object.listen` (partial)<br>`a1.clothing.identify-clothes.listen` (partial)<br>`a1.clothing.identify-clothing-description.listen` (partial)<br>`a1.places.follow-directions.listen` (partial)<br>`a1.weather.understand-weather.listen` (partial)<br>`a1.weather.choose-weather-plan.listen` (partial) | 5 / 5 / 24 | 3 |
 | `a1.listening.dialogue-intention` — Understanding what someone wants | `a1.greetings.polite-greeting.listen` (partial)<br>`a1.food.make-request.listen` (partial)<br>`a1.daily_activities.ask-current-activity.listen` (partial)<br>`a1.places.ask-location.listen` (partial) | 0 / 0 / 6 | 0 |
-| `a1.writing.personal-message` — Writing a personal message | `a1.greetings.polite-greeting.write` (partial)<br>`a1.greetings.exchange-names.write` (partial)<br>`a1.home.describe-location.write` (related)<br>`a1.food.make-request.write` (partial)<br>`a1.daily_activities.ask-current-activity.write` (related)<br>`a1.places.ask-location.write` (related)<br>`a1.places.follow-directions.write` (related)<br>`a1.weather.choose-weather-plan.write` (related) | 0 / 0 / 0 | 1 |
-| `a1.writing.connected-description` — Describing everyday life | `a1.family.describe-family.write` (partial)<br>`a1.daily_activities.describe-routine.write` (partial)<br>`a1.colors.describe-object.write` (partial)<br>`a1.weather.describe-weather.write` (related) | 0 / 0 / 0 | 0 |
+| `a1.writing.personal-message` — Writing a personal message | `a1.greetings.polite-greeting.write` (partial)<br>`a1.greetings.exchange-names.write` (partial)<br>`a1.home.describe-location.write` (related)<br>`a1.food.make-request.write` (partial)<br>`a1.daily_activities.ask-current-activity.write` (related)<br>`a1.places.ask-location.write` (related)<br>`a1.places.follow-directions.write` (related)<br>`a1.weather.choose-weather-plan.write` (related) | 0 / 0 / 0 | 3 |
+| `a1.writing.connected-description` — Describing everyday life | `a1.family.describe-family.write` (partial)<br>`a1.daily_activities.describe-routine.write` (partial)<br>`a1.colors.describe-object.write` (partial)<br>`a1.weather.describe-weather.write` (related) | 0 / 0 / 0 | 1 |
 | `a1.writing.source-based-message` — Using information from a text | Unallocated | 0 / 0 / 0 | 0 |
 | `a1.speaking.intelligibility` — Speaking clearly enough to understand | Unallocated | 0 / 0 / 0 | 0 |
 | `a1.speaking.social-etiquette` — Greetings and polite exchanges | `a1.greetings.polite-greeting.read` (related)<br>`a1.greetings.polite-greeting.speak` (partial) | 0 / 0 / 0 | 0 |

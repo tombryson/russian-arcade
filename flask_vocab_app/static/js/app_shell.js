@@ -498,9 +498,10 @@
         try {
             const [{ h, render }, { StoryText }] = await Promise.all([
                 loadPreact(),
-                import('/static/js/StoryText.js?v=2'),
+                import('/static/js/StoryText.js?v=3'),
             ]);
             const words = JSON.parse(storyContainer.dataset.words || '[]');
+            const taskId = document.querySelector('#question-form [name="task_id"]')?.value || storyContainer.dataset.taskId;
             // Replace the readable server fallback once per DOM node. A restored
             // HTMX page has a new node and must be mounted again.
             if (!storyMounts.has(storyContainer)) {
@@ -510,7 +511,7 @@
             render(
                 h(StoryText, {
                     words,
-                    source: { story_id: storyContainer.dataset.storyId || '', story_key: storyContainer.dataset.storyKey || '' },
+                    source: { story_id: storyContainer.dataset.storyId || '', story_key: storyContainer.dataset.storyKey || '', ...(taskId ? {task_id: taskId} : {}) },
                     initialVisibility:
                         storyContainer.dataset.visibility || 'revealed',
                 }),
@@ -521,6 +522,8 @@
                 `<div class="alert alert-danger">${t('story_text_error')}</div>`;
         }
     }
+
+    document.addEventListener('arcade:comprehension-transcript', mountStoryText);
 
     async function confirmSync() {
         const dataElement = document.getElementById('sync-to-add');
@@ -806,6 +809,7 @@
         }
     });
     document.body.addEventListener('htmx:afterSwap', (event) => {
+        if (event.detail.target.id === 'questions-section') mountStoryText();
         if (event.detail.target.id === 'mainContent') {
             setMainLoading(false);
             return;

@@ -10,7 +10,7 @@
   {% endfor %}
   {% if result.criterion_reports %}
   <details>
-    <summary>{{ 'Понимание текста' if ru else 'Understanding the text' }}</summary>
+    <summary>{{ 'Понимание содержания' if ru else 'Understanding the message' }}</summary>
     {% for index, report in result.criterion_reports.items() %}
     <p><strong>{{ ui_t('comprehension.question') }} {{ index|int + 1 }}:</strong> {{ report.judgements[0].feedback }}</p>
     {% endfor %}

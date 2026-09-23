@@ -15,31 +15,31 @@
       </section>{% endfor %}
     </div>
     <div class="curriculum-unit-practice">
-      <section><h2>{{ 'Проверьте себя' if russian else 'Check the difference' }}</h2><p>{{ 'Четыре вопроса о месте и направлении.' if russian else 'Four questions about location and destination.' }}</p>
+      <section><h2>{{ 'Проверьте себя' if russian else 'Check the difference' }}</h2><p>{{ unit.practice_summary_ru|default('Четыре вопроса о месте и направлении.') if russian else unit.practice_summary|default('Four questions about location and destination.') }}</p>
         {% if profile_id %}<form method="post" action="/curriculum/units/{{ unit.id }}/practice" hx-boost="false">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="profile_id" value="{{ profile_id }}"><input type="hidden" name="request_id" value="{{ request_id }}">
           <button class="btn btn-primary" type="submit">{{ 'Начать или продолжить' if russian else 'Start or continue practice' }} →</button>
         </form>{% else %}<a href="/post/profiles">{{ 'Выбрать профиль' if russian else 'Choose your profile to practise' }} →</a>{% endif %}
       </section>
-      <section><h2>{{ 'Впишите форму слова' if russian else 'Write the word form' }}</h2><p>{{ 'Дополните три предложения о месте и направлении.' if russian else 'Complete three sentences about location and destination.' }}</p>
+      <section><h2>{{ 'Впишите форму слова' if russian else 'Write the word form' }}</h2><p>{{ unit.forms.summary_ru|default('Дополните три предложения о месте и направлении.') if russian else unit.forms.summary|default('Complete three sentences about location and destination.') }}</p>
         {% if profile_id %}<form method="post" action="/curriculum/units/{{ unit.id }}/forms" hx-boost="false">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="profile_id" value="{{ profile_id }}"><input type="hidden" name="request_id" value="{{ forms_request_id }}">
           <button class="btn btn-outline-primary" type="submit">{{ 'Начать или продолжить' if russian else 'Start or continue forms' }} →</button>
         </form>{% else %}<a href="/post/profiles">{{ 'Выбрать профиль' if russian else 'Choose your profile to practise' }} →</a>{% endif %}
       </section>
-      <section><h2>{{ 'Узнайте место на слух' if russian else 'Listen for the place' }}</h2><p>{{ 'Три коротких сообщения. Послушайте и выберите ответ.' if russian else 'Three short messages. Listen and choose the answer.' }}</p>
+      {% if unit.listening_available %}<section><h2>{{ 'Узнайте место на слух' if russian else 'Listen for the place' }}</h2><p>{{ 'Три коротких сообщения. Послушайте и выберите ответ.' if russian else 'Three short messages. Listen and choose the answer.' }}</p>
         {% if profile_id %}<form method="post" action="/curriculum/units/{{ unit.id }}/listening" hx-boost="false">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="profile_id" value="{{ profile_id }}"><input type="hidden" name="request_id" value="{{ listening_request_id }}">
           <button class="btn btn-outline-primary" type="submit">{{ 'Начать или продолжить' if russian else 'Start or continue listening' }} →</button>
         </form>{% else %}<a href="/post/profiles">{{ 'Выбрать профиль' if russian else 'Choose your profile to practise' }} →</a>{% endif %}
-      </section>
-      {% if not household_enabled and unit_writing_available %}<section><h2>{{ 'Напишите другу' if russian else 'Write to a friend' }}</h2><p>{{ 'Скажите, где вы сейчас и где встретитесь.' if russian else 'Say where you are and where you will meet.' }}</p>
+      </section>{% endif %}
+      {% if not household_enabled and unit_writing_available %}<section><h2>{{ unit.writing.title if russian else unit.writing.title_en }}</h2><p>{{ unit.writing_summary_ru|default('Скажите, где вы сейчас и где встретитесь.') if russian else unit.writing_summary|default('Say where you are and where you will meet.') }}</p>
         {% if profile_id %}<form method="post" action="/curriculum/units/{{ unit.id }}/writing" hx-boost="false">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="profile_id" value="{{ profile_id }}">
           <button class="btn btn-outline-primary" type="submit">{{ 'Открыть задание' if russian else 'Open writing task' }} →</button>
         </form>{% else %}<a href="/post/profiles">{{ 'Выбрать профиль' if russian else 'Choose your profile to write' }} →</a>{% endif %}
       </section>{% endif %}
-      <section><h2>{{ unit.speaking_title_ru if russian else unit.speaking_title }}</h2><p>{{ 'Поговорите с местным жителем в разговорной практике.' if russian else 'Talk to a local resident in Speaking.' }}</p><a href="{{ unit.speaking_href }}" hx-boost="false">{{ 'Открыть разговор' if russian else 'Open conversation' }} →</a></section>
+      {% if unit.speaking_href %}<section><h2>{{ unit.speaking_title_ru if russian else unit.speaking_title }}</h2><p>{{ unit.speaking_summary_ru|default('Поговорите с местным жителем в разговорной практике.') if russian else unit.speaking_summary|default('Talk to a local resident in Speaking.') }}</p><a href="{{ unit.speaking_href }}" hx-boost="false">{{ 'Открыть разговор' if russian else 'Open conversation' }} →</a></section>{% endif %}
     </div>
   </div>
 </main>

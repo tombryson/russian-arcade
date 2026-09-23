@@ -44,7 +44,7 @@
 .curriculum-reference-links a { color:inherit; text-underline-offset:3px; }
 .curriculum-unit-nav { display:flex; justify-content:space-between; margin-bottom:12px; font-size:14px; }
 .curriculum-unit-nav a,.curriculum-unit-practice a { color:inherit; text-underline-offset:4px; }
-.curriculum-unit-examples { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin:0 0 24px; }
+.curriculum-unit-examples { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,19rem),1fr)); gap:24px; margin:0 0 24px; }
 .curriculum-unit-examples section { padding:18px 20px; background:var(--wp-surface-sheet,#30374e); border-radius:12px; }
 .curriculum-unit h2 { margin:0 0 10px; font:500 20px/1.4 var(--wp-font-reading,sans-serif); color:inherit; }
 .curriculum-unit-examples p,.curriculum-unit-practice p { font-size:15px; line-height:1.5; margin:0 0 16px; }
