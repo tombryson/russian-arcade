@@ -52,6 +52,6 @@ export function WelcomeHero({ headingRef, profileKey, nextDestination, courseJou
       </span>
       <span class="ticket-action">{action} <span aria-hidden="true">↗</span></span>
     </a>
-    <div class="first-steps-home-link"><a class="text-link" href={courseJourney ? '#journey' : '#first-steps'}>{courseJourney ? 'See the journey' : 'See all five lessons'} <span aria-hidden="true">→</span></a>{failed && <span role="status"> Your place could not load. <button class="text-link" onClick={()=>setRevision(v=>v+1)}>Try again</button></span>}</div>
+    {(!courseJourney || failed) && <div class="first-steps-home-link">{!courseJourney && <a class="text-link" href="#first-steps">See all five lessons <span aria-hidden="true">→</span></a>}{failed && <span role="status"> Your place could not load. <button class="text-link" onClick={()=>setRevision(v=>v+1)}>Try again</button></span>}</div>}
   </section>;
 }
