@@ -8,7 +8,7 @@ import unittest
 from migrations import upgrade_database
 from repositories.learning_repository import payload_hash, timestamp
 from services.course_evidence import freeze_course_evidence
-from services.course_progression import course_snapshot
+from services.course_progression import checkpoint_start, course_snapshot
 from services.progression import award, personal_profile, reverse
 
 
@@ -68,6 +68,37 @@ class CourseEvidenceTests(unittest.TestCase):
                    ('greetings', 'greetings', 'numbers', 'numbers', 'family', 'family')]
         self.assertEqual(amounts, [3, 3, 3, 3, 0, 0])
         self.assertEqual(self.topic('family')['successful_tasks'], 2)
+
+    def test_standalone_activity_work_prepares_without_creating_target_evidence(self):
+        self.credit(*self.translation())
+        chapter = course_snapshot(self.conn, self.pid)['chapters'][0]
+        self.assertAlmostEqual(chapter['progress'], 1 / 6)
+        self.assertEqual(chapter['preparation_basis'], 'activity_practice')
+        self.assertEqual(chapter['target_preparation_progress'], 0)
+        self.assertEqual(chapter['target_coverage']['prepared_count'], 0)
+        self.credit(*self.translation())
+        for topic in ('family', 'home'):
+            self.credit(*self.translation(topic=topic))
+            self.credit(*self.translation(topic=topic))
+        self.assertEqual(course_snapshot(self.conn, self.pid)['chapters'][0]['progress'], .5)
+        questions, answers = ['Как зовут девочку?'], ['Анна.']
+        sid = self.conn.execute('''INSERT INTO saved_stories(title,topic,difficulty,text,questions,answers,score,owner_profile_id)
+            VALUES ('Анна','family','A1','Это Анна.',?,?,8,?)''', (json.dumps(questions), json.dumps(answers), self.pid)).lastrowid
+        digest = payload_hash({'story_id': sid, 'questions': questions, 'answers': answers})
+        source = f'story-check:{digest}:activity-route'
+        award(self.conn, self.pid, activity='reading', content_key=f'story:{sid}', source_key=source,
+              title='Reading', target_level='A1', evidence={'course_task_context_matches': True}, now=self.now)
+        course = course_snapshot(self.conn, self.pid)
+        chapter = course['chapters'][0]
+        self.assertEqual((chapter['status'], chapter['activity_preparation_progress'], chapter['progress']), ('ready', 1, 1))
+        self.assertEqual(chapter['target_preparation_progress'], 0)
+        self.assertEqual(self.conn.execute('SELECT COUNT(*) FROM course_target_observations').fetchone()[0], 0)
+        self.assertFalse(course['awards_proficiency_level'])
+        attempt = checkpoint_start(self.conn, self.pid, 'home', 'normal-after-activities')
+        self.assertEqual(attempt['status'], 'active')
+        reverse(self.conn, self.pid, 'reading', source)
+        self.assertEqual(course_snapshot(self.conn, self.pid)['chapters'][0]['progress'], .5)
+        self.assertEqual(self.conn.execute('SELECT COUNT(*) FROM course_target_observations').fetchone()[0], 0)
 
     def test_other_owners_wrong_task_ids_and_unmapped_topics_do_not_credit(self):
         self.conn.execute("INSERT INTO learning_profiles(id,display_name,avatar,study_timezone,created_at) VALUES ('other','Other','cat','UTC',?)", (self.now,))

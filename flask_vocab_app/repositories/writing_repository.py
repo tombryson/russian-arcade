@@ -8,6 +8,8 @@ from models.database import connect_db
 from services.progression import award, legacy_profile
 from utils.activity_owner import activity_profile_id
 from services.curriculum import normalize_level
+from contracts.curriculum import validate_task_contract, validate_judgements
+from services.activity_evidence import save_contract, load_contract, save_report, reports_for_task
 
 
 class WritingConflict(ValueError):
@@ -55,8 +57,15 @@ class WritingRepository:
             return None
         with connect_db(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
+            profile_id = activity_profile_id(conn)
+            item['curriculum_contract'] = load_contract(conn, profile_id, 'writing', str(exercise_id))
+            reports = reports_for_task(conn, profile_id, 'writing', str(exercise_id))
             item['attempts'] = [dict(row) for row in conn.execute(
                 'SELECT * FROM writing_attempts WHERE exercise_id=? ORDER BY id DESC', (exercise_id,))]
+            for attempt in item['attempts']:
+                if str(attempt['id']) in reports:
+                    attempt['criterion_report'] = reports[str(attempt['id'])]['report']
+                    attempt['criterion_support'] = reports[str(attempt['id'])]['support']
         return item
 
     @staticmethod
@@ -77,20 +86,53 @@ class WritingRepository:
             raise ValueError('Invalid task words')
 
     def create(self, task, topic, difficulty, target_words):
-        self.validate_task(task)
+        with connect_db(self.db_path) as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            return self.create_in_transaction(conn, task, topic, difficulty, target_words, activity_profile_id(conn))
+
+    @staticmethod
+    def validate_curriculum_contract(contract, task, required_words, difficulty):
+        frozen = validate_task_contract(contract)
+        if (frozen['activity'] != 'writing'
+                or frozen['level'] != normalize_level(difficulty, legacy='writing')
+                or frozen['content'].get('task') != task
+                or frozen['content'].get('required_words') != required_words
+                or any(item['response_mode'] not in ('controlled_text', 'independent_writing')
+                       for item in frozen['criteria'])):
+            raise ValueError('Writing criteria must describe this exact text task and level.')
+        # Existing Writing feedback always includes an example. A subsequent
+        # check may use it and must remain usable as supported practice.
+        if 'model_answer' not in frozen['support']['independence_breakers']:
+            raise ValueError('Writing criteria must account for example feedback on later checks.')
+        return frozen
+
+    @staticmethod
+    def create_in_transaction(conn, task, topic, difficulty, target_words, profile_id):
+        """Use the same validated task store for generated and authored work."""
+        WritingRepository.validate_task(task)
         normalize_level(difficulty, legacy='writing')
         if target_words not in (30,100,300):
             raise ValueError('Invalid setup')
         if not isinstance(topic,str) or not topic.strip() or len(topic) > 100:
             raise ValueError('Invalid topic')
-        with connect_db(self.db_path) as conn:
-            conn.execute('BEGIN IMMEDIATE')
-            cursor = conn.execute('''INSERT INTO writing_exercises
-                (topic,difficulty,task,required_words,min_words,user_response,created_at,owner_profile_id) VALUES (?,?,?,?,?,'',?,?)''',
-                (topic,difficulty,task['task'],json.dumps(task['required_words'],ensure_ascii=False),target_words,timestamp(),activity_profile_id(conn)))
-            exercise_id = cursor.lastrowid
-            conn.execute('INSERT INTO writing_details(exercise_id,title,title_en,task_en) VALUES (?,?,?,?)',
-                         (exercise_id,task['title'],task['title_en'],task['task_en']))
+        contract = None
+        if 'curriculum_contract' in task:
+            contract = WritingRepository.validate_curriculum_contract(
+                task['curriculum_contract'], task['task'], task['required_words'], difficulty)
+            for key in ('title', 'title_en', 'task_en'):
+                if key in contract['content'] and contract['content'][key] != task[key]:
+                    raise ValueError('Frozen Writing instructions must match their saved display text.')
+            if ('requested_topic' in contract['content']
+                    and contract['content']['requested_topic'] != topic):
+                raise ValueError('Frozen Writing topic provenance must match the requested topic.')
+        cursor = conn.execute('''INSERT INTO writing_exercises
+            (topic,difficulty,task,required_words,min_words,user_response,created_at,owner_profile_id) VALUES (?,?,?,?,?,'',?,?)''',
+            (topic,difficulty,task['task'],json.dumps(task['required_words'],ensure_ascii=False),target_words,timestamp(),profile_id))
+        exercise_id = cursor.lastrowid
+        conn.execute('INSERT INTO writing_details(exercise_id,title,title_en,task_en) VALUES (?,?,?,?)',
+                     (exercise_id,task['title'],task['title_en'],task['task_en']))
+        if contract is not None:
+            save_contract(conn, profile_id, 'writing', str(exercise_id), contract)
         return exercise_id
 
     @staticmethod
@@ -120,6 +162,17 @@ class WritingRepository:
         with connect_db(self.db_path) as conn:
             conn.execute('BEGIN IMMEDIATE')
             self.assert_revision(conn,exercise_id,revision)
+            owner = activity_profile_id(conn)
+            contract = load_contract(conn, owner, 'writing', str(exercise_id)) if assessment is not None else None
+            report = assessment.get('criterion_report') if assessment is not None else None
+            if contract is not None:
+                # Reject before writing the draft. The shared writer validates
+                # again against the inserted attempt in this same transaction.
+                validate_judgements(contract, report, response_text=response)
+            elif report is not None:
+                raise ValueError('This task had no saved criteria before assessment.')
+            support = ['model_answer'] if contract is not None and conn.execute(
+                'SELECT 1 FROM writing_attempts WHERE exercise_id=? LIMIT 1', (exercise_id,)).fetchone() else []
             conn.execute('''INSERT INTO writing_drafts(exercise_id,response,revision,updated_at) VALUES (?,?,?,?)
                 ON CONFLICT(exercise_id) DO UPDATE SET response=excluded.response,
                 revision=excluded.revision,updated_at=excluded.updated_at''',(exercise_id,response,revision+1,timestamp()))
@@ -128,6 +181,9 @@ class WritingRepository:
                     (exercise_id,response,score,score_max,strength,next_step,example,ui_language,created_at,source)
                     VALUES (?,?,?,10,?,?,?,?,?,'writing-v1')''',
                     (exercise_id,response,assessment['score'],assessment['strength'],assessment['next_step'],assessment['example'],language,timestamp()))
+                if contract is not None:
+                    save_report(conn, owner, 'writing', str(exercise_id), str(attempt.lastrowid), report,
+                                response_text=response, support=support)
                 profile_id = legacy_profile(conn)
                 if profile_id:
                     award(conn, profile_id, activity='writing', content_key=f'writing:{exercise_id}',

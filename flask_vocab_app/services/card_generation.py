@@ -297,7 +297,7 @@ class CardGenerationService:
                 pack['source'] = f"{label} {source['lesson_id']}, revision {source['revision_id']}, page {source['page']}. Context and translation: {source['model']}."
             elif word.get('first_steps_source'):
                 origin = word['first_steps_source']
-                label = 'Saved Journey game practice: ' if origin.get('kind') == 'game' else 'Authored First steps lesson: '
+                label = {'game': 'Saved Journey game practice: ', 'course': 'Authored course letter: '}.get(origin.get('kind'), 'Authored First steps lesson: ')
                 pack['source'] = label + origin['title'] + '. ' + origin['url']
                 if word.get('practice_source', {}).get('kind') == 'lesson':
                     pack['source'] += ' Lesson: ' + word['practice_source']['title'] + '. ' + word['practice_source']['url']

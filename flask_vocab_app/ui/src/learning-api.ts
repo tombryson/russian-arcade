@@ -5,11 +5,12 @@ export type LearningHome = {
   sessions: { id: string; title: string; status: string; content_status: string }[];
 };
 export type Progress = { profile_id: string; evidence: { word_id: number; lemma: string }[] };
-export type AnswerFeedback = { outcome: string; answer: string; assisted: boolean };
+export type AnswerFeedback = { outcome: string; answer: string; assisted: boolean; explanation?: string; response_text?: string; support?: string[]; listened?: boolean; transcript?: string };
 export type PracticeSession = {
   id: string; profile_id: string; title: string; revision: number; status: string;
   completed_items: number; total_items: number;
-  item: { id: string; prompt: string; choices: { id: string; text: string }[]; has_hint: boolean; hint?: string; asset_ids?: string[] } | null;
+  origin?: {href: string; title: string};
+  item: { id: string; type?: 'choice' | 'controlled_text' | 'listening_choice'; prompt: string; choices?: { id: string; text: string }[]; has_hint: boolean; hint?: string; asset_ids?: string[]; audio?: {url: string; sha256: string; duration_ms: number}; listened?: boolean; transcript?: string | null; has_transcript?: boolean } | null;
   attempts: { id: string; prompt?: string; feedback: AnswerFeedback }[];
 };
 export class ApiError extends Error {
@@ -46,6 +47,6 @@ export async function api<T>(url: string, body?: unknown, signal?: AbortSignal):
   const result = await response.json();
   if (!response.ok) throw new ApiError(result.error?.message ?? 'Your practice could not be saved. Please try again.', result.error?.code ?? 'request_failed', result.error?.current_session);
   if (result.csrf_token) csrf = result.csrf_token;
-  if (body!==undefined && !/\/(?:heartbeat|connect)$/.test(url)) window.dispatchEvent(new Event('lingo:progression'));
+  if (body!==undefined && !/\/(?:heartbeat|connect|draft)$/.test(url)) window.dispatchEvent(new Event('lingo:progression'));
   return result as T;
 }

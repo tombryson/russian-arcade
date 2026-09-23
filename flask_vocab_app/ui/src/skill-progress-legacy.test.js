@@ -39,6 +39,14 @@ async function setup(initial=data(),{household=false,language='en',layout='top',
 }
 
 describe('Shared progress in existing activities',()=>{
+  it('distinguishes a full preparation bar from a saved milestone pass',async()=>{
+    const {rail,state,refresh}=await setup(rated({progress:1,status:'ready'}));
+    expect(rail.querySelector('[data-skill-bar]').getAttribute('aria-valuetext')).toContain('100% prepared for checkpoint');
+    expect(rail.querySelector('[data-skill-bar]').getAttribute('aria-valuetext')).not.toContain('Milestone passed');
+    state.data=rated({progress:1,status:'passed'});
+    await refresh();
+    expect(rail.querySelector('[data-skill-bar]').getAttribute('aria-valuetext')).toContain('Milestone passed');
+  });
   it.each([['top',1200,'120px'],['top',500,'120px'],['sidebar',1200,'0px'],['sidebar',500,'104px']])('measures the visible %s bar at width %s',async(layout,width,expected)=>{
     const {document}=await setup(data(),{layout,width});
     expect(document.documentElement.style.getPropertyValue('--arcade-header-height')).toBe(expected);
@@ -69,7 +77,7 @@ describe('Shared progress in existing activities',()=>{
     expect(rail.tagName).toBe('DIV');expect(link.tagName).toBe('A');
     expect(link.getAttribute('href')).toBe('/#journey');
     expect(link.getAttribute('hx-boost')).toBe('false');
-    expect(link.getAttribute('aria-label')).toBe('Chapter 1 of 4 · A small message · 20% complete. Open your journey');
+    expect(link.getAttribute('aria-label')).toBe('Chapter 1 of 4 · A small message · 20% prepared for checkpoint. Open your journey');
     expect(rail.textContent.trim()).toBe('');
     expect(rail.querySelector('summary,details,.skill-rail-caption,.skill-progress-panel,[data-skill-content]')).toBeNull();
     expect(rail.getAttribute('open')).toBeNull();
@@ -88,7 +96,7 @@ describe('Shared progress in existing activities',()=>{
     expect([draft.selectionStart,draft.selectionEnd]).toEqual([2,5]);
     expect(rail.style.getPropertyValue('--skill-progress')).toBe('0.25');
     expect(rail.querySelector('[data-skill-bar]').getAttribute('aria-valuenow')).toBe('25');
-    expect(link.getAttribute('aria-label')).toContain('25% complete');
+    expect(link.getAttribute('aria-label')).toContain('25% prepared for checkpoint');
     expect(rail.classList.contains('is-moving')).toBe(true);
     document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape'}));
     expect(document.activeElement).toBe(draft);
@@ -115,7 +123,7 @@ describe('Shared progress in existing activities',()=>{
     const {state,document,rail,link,refresh}=await setup();
     state.fail=true;
     await refresh();
-    expect(link.getAttribute('aria-label')).toContain('20% complete');
+    expect(link.getAttribute('aria-label')).toContain('20% prepared for checkpoint');
     expect(link.getAttribute('aria-label')).toContain('Showing your last saved progress');
     expect(rail.style.getPropertyValue('--skill-progress')).toBe('0.2');
     expect(rail.querySelector('.skill-rail-runner').hidden).toBe(false);
@@ -159,7 +167,7 @@ describe('Shared progress in existing activities',()=>{
   it('provides the chapter and journey destination in Russian',async()=>{
     const {link}=await setup(data(),{language:'ru'});
     expect(link.getAttribute('aria-label')).toContain('Глава 1 из 4');
-    expect(link.getAttribute('aria-label')).toContain('20% пройдено');
+    expect(link.getAttribute('aria-label')).toContain('20% подготовки к проверке');
     expect(link.getAttribute('aria-label')).toContain('Открыть путешествие');
   });
 });

@@ -31,7 +31,7 @@ Google Drive and SQLite have separate roles. Drive supports quick word capture, 
 | **Speaking** | Talk freely in a scenario, or choose replies one exchange at a time in Step-through mode. Live conversations receive an audio review; Step-through offers optional hints and explanations. |
 | **Tutor lessons** | Upload a PDF or image, save revisions, and practise with exercises based on the document. Select words on its pages for flashcards. |
 | **My words** | Browse words, forms and grammatical details. See card counts and manage saved vocabulary. |
-| **Guided A1 course** | Complete four [chapters](docs/word-post/course-chapters.md) covering all ten A1 topics. Help Barsik with new notes, separate listening updates and checkpoint replies, then open your letter. |
+| **Guided A1 course** | Complete four [milestones](docs/word-post/course-milestones.md), from home to the edge of town. Read letters sent to Barsik, listen to updates and complete a cumulative course assessment. |
 | **Barsik’s journey** | Learn your first words through the introduction, earn Lingocoins and choose optional games while following the guided course. |
 | **Anki tools** | Use the existing automated card-generation workflow when you prefer to study in Anki. Native and Anki review schedules remain separate. |
 
@@ -60,7 +60,11 @@ The [curriculum](docs/curriculum.md) defines **50 topics from A1 to C2**, with t
 
 Reading, Writing, Translation and Word Jumble draw from this shared material. A topic has a default course level; learners can choose another level when revisiting it. Word and form difficulty remain separate vocabulary filters.
 
-The guided course adds four authored A1 chapters and independent checkpoints to the catalogue. Passing all four unlocks the A2 guided level; this release does not include authored A2 chapters or award a proficiency qualification. Higher-level free practice remains accessible. See [chapter content and progression](docs/word-post/course-chapters.md).
+The guided course adds four A1 milestones, three assessment variants per stop and a cumulative final letter. Target-specific preparation connects to normal activities. Completed letters can become contextual flashcards or Writing tasks. Passing all four preserves access to A2 practice; the guided A2 region remains future content. See [course content and progression](docs/word-post/course-milestones.md).
+
+A separate [A1–B2 reference](docs/curriculum-requirements.md) records 239 observable requirements from published TORFL standards and sample tests. It covers language use, reading, listening, writing and speaking. The [research review](docs/curriculum-research.md) explains the source editions and assessment limits.
+
+The first [curriculum implementation](docs/curriculum-implementation.md) adds an A1 location-and-destination unit, contextual questions, typed forms and a Writing task. New A1–B2 Writing tasks link explicit instructions to the reference requirements. Selected A1 Speaking tasks also save criteria and review the original audio. These results are diagnostic; existing milestone passes stay unchanged. The [implementation plan](docs/curriculum-uplift-plan.md) records the remaining teaching and five-domain assessment work.
 
 The [course catalogue](https://russian-arcade.fly.dev/curriculum) lists the topics and opens practice for each one. It does not add words automatically. Saving vocabulary still uses the existing lemma, form, topic and mnemonic pipeline.
 
@@ -122,11 +126,11 @@ The importer uses a Russian morphological dictionary to generate possible forms.
 - **Duplicates:** keep one copy of each spelling and retained tag combination.
 - **Difficulty:** estimate lemma difficulty from frequency and length. Increase form difficulty for plurals and participles.
 
-Frequency is a selection aid. A rare form may still be useful or correct. Lesson selections preserve the form found in the source text; they do not use these bulk-import filters.
+Frequency is a selection aid. A rare form may still be useful or correct. Lesson capture uses the shared import pipeline and also preserves the exact validated form selected in the source, even when bulk filters would exclude it.
 
 The Anki generator filters words and forms by the requested topic, part of speech, case and difficulty. It randomly selects an eligible form, then generates a sentence, cloze, translation, picture and audio. A **cloze** is a sentence with a word or phrase removed for the learner to supply.
 
-The native batch generator does not yet provide the same variety. It applies an optional case filter, then prefers a form matching the lemma. The importer also loses some adjective and participle tags. The [database guide](docs/vocabulary-data-model.md) explains these gaps and the exact filtering rules.
+The native batch generator filters by case and form difficulty, then prefers less-used words, forms and grammatical combinations. It uses generation history to vary practice; that history is not evidence of mastery. The importer still loses some adjective and participle tags. The [database guide](docs/vocabulary-data-model.md) explains the selection rules and remaining gaps.
 
 ### Contextual translations
 
@@ -210,7 +214,7 @@ Each account can use **US$1 per day and US$2 in total** of funded AI. All visito
 
 The server reserves costs before provider calls and limits each account to 30 calls per rolling minute and 120 per day. The standard flashcard generator allows at most five cards per hosted batch. Pictures, speech, transcription and assessment all count; one activity may need several calls. Saved practice remains available after the allowance runs out. Lingocoins do not buy AI credits.
 
-Live calls close after one minute, but a server failure can prevent that close; a provider-side spending limit is also required. See [hosted trial operation](docs/operations-fly.md#funded-ai-trial) for the controls and their limits.
+Live calls close after one minute, but a server failure can prevent that close; a provider-side spending limit is also required. See [hosted trial operation](docs/operations-fly.md#budget-and-provider-limits) for the controls and their limits.
 
 The application is under active development, with local individual and household use as its main deployment model. Current limits include:
 
@@ -328,6 +332,9 @@ Historical scripts may retain machine-specific assumptions; read them before run
 
 - [Architecture](docs/architecture.md), [development](docs/development.md) and [operations](docs/operations.md)
 - [Curriculum: topics, vocabulary and grammar](docs/curriculum.md)
+- [Curriculum and assessment implementation plan](docs/curriculum-uplift-plan.md)
+- [Curriculum implementation status](docs/curriculum-implementation.md)
+- [Curriculum coverage inventory](docs/curriculum-coverage.md)
 - [Vocabulary database and form-generation rules](docs/vocabulary-data-model.md)
 - [Drive/SQLite synchronisation contract](docs/synchronization.md)
 - [Native flashcards](docs/word-post/native-flashcards.md) and [vocabulary library](docs/word-post/vocabulary-library.md)
@@ -335,6 +342,7 @@ Historical scripts may retain machine-specific assumptions; read them before run
 - [Speaking scenarios](docs/word-post/speaking-scenarios.md) and [assessment](docs/word-post/speaking-assessment.md)
 - [Describe the scene](docs/word-post/scene-builder.md), [Journey games](docs/word-post/journey-games.md) and [mixed vocabulary / Radio](docs/word-post/mixed-vocabulary-and-radio.md)
 - [Guided A1 chapters](docs/word-post/course-chapters.md), [levels and rewards](docs/word-post/levels-and-progression.md), [skill progress](docs/word-post/skill-progress.md) and [Barsik’s story](docs/word-post/barsik-journey.md)
+- [Journey milestones: build plan](docs/word-post/journey-milestones-build-plan.md)
 - [Design system](docs/word-post/design-system.md) and [hosting runbook](docs/operations-fly.md)
 - [Public release procedure](docs/release-process.md) and [game shop](docs/word-post/game-access.md)
 

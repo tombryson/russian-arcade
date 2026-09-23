@@ -24,6 +24,8 @@ from services.speaking_review import SpeakingReviewService
 from services.speaking_lifecycle import NaturalEnding
 from services.trial_live_budget import LiveTrialBudget, TRIAL_SECONDS
 from services.ai_trial_budget import TrialDenied
+from services.activity_evidence import save_contract, load_contract, reports_for_task
+from services.speaking_evidence import speaking_task_contract
 
 
 class LiveConversationService:
@@ -101,6 +103,9 @@ class LiveConversationService:
                 conn.execute('INSERT INTO live_conversation_sessions(id,profile_id,start_key,scenario_json,language,model,backend_model,voice,created_at,heartbeat_at,scenario_id,variant_id,target_level) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
                     (sid, profile['id'], key, encoded(scenario), language, self.config['LIVE_CONVERSATION_MODEL'],
                      self.config['CONVERSATION_MODEL'], random.choice(self.config['LIVE_CONVERSATION_VOICES']), timestamp(), timestamp(),scenario_id,scenario['seed'],scenario.get('target_level')))
+                contract = speaking_task_contract(scenario)
+                if contract is not None:
+                    save_contract(conn, profile['id'], 'speaking', sid, contract)
         return self.read(access, sid)
 
     def read(self, access, sid):
@@ -109,6 +114,17 @@ class LiveConversationService:
             rows = conn.execute('SELECT * FROM live_conversation_recordings WHERE session_id=? ORDER BY ordinal', (sid,)).fetchall()
             events = conn.execute("SELECT payload_json FROM live_conversation_events WHERE session_id=? AND type IN ('session.input_transcript.delta','session.output_transcript.delta') ORDER BY id", (sid,)).fetchall()
             review = self.reviews.read(conn, sid) if self.reviews else None
+            if review and review['state'] == 'ready' and review['report']:
+                contract = load_contract(conn, session['profile_id'], 'speaking', sid)
+                if contract is not None:
+                    saved = reports_for_task(conn, session['profile_id'], 'speaking', sid).get(sid)
+                    if saved is None or saved['report'] != review['report'].get('criterion_report'):
+                        raise LearningError('unavailable', 'The saved criterion review could not be verified.', 503)
+                    scenario = contract['content']['scenario']
+                    review['report']['criterion_details'] = [{
+                        'label': scenario['goals'][0], 'label_ru': scenario['goals_ru'][0],
+                        'outcome': item['outcome'], 'feedback': item['feedback']}
+                        for item in saved['report']['judgements']]
         result = {k: session[k] for k in ('id','state','created_at','started_at','ended_at','model','voice','error','end_reason','scenario_id','variant_id','target_level')}
         result['review'] = review
         result.update(scenario=json.loads(session['scenario_json']), captions=[json.loads(r[0]) for r in events], recordings=[],
@@ -457,6 +473,9 @@ class LiveConversationService:
                 if sid in self.connections or (self.reviews and sid in self.reviews.running) or conn.execute('SELECT 1 FROM live_conversation_recordings WHERE session_id=? AND lease_until>?', (sid,timestamp())).fetchone() or conn.execute("SELECT 1 FROM speaking_reviews WHERE session_id=? AND (state='queued' OR lease_until>?)", (sid,timestamp())).fetchone():
                     raise LearningError('busy','End the conversation and let language notes finish before deleting it.',409)
                 files = [r[0] for r in conn.execute('SELECT filename FROM live_conversation_recordings WHERE session_id=?',(sid,))]
+                conn.execute("DELETE FROM activity_criterion_reports WHERE contract_id IN "
+                             "(SELECT id FROM activity_task_contracts WHERE activity='speaking' AND task_key=?)", (sid,))
+                conn.execute("DELETE FROM activity_task_contracts WHERE activity='speaking' AND task_key=?", (sid,))
                 conn.execute('DELETE FROM live_conversation_sessions WHERE id=?',(sid,))
             for filename in files:
                 if Path(filename).name == filename:

@@ -16,6 +16,7 @@ from repositories.writing_repository import WritingRepository
 from tests.support import isolated_app
 from tests.test_story_titles import STORY
 from tests.test_writing_cleanup import TASK, ADVICE
+from tests.test_writing_generated_evidence import generated_task
 from utils.story_display import present_story
 
 
@@ -105,7 +106,7 @@ class CurriculumProviderContractTests(unittest.TestCase):
 
     def test_writing_legacy_levels_remain_accepted_and_invalid_levels_fail_before_provider(self):
         service = WritingService.__new__(WritingService)
-        service.structured = Mock(return_value=TASK)
+        service.structured = Mock(return_value=generated_task('B1'))
         service.generate_writing_task('family', 'advanced')
         self.assertEqual(service.structured.call_args.args[3]['level'], 'B1')
         service.structured.reset_mock()

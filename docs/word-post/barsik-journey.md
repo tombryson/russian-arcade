@@ -1,6 +1,8 @@
 # Barsik's journey: a small letter, a big adventure
 
-Status: **narrative direction approved by the owner, 9 September 2026; implementation boundary updated 22 September 2026**. This is the canonical campaign brief. Shared Lingocoins, saved post-office/market unlocks and the first-delivery lesson are implemented. The earlier [five-lesson First steps opening](first-steps.md) remains saved; the current course prepares all ten A1 topics. The four-chapter A1 route and its final-letter checkpoint now supersede the earlier planned worlds below.
+Status: **earlier narrative brief and shipped version-1 reference, updated 22 September 2026**. The [journey and milestones build plan](journey-milestones-build-plan.md) is the current direction for the next release. It starts Barsik at home, uses received letters for assessments and keeps the original delivery open beyond A1. The implementation and historical proposals below have not yet been migrated to that design.
+
+Shared Lingocoins, saved post-office/market unlocks and the first-delivery lesson are implemented. The earlier [five-lesson First steps opening](first-steps.md) remains saved; the shipped four-chapter A1 course prepares all ten A1 topics. Its current rules are recorded in the [chapter specification](course-chapters.md).
 
 This brief supersedes the previous invitation-at-your-door introduction, the Nina side-delivery pilot and the recommendation to restrict coins to cosmetics. It preserves individual use by default, optional household controls, direct access to existing activities and the removal of the passport.
 
@@ -24,13 +26,13 @@ Barsik is curious, friendly and determined. He can demonstrate Russian, ask for 
 
 The letter remains sealed during the journey. Familiar places and people establish why the message matters; its full contents are the ending. The three authored final variants are invitations from friends helping Barsik along the route, containing a place, time and practical arrangement. Their content and answer keys are in the [chapter catalogue](course-chapters.md).
 
-## 2. Agreed welcome and copy
+## 2. Welcome copy and earlier opening
 
 | Element | Copy |
 |---|---|
 | Descriptor | Learn Russian with Barsik |
 | Hero | A small letter. A big adventure. |
-| Supporting line | Barsik has a letter for you. Help him find the way, one Russian word at a time. |
+| Supporting line | Barsik has a letter for you. Help him deliver it, one word at a time. |
 | Opening card label | Your first delivery · a little adventure |
 | Opening card title | Hello, Barsik! |
 | Opening action | Let's begin |

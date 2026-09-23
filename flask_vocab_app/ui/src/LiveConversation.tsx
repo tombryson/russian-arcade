@@ -22,7 +22,8 @@ type Catalogue = {activity:{id:string;title:string;title_ru:string};scenarios:Sc
 type Score = {score:number|null;reason:string;evidence:string[]};
 type SpeakingReport = {basis:string;rubric_version:string;model:string;transcript:string;speech_status:'russian'|'mixed'|'no_russian'|'insufficient'|'unclear';
   grammar:Score;fluency:Score;goals:{id:string;status:'completed'|'not_yet'|'uncertain';evidence:string[]}[];
-  summary:string;next_step:string;corrections:{original:string;replacement:string;explanation:string;category:string}[];uncertainty:string};
+  summary:string;next_step:string;corrections:{original:string;replacement:string;explanation:string;category:string}[];uncertainty:string;
+  criterion_details?:{label:string;label_ru:string;outcome:'satisfied'|'partial'|'not_satisfied'|'insufficient_evidence';feedback:string}[]};
 type Review = {state:'queued'|'analysing'|'ready'|'failed';error:string|null;retryable:boolean;report:SpeakingReport|null};
 type Saved = {id:string;scenario_id?:string;state:string;connected:boolean;needs_recovery?:boolean;finalized:boolean;created_at:number;error:string|null;captions:Caption[];recordings:Recording[];
   scenario?:Scenario;end_reason?:string|null;review?:Review|null};
@@ -320,7 +321,7 @@ export function LiveConversation({sessionId,language='en',initialScenarioId,init
       {catalogue ? practiceLevels.map(band=>{
         const choices=catalogue.scenarios.filter(item=>item.available!==false && item.variant_count>0 && (item.levels ?? ['A1']).includes(band));
         if (!choices.length) return null;
-        return <section class={`speaking-level-group${band==='A1' ? '' : ' speaking-level-group-muted'}`} key={band} aria-labelledby={`speaking-level-${band}`}>
+        return <section class="speaking-level-group" key={band} aria-labelledby={`speaking-level-${band}`}>
           <h2 id={`speaking-level-${band}`}>{band}</h2>
           <ul class="speaking-scenario-grid">{choices.map(item=>{const detail=item.level_details?.[band] ?? item;return <li key={item.id}>
             <button class="speaking-scenario-card" onClick={()=>chooseScenario(item.id,band)} aria-labelledby={`speaking-scenario-${band}-${item.id}`}>
@@ -473,6 +474,14 @@ function SpeakingFeedback({report,scenario,language}:{report:SpeakingReport;scen
     {report.corrections.slice(0,2).map((correction,index)=><div class="conversation-correction" key={index}><span lang="ru">{correction.original}</span> → <strong lang="ru">{correction.replacement}</strong><p>{correction.explanation}</p></div>)}
     {report.next_step && <div class="live-next-step"><h3>{t('Try this next time','Попробуйте в следующий раз')}</h3><p>{report.next_step}</p></div>}
     {report.uncertainty && <p class="quiet">{report.uncertainty}</p>}
+    {!!report.criterion_details?.length && <details class="live-review-evidence"><summary>{t('What this recording shows','Что показывает эта запись')}</summary>
+      <p class="quiet">{t('This practice feedback may include help you received during the conversation.','Эта обратная связь может учитывать результат подсказок, полученных во время разговора.')}</p>
+      {report.criterion_details.map((criterion,index)=><section key={index}>
+        <h3>{language==='ru' ? criterion.label_ru : criterion.label}</h3>
+        <p>{criterion.outcome==='satisfied' ? t('Shown in this recording','Есть в этой записи') : criterion.outcome==='partial' ? t('Partly shown','Показано частично') : criterion.outcome==='not_satisfied' ? t('Needs practice','Стоит потренировать') : t('Not enough evidence','Недостаточно материала')}</p>
+        <p>{criterion.feedback}</p>
+      </section>)}
+    </details>}
     <details class="live-review-evidence"><summary>{t('What the review heard','Что услышала модель при разборе')}</summary>
       <p class="quiet">{t('This comes from a separate review of your recording. It may differ from the live captions.','Это результат отдельного прослушивания записи. Он может отличаться от текста во время разговора.')}</p>
       {russianTranscript(report.transcript)!==null ? <p lang="ru" class="live-review-transcript">{report.transcript}</p> : <p class="quiet">{t('No Russian transcript to show.','Нет русского текста для показа.')}</p>}

@@ -6,7 +6,7 @@ import { api } from './learning-api';
 type NextLesson={id:string;position:number;title:string;description:string;status:string;href:string};
 type Chapter={profile_id:string|null;lessons:NextLesson[];next_lesson:NextLesson|null;complete:boolean;completed_count:number};
 
-export function WelcomeHero({ headingRef, profileKey, nextDestination }: { headingRef: RefObject<HTMLHeadingElement>; profileKey?:string; nextDestination?:{title:string;href:string} }) {
+export function WelcomeHero({ headingRef, profileKey, nextDestination, courseJourney=false }: { headingRef: RefObject<HTMLHeadingElement>; profileKey?:string; nextDestination?:{title:string;href:string};courseJourney?:boolean }) {
   const [chapter,setChapter]=useState<Chapter>();
   const [failed,setFailed]=useState(false);
   const [revision,setRevision]=useState(0);
@@ -27,11 +27,11 @@ export function WelcomeHero({ headingRef, profileKey, nextDestination }: { headi
     document.addEventListener('visibilitychange',visible);
     return()=>{clearTimeout(timer);window.removeEventListener('lingo:progression',refresh);document.removeEventListener('visibilitychange',visible);};
   },[]);
-  const next=chapter?.next_lesson;
-  const complete=chapter?.complete;
+  const next=courseJourney ? chapter?.lessons.find(lesson=>lesson.id==='hello') : chapter?.next_lesson;
+  const complete=courseJourney ? !!chapter?.lessons.find(lesson=>lesson.id==='hello' && lesson.status==='completed') || !!chapter?.complete : chapter?.complete;
   const title=complete ? nextDestination?.title ?? 'Barsik’s journey' : next?.title ?? 'First steps with Barsik';
   const href=complete ? nextDestination?.href ?? '#journey' : next?.href ?? '#first-steps';
-  const label=complete ? 'Introduction complete · the journey continues' : next ? `First steps · ${next.position} of ${chapter!.lessons.length}` : 'Five short lessons to get started';
+  const label=complete ? courseJourney ? 'Your journey' : 'Introduction complete · the journey continues' : courseJourney ? 'Your first delivery · a little adventure' : next ? `First steps · ${next.position} of ${chapter!.lessons.length}` : 'Five short lessons to get started';
   const action=complete ? 'Continue the journey' : !next ? 'Open first steps' : next.status==='active' ? 'Continue' : next.position>1 ? 'Next lesson' : 'Let’s begin';
   return <section class="hero" aria-labelledby="welcome-title">
     <div class="hero-copy">
@@ -52,6 +52,6 @@ export function WelcomeHero({ headingRef, profileKey, nextDestination }: { headi
       </span>
       <span class="ticket-action">{action} <span aria-hidden="true">↗</span></span>
     </a>
-    <div class="first-steps-home-link"><a class="text-link" href="#first-steps">See all five lessons <span aria-hidden="true">→</span></a>{failed && <span role="status"> Your place could not load. <button class="text-link" onClick={()=>setRevision(v=>v+1)}>Try again</button></span>}</div>
+    {(!courseJourney || failed) && <div class="first-steps-home-link">{!courseJourney && <a class="text-link" href="#first-steps">See all five lessons <span aria-hidden="true">→</span></a>}{failed && <span role="status"> Your place could not load. <button class="text-link" onClick={()=>setRevision(v=>v+1)}>Try again</button></span>}</div>}
   </section>;
 }

@@ -28,6 +28,13 @@ STORY = {'title': 'Новая игрушка для Макса', 'title_en': 'A 
                        'Как они могут играть с мячом?', 'Во что ты любишь играть?']}
 
 
+def with_reading_focus(story, passage=None):
+    return {**story, 'topic_id': 'family', 'reading_focus': [
+        {'question_index': index, 'requirement_id': 'a1.reading.narrative-meaning',
+         'passage_excerpt': passage or story['text'], 'expectation': 'Identify the requested detail in the account.'}
+        for index in range(4)]}
+
+
 class StoryGenerationContractTests(unittest.TestCase):
     def setUp(self):
         self.service = ComprehensionService.__new__(ComprehensionService)
@@ -51,7 +58,7 @@ class StoryGenerationContractTests(unittest.TestCase):
         self.service.client = client
 
     def test_real_sdk_sends_astra_low_and_required_title_schema(self):
-        self.client_for(STORY)
+        self.client_for(with_reading_focus(STORY))
         result = asyncio.run(self.service.generate_story('family', 'beginner'))
         self.assertEqual(result['title'], STORY['title'])
         self.assertEqual(result['title_en'], STORY['title_en'])
@@ -61,7 +68,7 @@ class StoryGenerationContractTests(unittest.TestCase):
         self.assertEqual(request['reasoning'], {'effort': 'low'})
         self.assertEqual(request['text']['format']['type'], 'json_schema')
         self.assertTrue(request['text']['format']['strict'])
-        self.assertEqual(set(request['text']['format']['schema']['required']), {'title', 'title_en', 'text', 'questions'})
+        self.assertEqual(set(request['text']['format']['schema']['required']), {'title', 'title_en', 'text', 'questions', 'topic_id', 'reading_focus'})
         self.assertFalse(request['store'])
         self.assertNotIn('max_tokens', request)
         self.assertNotIn('temperature', request)
@@ -76,12 +83,12 @@ class StoryGenerationContractTests(unittest.TestCase):
         self.assertEqual(present_story({'text': STORY['text']})['display_title'], '')
 
     def test_pasted_passage_keeps_exact_text_and_receives_a_title(self):
-        self.client_for({'title': STORY['title'], 'title_en': STORY['title_en'], 'questions': STORY['questions']})
         passage = 'Анна говорит: «Привет!»\n\n  Макс рядом.\n'
+        self.client_for(with_reading_focus({'title': STORY['title'], 'title_en': STORY['title_en'], 'questions': STORY['questions']}, passage))
         result = asyncio.run(self.service.prepare_story_from_text(passage, 'family', 'beginner'))
         self.assertEqual(result['text'], passage)
         self.assertEqual(result['title'], STORY['title'])
-        self.assertEqual(set(self.requests[0]['text']['format']['schema']['required']), {'title', 'title_en', 'questions'})
+        self.assertEqual(set(self.requests[0]['text']['format']['schema']['required']), {'title', 'title_en', 'questions', 'topic_id', 'reading_focus'})
         self.assertEqual(json.loads(self.requests[0]['input'][1]['content'])['passage'], passage)
         self.service.generate_image.assert_not_called()
 

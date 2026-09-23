@@ -112,6 +112,11 @@ main, .bottom { max-width: 1180px; margin: auto; }
 .practice-row h3 { font: 500 20px/1.5 var(--wp-font-reading); }
 .practice-row p { color: var(--wp-text-secondary); margin-top: 6px; }
 .practice-page { max-width: 900px; margin: auto; }
+.practice-listening { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin-block: 16px; }
+.practice-listening audio { width: min(100%, 360px); }
+.practice-audio-error { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; width: 100%; }
+.practice-transcript { flex-basis: 100%; border-inline-start: 3px solid var(--wp-border-subtle); padding-inline-start: 16px; }
+.practice-transcript p { margin-block: 0 8px; }
 .first-delivery { max-width: 900px; margin: auto; padding-bottom: 72px; }
 .tutorial-welcome { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 300px); align-items: center; gap: 32px; margin-bottom: 32px; }
 .tutorial-welcome-art { width: 100%; margin: 0; justify-self: end; }

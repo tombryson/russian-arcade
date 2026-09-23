@@ -106,6 +106,51 @@ class SpeakingIntegrationTests(unittest.TestCase):
             self.assertEqual(again.status_code, 200, again.json)
             self.assertEqual(again.json['scenario'], preview)
 
+    def test_existing_catalogue_gets_new_reference_only_in_new_sessions_of_both_modes(self):
+        # An already-migrated installation retains its pre-reference variants.
+        with transaction(self.db, write=True) as conn:
+            rows = conn.execute("SELECT id,payload_json FROM speaking_scenario_variants WHERE scenario_id='shop' AND target_level='A2' AND enabled=1").fetchall()
+            catalogue = {}
+            for row in rows:
+                payload = json.loads(row['payload_json'])
+                payload['curriculum_context'].pop('proficiency_reference', None)
+                catalogue[row['id']] = json.dumps(payload)
+                conn.execute('UPDATE speaking_scenario_variants SET payload_json=? WHERE id=?',
+                             (catalogue[row['id']], row['id']))
+        historical = {}
+        with patch('services.torfl_requirements.generation_reference', return_value=None):
+            for mode in ('live', 'step'):
+                historical[mode] = self.start(mode, 'before-reference-' + mode)
+                self.assertNotIn('proficiency_reference', historical[mode]['scenario']['curriculum_context'])
+        with transaction(self.db) as conn:
+            originals = {mode: conn.execute(f'SELECT scenario_json FROM {mode}_conversation_sessions WHERE id=?',
+                                           (saved['id'],)).fetchone()[0]
+                         for mode, saved in historical.items()}
+        for mode in ('live', 'step'):
+            current = self.start(mode, 'after-reference-' + mode)
+            scenario = current['scenario']
+            source = json.loads(catalogue[scenario['seed']])
+            context = dict(scenario['curriculum_context'])
+            reference = context.pop('proficiency_reference')
+            self.assertEqual(reference['catalogue_version'], 'torfl-reference-v1')
+            self.assertEqual(reference['level'], 'A2')
+            self.assertTrue(reference['requirements'])
+            self.assertLessEqual(len(reference['requirements']), 8)
+            self.assertEqual(context, source['curriculum_context'])
+            self.assertEqual(scenario['learning_contract'], source['learning_contract'])
+            self.assertEqual(scenario['variation'], source['variation'])
+            old = historical[mode]
+            resumed = self.client.get(f'/api/v1/{mode}-conversations/{old["id"]}')
+            self.assertEqual(resumed.status_code, 200, resumed.json)
+            self.assertEqual(resumed.json['scenario'], old['scenario'])
+            self.assertEqual(self.start(mode, 'before-reference-' + mode, old['scenario'])['id'], old['id'])
+        with transaction(self.db) as conn:
+            for mode, saved in historical.items():
+                self.assertEqual(conn.execute(f'SELECT scenario_json FROM {mode}_conversation_sessions WHERE id=?',
+                                              (saved['id'],)).fetchone()[0], originals[mode])
+            self.assertEqual({row['id']: row['payload_json'] for row in conn.execute(
+                "SELECT id,payload_json FROM speaking_scenario_variants WHERE scenario_id='shop' AND target_level='A2' AND enabled=1")}, catalogue)
+
 
 if __name__ == '__main__':
     unittest.main()

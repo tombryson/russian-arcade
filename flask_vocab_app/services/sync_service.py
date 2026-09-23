@@ -2,6 +2,7 @@ from .trial_provider import config_snapshot, openai_client
 from .ai_trial_budget import TrialDenied
 from config import model_for
 from contextlib import closing
+from collections import Counter
 from pathlib import Path
 import unicodedata
 from utils.lazy import LazyService
@@ -17,10 +18,26 @@ import time
 from openai import OpenAI
 from services.google_drive_service import GoogleDriveService
 from services.vocabulary_topics import TOPICS
+from services.form_selection import canonical_tags
 from config import OPENAI_API_KEY, OPENAI_MODEL_HIGH, OPENAI_MODEL_FAST
 from datetime import datetime
 
 logger = logging.getLogger('SyncService')
+
+
+def _form_tags(tag):
+    """Keep the dictionary reading, including full/short and verbal distinctions."""
+    tags = {'pos': tag.POS}
+    for name in ('case', 'number', 'gender', 'animacy', 'tense', 'aspect', 'mood',
+                 'person', 'voice', 'transitivity', 'involvement'):
+        value = getattr(tag, name, None)
+        if value:
+            tags[name] = value
+    if tag.POS == 'COMP':
+        tags['degree'] = 'comp'
+    elif 'Supr' in tag:
+        tags['degree'] = 'Supr'
+    return tags
 
 
 class VocabularyEnrichmentUnavailable(RuntimeError):
@@ -82,8 +99,8 @@ class SyncService:
         
         parses = self.morph.parse(word)
         pos_map = {
-            'NOUN': 'NOUN', 'VERB': 'VERB', 'INFN': 'VERB', 'ADJF': 'ADJ', 'ADJS': 'ADJ',
-            'PRTF': 'ADJ', 'PRTS': 'ADJ', 'PRTF': 'ADJ', 'PRTS': 'ADJ', 'ADVB': 'ADVB', 'NUMR': 'NUMR', 'NPRO': 'NPRO',
+            'NOUN': 'NOUN', 'VERB': 'VERB', 'INFN': 'VERB', 'GRND': 'VERB', 'ADJF': 'ADJ', 'ADJS': 'ADJ',
+            'PRTF': 'ADJ', 'PRTS': 'ADJ', 'ADVB': 'ADVB', 'NUMR': 'NUMR', 'NPRO': 'NPRO',
             'CONJ': 'CONJ', 'COMP': 'COMP', 'PRCL': 'PART', 'PRED': 'PRED', 'PREP': 'PREP'
         }
         for parse in parses:
@@ -99,11 +116,11 @@ class SyncService:
                     pos = 'VERB'
                     logger.debug(f"Corrected participle '{word}' to lemma '{lemma}' (VERB)")
                     return lemma, pos, f"Normalized to lemma '{lemma}' (VERB)"
-            pos = pos_map.get(pos_tag, 'ADJ')
+            pos = pos_map.get(pos_tag, pos_tag)
             if parse.normal_form:
                 logger.debug(f"Normalized to lemma: {lemma} ({pos})")
                 return lemma, pos, f"Normalized to lemma '{lemma}'"
-        pos = pos_map.get(parses[0].tag.POS, 'ADJ') if parses else 'ADJ'
+        pos = pos_map.get(parses[0].tag.POS, parses[0].tag.POS) if parses else 'ADJ'
         logger.debug(f"No lemma change: {word} ({pos})")
         return word, pos, ""
 
@@ -141,7 +158,7 @@ class SyncService:
                     return True
 
             pos_map = {
-                'NOUN': 'NOUN', 'VERB': 'VERB', 'INFN': 'VERB', 'ADJF': 'ADJ', 'ADJS': 'ADJ',
+                'NOUN': 'NOUN', 'VERB': 'VERB', 'INFN': 'VERB', 'GRND': 'VERB', 'ADJF': 'ADJ', 'ADJS': 'ADJ',
                 'PRTF': 'ADJ', 'PRTS': 'ADJ', 'ADVB': 'ADVB', 'NUMR': 'NUMR', 'NPRO': 'NPRO',
                 'CONJ': 'CONJ', 'COMP': 'COMP', 'PRCL': 'PART', 'PRED': 'PRED', 'PREP': 'PREP'
             }
@@ -182,7 +199,7 @@ class SyncService:
 
             scored_parses.sort(key=lambda x: x[2], reverse=True)
             parsed, pos_tag, score = scored_parses[0]
-            pos = pos_map.get(pos_tag, pos_tag if explicit else 'ADJ')
+            pos = pos_map.get(pos_tag, pos_tag)
             logger.debug(f"Selected POS: {pos}, Score: {score}")
 
             if explicit:
@@ -200,14 +217,11 @@ class SyncService:
                     if pos in existing_pos:
                         logger.info(f"Skipping duplicate lemma '{lemma}' with POS '{pos}'")
                         return True
-                    for word_id, old_pos in existing:
-                        if old_pos != pos:
-                            cursor.execute("UPDATE words SET pos = ? WHERE id = ?", (pos, word_id))
-                            cursor.execute("DELETE FROM forms WHERE word_id = ?", (word_id))
-                            logger.info(f"Updated POS for '{lemma}' from {old_pos} to {pos}")
+                    # Another reading of this spelling is a separate entry.
+                    # Never relabel a saved word or delete forms linked to cards.
 
             forms = set()
-            form_count = 0
+            form_counts = Counter()
             valid_noun_cases = {'nomn', 'gent', 'datv', 'accs', 'ablt', 'loct'}
             valid_adj_cases = {'nomn', 'gent', 'datv', 'accs', 'ablt', 'loct'}
             max_noun_forms = 12
@@ -216,9 +230,8 @@ class SyncService:
             participle_freq_threshold = 2e-6
 
             for form in parsed.lexeme:
-                if not form.word:
+                if not form.word or not form.tag.POS:
                     continue
-                tags = {}
                 try:
                     freq = word_frequency(form.word, 'ru')
                     if form.tag.POS in ('PRTF', 'PRTS') and freq < participle_freq_threshold:
@@ -227,76 +240,27 @@ class SyncService:
                         continue
                     if form.tag.POS in ('ADJF', 'ADJS', 'COMP') and freq == 0:
                         continue
-                    if form.tag.POS in ('ADJF', 'ADJS') and hasattr(form.tag, 'degree') and form.tag.degree == 'Supr' and freq < 1e-7:
+                    if form.tag.POS in ('ADJF', 'ADJS') and 'Supr' in form.tag and freq < 1e-7:
                         continue
                     if form.tag.POS == "NOUN":
                         if form.tag.case not in valid_noun_cases or form.tag.number not in {'sing', 'plur'} or freq < freq_threshold:
                             continue
                         if form.tag.gender == 'neut' and form.word.endswith('ь') and form.word != lemma:
                             continue
-                        if form.tag.case:
-                            tags["case"] = form.tag.case
-                        if form.tag.number:
-                            tags["number"] = form.tag.number
-                        if form.tag.gender:
-                            tags["gender"] = form.tag.gender
-                        if form.tag.animacy:
-                            tags["animacy"] = form.tag.animacy
-                    elif form.tag.POS in ("ADJF", "ADJS"):
+                    elif form.tag.POS == 'ADJF':
                         if form.tag.case not in valid_adj_cases:
                             continue
-                        if form.tag.number:
-                            tags["number"] = form.tag.number
-                        if form.tag.gender and form.tag.number == 'sing':
-                            tags["gender"] = form.tag.gender
-                        if form.tag.case:
-                            tags["case"] = form.tag.case
-                        if hasattr(form.tag, 'degree') and form.tag.degree:
-                            tags["degree"] = form.tag.degree
-                    elif form.tag.POS in ("PRTF", "PRTS"):
-                        if form.tag.number:
-                            tags["number"] = form.tag.number
-                        if form.tag.gender and form.tag.number == 'sing':
-                            tags["gender"] = form.tag.gender
-                        if form.tag.tense:
-                            tags["tense"] = form.tag.tense
-                        if form.tag.voice:
-                            tags["voice"] = form.tag.voice
-                        tags["pos"] = "participle"
-                    elif form.tag.POS in ("VERB", "INFN", "GRND"):
-                        if form.tag.tense:
-                            tags["tense"] = form.tag.tense
-                        if form.tag.aspect:
-                            tags["aspect"] = form.tag.aspect
-                        if form.tag.mood:
-                            tags["mood"] = form.tag.mood
-                        if form.tag.person:
-                            tags["person"] = form.tag.person
-                        if form.tag.number:
-                            tags["number"] = form.tag.number
-                    elif form.tag.POS == "COMP":
-                        tags["degree"] = "comp"
-                    elif form.tag.POS == "ADVB":
-                        tags["pos"] = "adverb"
-                        if hasattr(form.tag, 'degree') and form.tag.degree:
-                            tags["degree"] = form.tag.degree
-                    elif form.tag.POS == "PREP":
-                        tags["pos"] = "preposition"
-                    elif form.tag.POS == "CONJ":
-                        tags["pos"] = "conjunction"
-                    elif form.tag.POS in ("PRCL", "PRED"):
-                        tags["pos"] = "particle" if form.tag.POS == "PRCL" else "predicative"
-                    else:
-                        tags["pos"] = pos_map.get(form.tag.POS, form.tag.POS if explicit else "other")
-                    dedup_tags = {k: v for k, v in tags.items() if k not in ('animacy', 'case') or form.tag.POS not in ('ADJF', 'ADJS', 'PRTF', 'PRTS')}
-                    if form.tag.POS in ('ADJF', 'ADJS', 'PRTF', 'PRTS') and 'gender' in dedup_tags and dedup_tags.get('number') == 'plur':
-                        del dedup_tags['gender']
-                    forms.add((form.word, json.dumps(dedup_tags, sort_keys=True)))
-                    form_count += 1
-                    if form.tag.POS == "NOUN" and form_count >= max_noun_forms:
-                        break
-                    if form.tag.POS in ("ADJF", "ADJS") and form_count >= max_adj_forms:
-                        break
+                    # Short adjectives/participles have no case. Keep their
+                    # actual POS and agreement instead of inventing a case.
+                    tags = _form_tags(form.tag)
+                    candidate = (form.word, canonical_tags(tags))
+                    limit = {'NOUN': max_noun_forms, 'ADJF': max_adj_forms}.get(form.tag.POS)
+                    if candidate in forms or (limit is not None and form_counts[form.tag.POS] >= limit):
+                        continue
+                    forms.add(candidate)
+                    form_counts[form.tag.POS] += 1
+                    # Continue through the lexeme: its short/comparative forms
+                    # can follow the capped full-adjective forms.
                 except AttributeError:
                     continue
 
@@ -332,24 +296,30 @@ class SyncService:
                             'SELECT id, form, tags, form_difficulty FROM forms WHERE word_id=?', (word_id,)).fetchall():
                         try:
                             decoded = json.loads(stored_tags)
+                            signature = (surface, canonical_tags(decoded))
                         except (TypeError, ValueError):
                             continue
-                        if isinstance(decoded, dict):
-                            signature = (surface, json.dumps(decoded, sort_keys=True))
-                            existing_forms.setdefault(signature, []).append((form_id, difficulty))
+                        existing_forms.setdefault(signature, []).append((form_id, difficulty))
 
                 # Insert forms with form_difficulty
-                for form, tags_json in forms:
+                for form, tags_json in sorted(forms):
                     tags = json.loads(tags_json)
                     modifier = 0
-                    if 'participle' in tags.get('pos', '') or 'GRND' in tags_json:  # Participles/gerunds
+                    if tags.get('pos') in ('PRTF', 'PRTS', 'GRND'):
                         modifier += 2
                     if 'plur' in tags.get('number', ''):  # Plural declensions
                         modifier += 1
                     form_difficulty = min(8, lemma_difficulty + modifier)  # Cap at 8
                     logger.debug(f"Form '{form}' (POS: {tags.get('pos', '')}, Tags: {tags}): Lemma {lemma_difficulty}, Modifier {modifier}, Form {form_difficulty}")
-                    if explicit and (form, tags_json) in existing_forms:
-                        for form_id, difficulty in existing_forms[(form, tags_json)]:
+                    stored = existing_forms.get((form, tags_json), [])
+                    # Older complete readings may lack only the newly explicit
+                    # POS field. Reuse their IDs without rewriting their tags.
+                    # Missing case/gender/etc. does not qualify as equivalence.
+                    if explicit and not stored:
+                        legacy_tags = {name: value for name, value in tags.items() if name != 'pos'}
+                        stored = existing_forms.get((form, canonical_tags(legacy_tags)), [])
+                    if explicit and stored:
+                        for form_id, difficulty in stored:
                             if difficulty is None or difficulty == 0:
                                 cursor.execute('UPDATE forms SET form_difficulty=? WHERE id=?', (form_difficulty, form_id))
                         continue
@@ -360,14 +330,12 @@ class SyncService:
                         )
                     except sqlite3.IntegrityError as e:
                         logger.warning(f"Skipping duplicate form '{form}' for lemma '{lemma}': {str(e)}")
-                        if explicit:
+                        if explicit or not cursor.execute(
+                                'SELECT 1 FROM forms WHERE word_id=? AND form=? AND tags=?',
+                                (word_id, form, tags_json)).fetchone():
                             raise
-                        # Update existing form's form_difficulty
-                        cursor.execute(
-                            "UPDATE forms SET form_difficulty = ? WHERE word_id = ? AND form = ?",
-                            (form_difficulty, word_id, form)
-                        )
-                        logger.info(f"Updated form_difficulty for existing form '{form}' to {form_difficulty}")
+                        # A retry must not overwrite a stored reading's score,
+                        # or all syncretic readings sharing this spelling.
                 logger.info(f"Processed lemma '{lemma}' with POS '{pos}', {len(forms)} forms")
                 return True
             except sqlite3.Error as e:
@@ -641,7 +609,7 @@ class SyncService:
             to_keep = []
             seen_lemmas = set()
             pos_map = {
-                'NOUN': 'NOUN', 'VERB': 'VERB', 'INFN': 'VERB', 'ADJF': 'ADJ', 'ADJS': 'ADJ',
+                'NOUN': 'NOUN', 'VERB': 'VERB', 'INFN': 'VERB', 'GRND': 'VERB', 'ADJF': 'ADJ', 'ADJS': 'ADJ',
                 'PRTF': 'ADJ', 'PRTS': 'ADJ', 'ADVB': 'ADVB', 'NUMR': 'NUMR', 'NPRO': 'NPRO',
                 'CONJ': 'CONJ', 'COMP': 'COMP', 'PRCL': 'PART', 'PRED': 'PRED', 'PREP': 'PREP'
             }

@@ -10,7 +10,7 @@ afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();});
 describe('Header chapter progress',()=>{
   it('links to the chapter journey and preserves the exact silent Barsik rail',()=>{
     const {container}=render(<><input aria-label="Draft" value="Мой ответ"/><SkillProgress progression={source()}/></>);
-    expect(screen.getByRole('link',{name:'Chapter 1 of 4 · A small message · 20% complete. Open your journey'}).getAttribute('href')).toBe('/#journey');
+    expect(screen.getByRole('link',{name:'Chapter 1 of 4 · A small message · 20% prepared for checkpoint. Open your journey'}).getAttribute('href')).toBe('/#journey');
     expect(container.querySelector('.skill-rail')?.textContent).toBe('');expect(container.querySelector('details')).toBeNull();
     expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('20');
     expect(container.querySelector('img')?.getAttribute('src')).toBe('/static/images/barsik-progress-run-v1.webp');
@@ -21,6 +21,15 @@ describe('Header chapter progress',()=>{
     expect(screen.getByRole('link',{name:'Open your journey'})).toBeTruthy();expect(screen.queryByRole('progressbar')).toBeNull();
     expect((container.querySelector('.skill-rail') as HTMLElement).style.getPropertyValue('--skill-progress')).toBe('0');
     expect(container.innerHTML).not.toMatch(/Elo|1,040|Getting started/);
+  });
+  it('distinguishes full preparation from a passed checkpoint',()=>{
+    const ready=data(1);ready.course!.chapters[0].status='ready';
+    const {rerender}=render(<SkillProgress progression={source(ready)}/>);
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuetext')).toContain('100% prepared for checkpoint');
+    expect(screen.queryByRole('link',{name:/Milestone passed/})).toBeNull();
+    const passed=data(1);passed.course!.chapters[0].status='passed';
+    rerender(<SkillProgress progression={source(passed)}/>);
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuetext')).toContain('Milestone passed');
   });
   it('keeps loading and failed states accessible',()=>{
     const {container,rerender}=render(<SkillProgress progression={{data:undefined,error:'',loading:true,refresh:vi.fn()}}/>);
@@ -38,6 +47,14 @@ describe('Header chapter progress',()=>{
     const version=data(.7,'another');version.course!.version='a1-v2';rerender(<SkillProgress progression={source(version)}/>);expect(moving()).toBe(false);
     const next=data(.9,'another');next.course!.version='a1-v2';next.course!.current_chapter_id='chapter-2';next.course!.chapters[1].progress=.2;
     rerender(<SkillProgress progression={source(next)}/>);expect(moving()).toBe(false);
+  });
+  it('does not animate a release change as newly earned progress',()=>{
+    const first=data(.1);first.course!.release_id='a1-v1';
+    const {container,rerender}=render(<SkillProgress progression={source(first)}/>);
+    const next=data(.8);next.course!.release_id='a1-journey-v2';
+    rerender(<SkillProgress progression={source(next)}/>);
+    expect(container.querySelector('.skill-rail')!.classList.contains('is-moving')).toBe(false);
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('80');
   });
   it.each([[1.3,'100'],[-.2,'0'],[Number.NaN,'0']])('bounds progress %s and retains saved data during temporary errors', (progress,expected)=>{
     render(<SkillProgress progression={source(data(progress),'Offline')}/>);expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe(expected);

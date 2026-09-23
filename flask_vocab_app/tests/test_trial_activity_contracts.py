@@ -21,6 +21,7 @@ from services.openai_service import OpenAIService
 from services.trial_provider import openai_client
 from services.word_jumble_service import WordJumbleService
 from services.writing_service import WritingService
+from tests.test_writing_generated_evidence import generated_task
 
 
 class TrialActivityContractTests(unittest.TestCase):
@@ -111,14 +112,15 @@ class TrialActivityContractTests(unittest.TestCase):
         self.assert_settled()
 
     def test_writing_activity_schema(self):
-        payload = {'title': 'Мой день', 'title_en': 'My day',
-            'task': 'Расскажи о своём дне.', 'task_en': 'Describe your day.',
-            'required_words': ['дом', 'работа', 'вечер']}
+        payload = generated_task()
         service = WritingService.__new__(WritingService)
         service.client = self.client(payload)
         with patch('services.writing_service.model_for', return_value='gpt-5.6-luna'):
             result = service.generate_writing_task('any', 'beginner', 30)
-        self.assertEqual(result, payload)
+        self.assertEqual(result['task'], payload['task'])
+        self.assertEqual(result['curriculum_contract']['content']['writing_focus'], payload['writing_focus'])
+        schema = self.sent[0]['text']['format']['schema']['properties']
+        self.assertEqual(schema['writing_focus']['maxItems'], 2)
         self.assert_settled()
 
     def test_word_jumble_tutor_feedback_schema(self):

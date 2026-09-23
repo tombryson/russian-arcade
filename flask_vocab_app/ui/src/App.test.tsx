@@ -19,7 +19,7 @@ describe('Russian Arcade activity home', () => {
     const fetch=vi.fn((url:string)=>response(url==='/api/v1/course' ? course : {profile_id:'personal',balance:0,course,skill:{status:'not_calibrated'}}));
     vi.stubGlobal('fetch',fetch);render(<App initialProfile={{id:'personal',display_name:'Learner'}} initialOnboarding={{profile_id:'personal',coins_introduced:false,progress_introduced:false}}/>);
     expect(await screen.findByRole('heading',{name:'The little post office',level:1})).toBeTruthy();
-    expect(screen.getByRole('button',{name:'Test out of this chapter →'})).toBeTruthy();
+    expect(screen.getByRole('button',{name:'Test out of this milestone →'})).toBeTruthy();
     expect(screen.queryByRole('heading',{name:'Your first delivery'})).toBeNull();
     expect(fetch.mock.calls.some(([url])=>url==='/api/v1/course')).toBe(true);
     expect(fetch.mock.calls.some(([url])=>url.startsWith('/api/v1/journey'))).toBe(false);
@@ -321,4 +321,12 @@ describe('Stepwise header introduction',()=>{
     await vi.waitFor(()=>expect(document.querySelector('.skill-rail-runner')).toBeTruthy());
     expect(screen.queryByText(/Loading skill progress/)).toBeNull();
   });
+});
+
+it('uses the published course welcome for a signed-out visitor',async()=>{
+  window.history.replaceState(null,'','/#home');
+  vi.stubGlobal('fetch',vi.fn((url:string)=>response(url==='/api/v1/first-steps'?{profile_id:null,lessons:[{id:'hello',position:1,title:'Hello, Barsik!',description:'Learn your first words.',status:'available',href:'#first-delivery'}],next_lesson:{id:'hello',position:1,title:'Hello, Barsik!',description:'Learn your first words.',status:'available',href:'#first-delivery'},complete:false}:{})));
+  render(<App initialProfile={null} defaultCourseRelease="a1-journey-v2"/>);
+  expect(await screen.findByText('Your first delivery · a little adventure')).toBeTruthy();
+  expect(screen.queryByRole('link',{name:/See the journey/})).toBeNull();expect(screen.queryByRole('link',{name:/See all five lessons/})).toBeNull();
 });

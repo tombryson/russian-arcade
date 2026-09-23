@@ -60,6 +60,9 @@ class PublicDemoTests(unittest.TestCase):
         for path in ('/api/v1/user-session/profiles', '/api/v1/live-conversations', '/lessons/create',
                      '/api/v1/card-generation/batches', '/api/v1/card-generation/batches/example/next',
                      '/api/v1/live-conversations/example/connect', '/api/v1/flashcards/example/media',
+                     '/api/v1/course/checkpoints/example/vocabulary',
+                     '/api/v1/course/checkpoints/example/writing',
+                     '/api/v1/course/checkpoints/example/flashcards',
                      '/api/v1/games/example/start'):
             self.assertEqual(self.a.post(path, base_url=self.base, json={},
                           headers={'X-CSRF-Token': state['csrf_token']}).status_code, 403, path)
@@ -77,6 +80,30 @@ class PublicDemoTests(unittest.TestCase):
         with transaction(self.app.config['DB_PATH']) as conn:
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM journey_game_purchases').fetchone()[0], 0)
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM journey_game_access').fetchone()[0], 0)
+
+    def test_unit_typed_forms_use_owned_saved_practice_without_a_provider(self):
+        state = self.state(self.a)
+        path = '/curriculum/units/location-destination-v1'
+        page = self.a.get(path, base_url=self.base)
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(path + '/forms', page.text)
+        response = self.a.post(path + '/forms', base_url=self.base,
+                               data={'profile_id': state['profile']['id'], 'request_id': 'demo-forms'},
+                               headers={'X-CSRF-Token': state['csrf_token']})
+        self.assertEqual(response.status_code, 303, response.text)
+        session_id = response.location.rsplit('/', 1)[1]
+        url = '/api/v1/learning-sessions/' + session_id
+        saved = self.a.get(url, base_url=self.base).json
+        self.assertEqual(saved['item']['type'], 'controlled_text')
+        checked = self.a.post(url + '/attempts', base_url=self.base,
+                              json={'submission_id': 'typed', 'expected_revision': 0,
+                                    'item_id': saved['item']['id'], 'answer': {'text': 'ШКОЛУ.'}},
+                              headers={'X-CSRF-Token': state['csrf_token']})
+        self.assertEqual(checked.status_code, 200, checked.text)
+        self.assertEqual(checked.json['attempts'][0]['answer'], {'text': 'ШКОЛУ.'})
+        self.assertEqual(checked.json['attempts'][0]['outcome'], 'correct')
+        self.state(self.b)
+        self.assertEqual(self.b.get(url, base_url=self.base).status_code, 404)
 
     @patch('utils.lazy.LazyService._get', side_effect=AssertionError('Course demo must not resolve providers'))
     def test_course_checkpoints_are_playable_owned_and_provider_free(self, provider):
@@ -135,6 +162,9 @@ class PublicDemoTests(unittest.TestCase):
             result = post(path + '/answer', {'answers': answers, 'submission_id': f'demo-course-{number}'})
             self.assertEqual(result['result']['score'], result['result']['total'])
             self.assertTrue(result['result']['essential_passed'])
+            self.assertEqual(result['vocabulary'], [])
+            self.assertFalse(result['writing_available'])
+            self.assertFalse(result['flashcards_available'])
             self.assertEqual({item['question_id']: item['selected_answer'] for item in result['result']['feedback']}, answers)
             self.assertEqual(self.a.get(path, base_url=self.base).json, result)
             if number == 1:
@@ -151,6 +181,143 @@ class PublicDemoTests(unittest.TestCase):
                 self.assertTrue(result['result']['passed'])
                 self.assertEqual(result['course']['chapters'][0]['status'], 'passed')
                 self.assertEqual(result['course']['current_chapter_id'], course['chapters'][1]['id'])
+        provider.assert_not_called()
+
+    @patch('utils.lazy.LazyService._get', side_effect=AssertionError('Course preparation must not resolve providers'))
+    def test_course_preparation_is_playable_owned_and_provider_free(self, provider):
+        import json
+        from repositories.learning_repository import transaction
+
+        self.app.config['COURSE_DEFAULT_RELEASE'] = 'a1-journey-v2'
+        visitor = self.state(self.a)
+        headers = {'X-CSRF-Token': visitor['csrf_token']}
+        start_path = '/api/v1/course/chapters/home/practice'
+        request_body = {'request_id': 'demo-preparation', 'release_id': 'a1-journey-v2'}
+        denied = self.a.post(start_path, base_url=self.base, json=request_body)
+        self.assertEqual(denied.status_code, 403)
+
+        def post(path, body):
+            response = self.a.post(path, base_url=self.base, headers=headers, json=body)
+            self.assertEqual(response.status_code, 200, response.text)
+            return response.json
+
+        state = post(start_path, request_body)
+        self.assertEqual(state, post(start_path, request_body))
+        path = '/api/v1/course/practice/' + state['id']
+        self.assertEqual(self.a.get(path, base_url=self.base).json, state)
+        self.assertIsNone(state['current_item']['question'])
+        self.assertEqual(self.b.get(path, base_url=self.base).status_code, 404)
+        first = state['current_item']['id']
+        other_headers = {'X-CSRF-Token': self.state(self.b)['csrf_token']}
+        for action in ('learn', 'hint', 'transcript', 'listened', 'answer', 'next'):
+            body = {'item_id': first, 'request_id': 'other-' + action}
+            if action == 'answer':
+                body['choice_id'] = 'a'
+            denied = self.b.post(path + '/' + action, base_url=self.base, headers=other_headers, json=body)
+            self.assertEqual(denied.status_code, 404, denied.text)
+        denied = self.a.post(path + '/learn', base_url=self.base,
+                             json={'item_id': first, 'request_id': 'missing-csrf'})
+        self.assertEqual(denied.status_code, 403)
+        with transaction(self.app.config['DB_PATH']) as conn:
+            saved = json.loads(conn.execute('SELECT content_json FROM course_target_practice_attempts WHERE id=?',
+                                            (state['id'],)).fetchone()[0])
+
+        for item in saved:
+            self.assertEqual(state['current_item']['id'], item['id'])
+            def action(name, **values):
+                return post(path + '/' + name, {'item_id': item['id'], 'request_id': item['id'] + '-' + name} | values)
+            state = action('learn')
+            self.assertEqual(state['current_item']['stage'], 'question')
+            self.assertNotIn('answer', state['current_item']['question'])
+            self.assertIsNone(state['current_item']['feedback'])
+            if item['question'].get('audio_url'):
+                self.assertIsNone(state['current_item']['transcript'])
+                with self.a.get(item['question']['audio_url'], base_url=self.base) as audio:
+                    self.assertEqual(audio.status_code, 200)
+                    self.assertEqual(audio.mimetype, 'audio/mpeg')
+                state = action('listened')
+                self.assertTrue(state['current_item']['listened'])
+                state = action('transcript')
+                self.assertEqual(state['current_item']['transcript'], item['question']['transcript'])
+            state = action('hint')
+            self.assertIsNotNone(state['current_item']['hint'])
+            state = action('answer', choice_id=item['question']['answer'])
+            self.assertTrue(state['current_item']['feedback']['correct'])
+            state = action('next')
+
+        self.assertEqual(state['status'], 'completed')
+        self.assertTrue(state['coverage']['ready'])
+        self.assertTrue(all(not target['demonstrated'] for target in state['coverage']['targets']))
+        self.assertEqual(self.a.get(path, base_url=self.base).json, state)
+        with transaction(self.app.config['DB_PATH']) as conn:
+            self.assertEqual(conn.execute('SELECT COUNT(*) FROM course_chapter_passes WHERE profile_id=?',
+                                          (visitor['profile']['id'],)).fetchone()[0], 0)
+            self.assertEqual(conn.execute('SELECT COUNT(*) FROM progression_events WHERE profile_id=?',
+                                          (visitor['profile']['id'],)).fetchone()[0], 0)
+        provider.assert_not_called()
+
+    @patch('utils.lazy.LazyService._get', side_effect=AssertionError('Saving course drafts must not resolve providers'))
+    def test_course_drafts_remain_owned_and_preserve_conflicting_work(self, provider):
+        course = self.a.get('/api/v1/course', base_url=self.base).json
+        headers = {'X-CSRF-Token': course['csrf_token']}
+        started = self.a.post('/api/v1/course/chapters/' + course['chapters'][0]['id'] + '/checkpoint',
+            base_url=self.base, headers=headers, json={'request_id': 'draft-start', 'challenge': True})
+        self.assertEqual(started.status_code, 200, started.text)
+        attempt = started.json
+        path = '/api/v1/course/checkpoints/' + attempt['id']
+        question = attempt['questions'][0]
+        body = {'answers': {question['id']: question['choices'][0]['id']}, 'revision': 0}
+        self.assertEqual(self.a.post(path + '/draft', base_url=self.base, json=body).status_code, 403)
+        other_headers = {'X-CSRF-Token': self.state(self.b)['csrf_token']}
+        denied = self.b.post(path + '/draft', base_url=self.base, headers=other_headers, json=body)
+        self.assertEqual(denied.status_code, 404)
+        saved = self.a.post(path + '/draft', base_url=self.base, headers=headers, json=body)
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertEqual(saved.json['draft_answers'], body['answers'])
+        self.assertEqual(saved.json['draft_revision'], 1)
+        self.assertEqual(self.a.post(path + '/draft', base_url=self.base, headers=headers, json=body).json, saved.json)
+        conflict = self.a.post(path + '/draft', base_url=self.base, headers=headers,
+                               json={'answers': {}, 'revision': 0})
+        self.assertEqual(conflict.status_code, 409)
+        self.assertEqual(conflict.json['error']['code'], 'draft_conflict')
+        self.assertEqual(self.a.get(path, base_url=self.base).json['draft_answers'], body['answers'])
+        provider.assert_not_called()
+
+    @patch('utils.lazy.LazyService._get', side_effect=AssertionError('Switching a course must not resolve providers'))
+    def test_course_switch_is_explicit_owned_and_keeps_previous_access(self, provider):
+        from repositories.learning_repository import transaction
+
+        self.app.config['COURSE_DEFAULT_RELEASE'] = 'a1-journey-v2'
+        visitor = self.state(self.a)
+        profile_id = visitor['profile']['id']
+        headers = {'X-CSRF-Token': visitor['csrf_token']}
+        with transaction(self.app.config['DB_PATH'], write=True) as conn:
+            conn.execute("INSERT INTO course_enrolments VALUES (?,'A1','a1-v1',1,'schema-044')", (profile_id,))
+            conn.execute("INSERT INTO course_continuation_entitlements VALUES (?,'A2','a1-v1','legacy-course-completion',1)", (profile_id,))
+        course = self.a.get('/api/v1/course', base_url=self.base).json
+        self.assertEqual(course['release_id'], 'a1-v1')
+        started = self.a.post('/api/v1/course/chapters/' + course['chapters'][0]['id'] + '/checkpoint',
+            base_url=self.base, headers=headers, json={'request_id': 'old-course', 'challenge': True})
+        self.assertEqual(started.status_code, 200, started.text)
+        old_id = started.json['id']
+        path = '/api/v1/course/releases/a1-journey-v2/switch'
+        body = {'request_id': 'demo-switch', 'from_release_id': 'a1-v1'}
+        self.assertEqual(self.a.post(path, base_url=self.base, json=body).status_code, 403)
+        other = self.state(self.b)
+        response = self.b.post(path, base_url=self.base,
+            headers={'X-CSRF-Token': other['csrf_token']}, json=body)
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(self.a.get('/api/v1/course', base_url=self.base).json['release_id'], 'a1-v1')
+        changed = self.a.post(path, base_url=self.base, headers=headers, json=body)
+        self.assertEqual(changed.status_code, 200, changed.text)
+        self.assertEqual(changed.json['release_id'], 'a1-journey-v2')
+        self.assertEqual(changed.json['unlocked_levels'], ['A1', 'A2'])
+        self.assertEqual(changed.json['previous_courses'][0]['attempts'][0]['id'], old_id)
+        self.assertEqual(self.a.post(path, base_url=self.base, headers=headers, json=body).json, changed.json)
+        self.assertEqual(self.a.get('/api/v1/course/checkpoints/' + old_id, base_url=self.base).json['status'], 'active')
+        with transaction(self.app.config['DB_PATH']) as conn:
+            rows = conn.execute('SELECT profile_id FROM course_release_switches').fetchall()
+            self.assertEqual([row['profile_id'] for row in rows], [profile_id])
         provider.assert_not_called()
 
     def test_advertised_samples_are_playable_without_providers_and_owned(self):

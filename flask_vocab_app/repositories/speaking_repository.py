@@ -137,6 +137,15 @@ def choose_variant(conn, scenario_id='cafe', *, previous_seeds=(), seed=None, le
         available = [key for key in variants if key not in recent]
         seed = random.choice(available) if available else recent[-1]
     snapshot = json.loads(variants[seed]['payload_json'])
+    context = snapshot.get('curriculum_context')
+    if isinstance(context, dict) and isinstance(context.get('topic_id'), str):
+        from services.torfl_requirements import generation_reference
+        reference = generation_reference(context['topic_id'], variants[seed]['target_level'], 'speaking')
+        if reference is not None:
+            # Refresh planning guidance only in the selected copy. Both modes
+            # freeze it when creating a session; resumed sessions and persisted
+            # catalogue facts/contracts are never rewritten by selection.
+            snapshot['curriculum_context'] = {**context, 'proficiency_reference': reference}
     level_metadata = conn.execute('SELECT title,title_ru FROM speaking_scenario_levels WHERE scenario_id=? AND target_level=?',
                                   (scenario_id,variants[seed]['target_level'])).fetchone()
     # Metadata is copied into the immutable session snapshot, so future

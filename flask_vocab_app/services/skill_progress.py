@@ -62,7 +62,7 @@ def _number(value, lower, upper):
     return type(value) in (int, float) and math.isfinite(value) and lower <= value <= upper
 
 
-def freeze_evidence(conn, activity, content_key, source_key, target_level, evidence):
+def freeze_evidence(conn, activity, content_key, source_key, target_level, evidence, *, profile_id=None):
     """Attach rating evidence inside the same transaction that saves a check.
 
     The public award endpoint does not accept these fields from a browser. Ignore
@@ -71,6 +71,19 @@ def freeze_evidence(conn, activity, content_key, source_key, target_level, evide
     """
     result = dict(evidence) if isinstance(evidence, dict) else {}
     result.pop('_skill', None)
+    if activity == 'reading' and str(source_key).startswith('comprehension-check:'):
+        from services.course_evidence import comprehension_assessment, comprehension_event_fields
+        saved = comprehension_assessment(conn, profile_id, content_key, source_key)
+        if not saved:
+            return result
+        result.update(comprehension_event_fields(saved))
+        if saved['assisted'] or not saved['first_fresh']:
+            return result
+        difficulty = CURRICULUM_LEVELS.get(saved['difficulty'], THREE_LEVELS.get(saved['difficulty']))
+        if difficulty is not None:
+            result['_skill'] = {'policy_version': POLICY, 'task_rating': difficulty,
+                                'task_difficulty': saved['difficulty'], 'scores': {'reading': saved['score'] / 10}}
+        return result
     if result.get('assisted') is True or result.get('hint_used') is True:
         return result
     scores = {}

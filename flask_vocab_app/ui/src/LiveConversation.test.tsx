@@ -358,7 +358,8 @@ describe('Speaking activity',()=>{
     expect(a1.compareDocumentPosition(a2) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(a1).getAllByRole('button')).toHaveLength(5);
     expect(within(a2).getAllByRole('button')).toHaveLength(5);
-    expect(a2.classList.contains('speaking-level-group-muted')).toBe(true);
+    expect(a2.classList.contains('speaking-level-group-muted')).toBe(false);
+    expect(within(a2).getAllByRole('button').every(button=>!button.hasAttribute('disabled'))).toBe(true);
     expect(screen.queryByRole('tablist')).toBeNull();
     expect(screen.queryByRole('tab')).toBeNull();
     expect(screen.queryByRole('combobox')).toBeNull();
@@ -602,6 +603,22 @@ describe('Speaking activity',()=>{
     expect(screen.getByLabelText('Grammar').textContent).toContain('3 / 5');
     expect(fetch.mock.calls.some(([url])=>url.includes('/options') || url.includes('/scenarios') || url.endsWith('/review'))).toBe(false);
     expect(getUserMedia).not.toHaveBeenCalled();
+  });
+  it('keeps optional criterion feedback compact and allows short speech with no broad score',async()=>{
+    const fetch=setup({...saved,state:'completed',scenario,recordings:[recording],review:{state:'ready',error:null,retryable:false,
+      report:{...report,speech_status:'insufficient',grammar:{score:null,reason:'A short question does not support a broad score.',evidence:[]},
+        fluency:{score:null,reason:'There is too little speech for this score.',evidence:[]},
+        criterion_details:[{label:'Ask where the park is',label_ru:'Спросите, где находится парк',outcome:'satisfied',feedback:'Your short question asks where the park is.'}]}}});
+    const {getUserMedia}=fakeMedia();render(<LiveConversation sessionId="live-one" />);
+    const disclosure=(await screen.findByText('What this recording shows')).closest('details');
+    expect(disclosure?.open).toBe(false);
+    expect(within(disclosure!).getByRole('heading',{name:'Ask where the park is'})).toBeTruthy();
+    expect(within(disclosure!).getByText('Shown in this recording')).toBeTruthy();
+    expect(within(disclosure!).getByText('Your short question asks where the park is.')).toBeTruthy();
+    expect(screen.getByLabelText('Grammar').textContent).not.toContain('/ 5');
+    expect(screen.getByText(report.summary)).toBeTruthy();
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(fetch.mock.calls.some(([url])=>url.endsWith('/review'))).toBe(false);
   });
   it.each(['insufficient','unclear'])('does not invent scores when speech is %s',async speech_status=>{
     setup({...saved,state:'completed',scenario,recordings:[recording],review:{state:'ready',error:null,retryable:false,report:{...report,speech_status,

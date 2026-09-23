@@ -93,6 +93,16 @@ Use “For grown-ups” as the entry, but implement actual server access policy.
 
 ## 4. Component contracts
 
+### Activity entry layout
+
+Milestone and activity screens use the compact learning header. Keep the title, brief context and main action together. Put alternative actions beside the main action, and move detailed progress requirements below the practice choices. On desktop, the milestone topic activities should fit in the first viewport. Check the rendered layout at desktop and narrow widths; reducing text size alone is not a layout fix.
+
+### Navigation cards
+
+When a card opens one destination, its entire surface must be clickable: illustration, text and padding. Use one native link with a clear destination name. The card should have one keyboard stop and a visible focus outline around the whole card. Preserve normal link actions, including opening in a new tab.
+
+A stretched link can extend a title or action link across its card. Keep its hit area within that card and check it at narrow widths. Do not put other links, buttons or form controls inside that hit area; cards with several actions need separate controls. Locked cards remain inactive and outside the tab order. Do not give them hover or pointer treatments that imply they can be opened.
+
 | Component | Purpose | Required states/behaviour |
 |---|---|---|
 | Postal header/navigation | Locate the child in the world | Active destination, long labels, keyboard focus, profile context, small screen |

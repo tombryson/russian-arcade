@@ -44,6 +44,14 @@ def create_card_generation_blueprint(generator, authoring):
             raise LearningError('invalid_input', 'Use the words from your saved game.')
         return jsonify(create_game_flashcards(generator, access_id(), session_id, data.get('items'))), 201
 
+    @bp.post('/api/v1/course/checkpoints/<attempt_id>/flashcards')
+    @access_policy('adult')
+    def course_cards(attempt_id):
+        from services.course_followups import create_flashcards
+        if body():
+            raise LearningError('invalid_input', 'Use the words from your saved letter.')
+        return jsonify(create_flashcards(generator, access_id(), attempt_id)), 201
+
     @bp.get('/api/v1/card-generation/options')
     @access_policy('adult')
     def options():

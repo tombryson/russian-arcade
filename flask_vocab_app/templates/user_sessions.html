@@ -31,6 +31,7 @@
       </form>
       {% endfor %}
     </div>
+    {% include '_profile_course_progress.html' %}
     {% include '_profile_skill_progress.html' %}
     {% include '_navigation_preferences.html' %}
     <details class="user-profile-add" {% if not state.profiles or error | default('') %}open{% endif %}>

@@ -49,7 +49,7 @@ def upgrade_database(db_path, backup=True):
                 snapshot.execute('PRAGMA journal_mode=DELETE')
         # SQLite's supported table-rebuild procedure changes FK enforcement
         # before BEGIN, then checks all references before the atomic commit.
-        rebuild = any(p.name in ('009_native_flashcards.sql', '012_four_review_ratings.sql', '017_lesson_word_selection.sql', '032_journey_game_library.sql') for p in pending)
+        rebuild = any(p.name in ('009_native_flashcards.sql', '012_four_review_ratings.sql', '017_lesson_word_selection.sql', '032_journey_game_library.sql', '045_course_releases.sql') for p in pending)
         conn.execute('PRAGMA foreign_keys=' + ('OFF' if rebuild else 'ON'))
         try:
             conn.execute('BEGIN IMMEDIATE')
@@ -90,6 +90,11 @@ def upgrade_database(db_path, backup=True):
                 if version == 42:
                     from repositories.speaking_repository import seed_curriculum
                     seed_curriculum(conn)
+                if version == 45 and not has_tables:
+                    # Migration 025 creates the local bootstrap profile. In a
+                    # brand-new database it has never used the legacy course;
+                    # leave enrolment to its first command and current release.
+                    conn.execute("DELETE FROM course_enrolments WHERE migration_source='schema-044'")
                 conn.execute('INSERT INTO schema_migrations(version) VALUES (?)', (version,))
             if conn.execute('PRAGMA foreign_key_check').fetchone():
                 raise ValueError('Migration would leave orphaned references; no changes were committed.')

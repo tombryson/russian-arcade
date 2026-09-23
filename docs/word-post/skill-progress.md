@@ -1,10 +1,10 @@
 # The header progress line
 
-Introduced 15 September 2026; course display updated 22 September 2026. The header now shows guided chapter preparation. Separate provisional practice ratings remain available under [levels and progression](levels-and-progression.md), without reviving the old additive `users.elo_rating`.
+Introduced 15 September 2026; preparation policy updated 23 September 2026. The header now shows guided chapter preparation. Separate provisional practice ratings remain available under [levels and progression](levels-and-progression.md), without reviving the old additive `users.elo_rating`.
 
-## Current chapter coverage — 22 September 2026
+## Current chapter preparation
 
-The header line now represents preparation for the current [guided A1 chapter](course-chapters.md), independently of Elo. It combines successful distinct task coverage for every chapter topic with the requirement for two activity families. Completing preparation opens the checkpoint; passing the checkpoint advances the course. A lower historical skill estimate does not reduce this coverage or remove a pass.
+The header line now represents preparation for the current [guided A1 chapter](course-chapters.md), independently of Elo. For the current release it uses the greater of ordinary activity preparation and focused-target preparation. The activity route requires successful distinct tasks for each chapter topic across two activity families. The focused route counts independent success, or introduction followed by practice. See the [milestone contract](course-milestones.md). Completing preparation opens the checkpoint; passing the checkpoint advances the course. A lower historical skill estimate does not reduce this coverage or remove a pass.
 
 The separate provisional skill histories and their evidence policy remain available. The rating formula and dated verification receipts below describe that separate model; they do not define the header’s fill or destination. Coins and FSRS remain separate.
 
@@ -12,7 +12,7 @@ The separate provisional skill histories and their evidence policy remain availa
 
 A thin line spans the bottom of the sticky header in both the main app and the older activity pages. A small running Barsik sits at its leading edge. Selecting Barsik or the line opens the **guided course** for the selected learner. The link's accessible name identifies the current chapter and preparation progress.
 
-The header shows the current chapter’s topic coverage and activity-family requirement. With no qualifying preparation, Barsik stays at the beginning. Passing a checkpoint advances to the next chapter, whose own coverage determines the new fill. Completing all four chapters shows the completed course. Separate unmeasured skills in the profile still show a dash and **Not started**.
+The header shows checkpoint preparation, not a percentage of proficiency. Reaching 100% recommends the checkpoint; it does not pass it. With no qualifying preparation, Barsik stays at the beginning. Passing a checkpoint advances to the next chapter, whose own coverage determines the new fill. Completing all four chapters shows the completed course. Separate unmeasured skills in the profile still show a dash and **Not started**.
 
 Barsik moves briefly when the same learner’s preparation improves within the current chapter. Reloading, changing learners or advancing to a different chapter must not look like newly earned preparation. He stays still between updates, and reduced-motion preferences disable animation. His feet stay aligned with the line, including at either edge on a narrow screen.
 

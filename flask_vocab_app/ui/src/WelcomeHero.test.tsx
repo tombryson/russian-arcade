@@ -44,3 +44,21 @@ describe('Saved First steps home ticket',()=>{
     expect(await screen.findByText('First steps · 2 of 5')).toBeTruthy();
   });
 });
+
+describe('Milestone course welcome',()=>{
+  it('moves from the single welcome into Home without requiring five introductory lessons',async()=>{
+    const current=lessons.map(lesson=>({...lesson,status:lesson.id==='hello'?'completed':'available'}));
+    vi.stubGlobal('fetch',vi.fn(()=>response({profile_id:'p',lessons:current,next_lesson:current[1],complete:false,completed_count:1})));
+    render(<WelcomeHero headingRef={createRef()} profileKey="p" courseJourney nextDestination={{title:'Leaving home',href:'#journey/chapter/home'}}/>);
+    expect(await screen.findByText('Leaving home')).toBeTruthy();
+    expect(screen.getByRole('link',{name:/Your journey.*Leaving home/}).getAttribute('href')).toBe('#journey/chapter/home');
+    expect(screen.queryByRole('link',{name:/See all five lessons/})).toBeNull();
+    expect(screen.getByText('Help him deliver it, one word at a time.')).toBeTruthy();
+  });
+  it('offers the welcome first for a new learner on the milestone route',async()=>{
+    vi.stubGlobal('fetch',vi.fn(()=>response({profile_id:'p',lessons,next_lesson:lessons[0],complete:false,completed_count:0})));
+    render(<WelcomeHero headingRef={createRef()} profileKey="p" courseJourney nextDestination={{title:'Leaving home',href:'#journey/chapter/home'}}/>);
+    expect(await screen.findByText('Your first delivery · a little adventure')).toBeTruthy();
+    expect(screen.getByRole('link',{name:/Hello, Barsik!/}).getAttribute('href')).toBe('#first-delivery');
+  });
+});

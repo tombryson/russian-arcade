@@ -2,11 +2,11 @@
 
 Progression decision: 15 September 2026. Game-shop update: 17 September 2026. This document records the approved direction and the scope of the first integrated release. It supersedes earlier proposals to turn the legacy Elo total into distance, or to charge coins for access to ordinary practice.
 
-## Current guided-course rules — 22 September 2026
+## Current guided-course rules — 23 September 2026
 
-The [four authored A1 chapters](course-chapters.md) now govern the main route. This section supersedes the older coin-unlock and header-rating descriptions below. Each chapter requires two successful distinct A1 tasks per topic at 70% or higher and at least two activity families across that chapter to open its normal checkpoint. Supported practice counts towards coverage; a current-chapter challenge can test out early.
+The [four authored A1 milestones](course-milestones.md) now govern the main route. This section supersedes the older coin-unlock and header-rating descriptions below. The current release accepts ordinary activity preparation or focused-target preparation for its normal checkpoint. The activity route uses two successful distinct A1 tasks per topic at 70% or higher across two activity families. Supported practice counts towards preparation; a current-chapter challenge can test out early. See the [TORFL research](../curriculum-research.md) and the proposed [curriculum and assessment implementation plan](../curriculum-uplift-plan.md).
 
-A checkpoint pass requires at least 80%, both essential message details, playback of the separate listening clip and no revealed question hints or transcript. Supported attempts provide feedback; a new unassisted attempt using another variant is required to pass. All four passes unlock the A2 guided level, with no authored A2 chapters claimed. Higher-level free practice stays available. These are pilot course rules, not CEFR certification.
+Current checkpoints require 7/8 for the first three milestones; the final requires 13/16 with separate component minima. Both essential message details, playback of the separate listening clip and no revealed question hints or transcript are also required. Supported attempts provide feedback; a new unassisted attempt using another variant is required to pass. All four passes unlock the A2 guided level, with no authored A2 chapters claimed. Higher-level free practice stays available. These are pilot course rules, not CEFR certification.
 
 The header line shows current-chapter coverage independently of Elo. Historical skill estimates remain separate. Coins, shop ownership and FSRS scheduling retain their existing contracts; they do not gate chapter progression. Earlier journey receipts stay saved.
 
@@ -43,7 +43,7 @@ Freeze the legacy additive Elo calculation. Preserve its historical value and re
 
 The relationship is activity type → scenario → variation. Café, shop, directions, station and introductions are scenarios, not levels. A variation has its own target band and authored learning contract: communicative objectives, grammar focus, vocabulary focus, agent complexity and support.
 
-There are 30 active situations: three for each of the five settings at A1 and at A2. Each setting and level has its own description and curriculum mapping. A1 tasks cover simple exchanges; A2 tasks add clarification, alternatives or coordinated plans. The saved task requirements guide dialogue generation and feedback. See [Speaking scenarios](speaking-scenarios.md) for the current coverage. The Speaking catalogue shows an **A1 heading and its activities**, followed by an **A2 heading and its activities in grey**. Both groups stay visible; there is no level toggle, dropdown or preference write when browsing them. The grey A2 styling does not disable its activities. Opening a card selects a task from that card’s band, and a seed from another level cannot be started under it. B1/B2 remain future authored content and are not shown as empty selectors.
+There are 30 active situations: three for each of the five settings at A1 and at A2. Each setting and level has its own description and curriculum mapping. A1 tasks cover simple exchanges; A2 tasks add clarification, alternatives or coordinated plans. The saved task requirements guide dialogue generation and feedback. See [Speaking scenarios](speaking-scenarios.md) for the current coverage. The Speaking catalogue shows an **A1 heading and its activities**, followed by an **A2 heading and its activities**. Both groups stay visible; there is no level toggle, dropdown or preference write when browsing them. Available A2 activities use the same active styling as A1. Opening a card selects a task from that card’s band, and a seed from another level cannot be started under it. B1/B2 remain future authored content and are not shown as empty selectors.
 
 The selected variation and contract are copied into the session at creation. Changes to curriculum cannot rewrite an existing conversation’s task or grading context. Historical sessions keep their original snapshots and an unknown target level; they are not retrospectively labelled.
 
@@ -79,7 +79,7 @@ Migration 025 assigns saved reading, writing, translation and Word Jumble work t
 
 ### Guided route and historical pilot
 
-The guided route now contains four A1 chapters and three authored checkpoint variants per chapter. Chapter 4 delivers the learner’s original letter and assesses its invitation alongside a separate spoken update. The [chapter contract](course-chapters.md) defines preparation, independent passes, support and retries.
+The current guided route contains four A1 milestones and three authored checkpoint variants per milestone. The final received letter arranges the journey beyond town; Barsik's original carried letter remains sealed. The [milestone contract](course-milestones.md) defines preparation, independent passes, support and retries. The [earlier chapter contract](course-chapters.md) remains available for the retained v1 release.
 
 The earlier post-office and market-town scenes used eligible-coin thresholds. Their stored unlocks, answers and rewards remain preserved, but they do not establish chapter coverage or a course pass. The main journey view and header link now open the guided course. Updating the coin badge still does not reload an activity or reconnect the microphone, and ordinary practice remains available.
 
@@ -111,7 +111,7 @@ The original release integrated the participation/progression system and A1/A2 S
 
 Still to build: authored A2 and later guided chapters, further live Speaking content, independent curriculum review of band assignments, learner ownership for old shared activities in household mode, and evaluated skill recommendations. The four A1 chapter checkpoints, including the final letter, are implemented. Coins do not solve those curriculum or measurement problems. The later game-shop update adds spending with permanent ownership; it does not introduce a calibrated Elo model. The visible practice rating is explicitly provisional and does not yet choose tasks for the learner.
 
-Operational rollout: back up the configured SQLite store; run `db-upgrade` explicitly; verify foreign keys and preserved historical row counts; build the React bundle; restart the local server against the same configuration. Retain the pre-migration backup. To roll back, stop the app and restore a matching code/database backup together; do not downgrade a database in place or discard subsequent practice silently.
+Operational rollout: back up the configured SQLite store; run `db-upgrade` explicitly; verify foreign keys and preserved historical row counts; build the React bundle; restart the local server against the same configuration. Retain the pre-migration backup. After new work has been saved, roll back through compatible code or release routing while retaining its records and media. Restoring an older database is disaster recovery, not a routine rollback; it must account explicitly for subsequent writes.
 
 ### Local rollout receipt
 

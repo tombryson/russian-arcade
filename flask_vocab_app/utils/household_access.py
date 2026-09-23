@@ -83,6 +83,8 @@ def install_household_policy(app):
             abort(404)
         if not enabled and request.blueprint == 'learning' and request.endpoint not in {
             'learning.household', 'learning.state', 'learning.post', 'learning.pocket', 'learning.asset',
+            'learning.start_session', 'learning.read_session', 'learning.attempt', 'learning.help_item',
+            'learning.listened_item', 'learning.transcript_item',
         }:
             abort(404)
         if enabled and (len(app.config.get('SECRET_KEY') or '') < 32 or app.config['SECRET_KEY'] == 'dev-secret-key-change-me'):
@@ -99,6 +101,9 @@ def install_household_policy(app):
         if request.endpoint == 'static':
             filename = request.view_args.get('filename', '')
             if filename.startswith(('css/','js/')) or re.fullmatch(r'audio/deliveries/[0-9a-f]{24}\.mp3', filename) or filename in {
+                'audio/course/curriculum/location-destination-listening-v1/shop-now.mp3',
+                'audio/course/curriculum/location-destination-listening-v1/after-pharmacy.mp3',
+                'audio/course/curriculum/location-destination-listening-v1/inside-museum.mp3',
                 'images/barsik-running-v1.webp', 'images/barsik-progress-run-v1.webp', 'images/favicon.svg',
                 'images/favicon.ico', 'images/apple-touch-icon.png',
                 'images/scene-builder/cat-v1.webp', 'images/scene-builder/table-v1.webp',
@@ -129,7 +134,7 @@ def install_household_policy(app):
         # must not accept another profile's data or write as that profile even
         # if a background response has refreshed its CSRF token.
         page_profile = request.headers.get('X-Profile-ID')
-        if page_profile is not None and (unsafe or role != 'public' or request.endpoint in {'learning.asset', 'onboarding.practice_read', 'first_steps.chapter', 'first_steps.lesson', 'journey_games.catalogue', 'journey_games.read', 'journey_game_media.status', 'journey_game_media.asset'}):
+        if page_profile is not None and (unsafe or role != 'public' or request.endpoint in {'learning.asset', 'onboarding.practice_read', 'first_steps.chapter', 'first_steps.lesson', 'journey_games.catalogue', 'journey_games.read', 'journey_game_media.status', 'journey_game_media.asset', 'curriculum.index'}):
             with transaction(app.config['DB_PATH']) as conn:
                 selected = conn.execute(
                     'SELECT p.id FROM household_access a JOIN learning_profiles p ON p.id=a.profile_id '

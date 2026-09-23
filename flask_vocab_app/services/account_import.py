@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 import sqlite3
 import tempfile
+import wave
 
 from migrations import upgrade_database
 
@@ -42,6 +43,9 @@ HOSTED_OVERLAY_TABLES = CATALOGUE_TABLES | AUTH_TABLES | {
     'live_conversation_recordings', 'live_conversation_sessions',
     'speaking_reviews', 'step_conversation_answers', 'step_conversation_sessions',
     'writing_details', 'writing_exercises', 'writing_drafts',
+    # Only unused schema-044 default enrolments pass the explicit check below.
+    # Course attempts, evidence, passes and continuation rights remain guarded.
+    'course_enrolments',
 }
 
 
@@ -107,6 +111,11 @@ def _json_refs(value, maps):
 
 def transform(name, table, row, maps, schemas):
     result = dict(row)
+    if name == 'comprehension_tasks':
+        # Provider work belongs to the original process, never to an offline
+        # artifact. Clear only the temporary claim; retain all task evidence.
+        for column in ('checking_submission_id', 'checking_sha256', 'checking_started_at', 'checking_token'):
+            result[column] = None
     if len(table['pk']) == 1:
         key = table['pk'][0]
         result[key] = _mapped(maps, name, result[key])
@@ -123,8 +132,36 @@ def transform(name, table, row, maps, schemas):
             except ValueError:
                 continue
             changed = _json_refs(parsed, maps)
+            if (name in ('activity_task_contracts', 'activity_criterion_reports', 'comprehension_tasks', 'comprehension_attempts')
+                    or (name == 'speaking_reviews' and isinstance(parsed, dict) and 'audio_source' in parsed)):
+                # Assessment payloads are immutable and hash-bound. Their
+                # typed routing columns can move; their original content cannot.
+                if changed != parsed:
+                    raise ImportConflict('Frozen activity evidence contains references requiring an explicit migration policy.')
+                continue
             if changed != parsed:
                 result[column] = encode(changed)
+    if name == 'activity_task_contracts':
+        if row['activity'] == 'writing':
+            if not re.fullmatch(r'[1-9][0-9]*', row['task_key']):
+                raise ImportConflict('Writing criterion contract has an invalid task identity.')
+            result['task_key'] = str(_mapped(maps, 'writing_exercises', int(row['task_key'])))
+        elif row['activity'] not in ('curriculum_unit', 'speaking', 'comprehension'):
+            raise ImportConflict('Activity criterion contracts need an explicit activity import adapter.')
+    if name == 'activity_criterion_reports':
+        contracts = {item['id']: item for item in schemas['activity_task_contracts']['rows']}
+        contract = contracts.get(row['contract_id'])
+        if contract is None or contract['profile_id'] != row['profile_id']:
+            raise ImportConflict('Criterion report has no matching owned contract.')
+        if contract['activity'] == 'writing':
+            if not re.fullmatch(r'[1-9][0-9]*', row['source_key']):
+                raise ImportConflict('Writing criterion report has an invalid attempt identity.')
+            result['source_key'] = str(_mapped(maps, 'writing_attempts', int(row['source_key'])))
+        elif contract['activity'] == 'speaking':
+            if row['source_key'] != contract['task_key']:
+                raise ImportConflict('Speaking criterion evidence belongs to another recorded conversation.')
+        elif contract['activity'] not in ('curriculum_unit', 'comprehension'):
+            raise ImportConflict('Activity criterion reports need an explicit activity import adapter.')
     if name == 'progression_events' and row['activity'] in ACTIVITY_NAMES:
         target = ACTIVITY_NAMES[row['activity']]
         value = row['content_key']
@@ -178,6 +215,11 @@ def _merge_duplicate(name, local, hosted):
             values = [value for value in (local[field], hosted[field]) if value is not None]
             merged[field] = min(values) if values else None
         return merged, 'Keep completed introductions from either workspace.'
+    if name == 'course_enrolments':
+        if (not _baseline_course_enrolment(hosted)
+                or any(local[field] != hosted[field] for field in ('profile_id', 'band', 'release_id'))):
+            raise ImportConflict('Conflicting course_enrolments record; course release choices require a specific mapping.')
+        return local, 'Keep the local course enrolment; archive the hosted automatic schema-044 default.'
     if name == 'users' and hosted['lingocoins'] == 0 and hosted['elo_rating'] == 1000:
         return local, 'Keep the existing local legacy balance; hosted legacy user is unused.'
     if name in ('words', 'forms'):
@@ -191,6 +233,23 @@ def _merge_duplicate(name, local, hosted):
                 merged[field] = hosted[field]
         return merged, 'Keep enriched local vocabulary; retain alternate metadata in import archive.'
     raise ImportConflict(f'Conflicting {name} record; no automatic merge policy exists.')
+
+
+def _baseline_course_enrolment(row):
+    """Recognise migration metadata, never an explicit course choice or pass."""
+    return (row['band'] == 'A1' and row['release_id'] == 'a1-v1'
+            and row['migration_source'] == 'schema-044')
+
+
+def _assert_baseline_course_enrolments(tables):
+    # Migration045 creates these rows even for an entirely unused workspace.
+    # Timestamps differ between snapshots, so preserve the local enrolment and
+    # archive that metadata difference. Unsupported hosted history is still
+    # rejected by the ordinary table gate, including earned continuation rights.
+    profiles = {row['id'] for row in tables.get('learning_profiles', {}).get('rows', [])}
+    for row in tables.get('course_enrolments', {}).get('rows', []):
+        if not _baseline_course_enrolment(row) or row['profile_id'] not in profiles:
+            raise ImportConflict('Hosted history needs an additional merge policy: course_enrolments')
 
 
 def _repair_card_projections(merged):
@@ -228,11 +287,70 @@ def _assert_inactive_jobs(tables):
                 raise ImportConflict('End live conversations before taking snapshots.')
 
 
-def build_account_import(local_path, hosted_path, output_path):
+def _assert_audio_filenames(rows):
+    owners = {}
+    for row in rows:
+        filename = row['filename']
+        if not filename or Path(filename).name != filename:
+            raise ImportConflict('Speaking recording has an unsafe filename.')
+        if filename in owners and owners[filename] != row['id']:
+            raise ImportConflict('Speaking recordings share a filename; choose an explicit media merge policy.')
+        owners[filename] = row['id']
+
+
+def _verify_speaking_audio(tables, audio_root):
+    """Verify original WAVs for imported criterion reports, not ASR captions.
+
+    Database ownership is checked again by validate_saved_evidence. This check
+    additionally proves that the separately supplied source files match the
+    original chunk and assembled-audio hashes. It neither copies nor repairs
+    recordings, transcripts, assessment results or missing source metadata.
+    """
+    contracts = {row['id']: row for row in tables['activity_task_contracts']['rows']}
+    session_ids = set()
+    for report in tables['activity_criterion_reports']['rows']:
+        contract = contracts.get(report['contract_id'])
+        if contract and contract['activity'] == 'speaking':
+            if report['source_key'] != contract['task_key'] or report['profile_id'] != contract['profile_id']:
+                raise ImportConflict('Speaking evidence has conflicting task or profile identities.')
+            session_ids.add(contract['task_key'])
+    if not session_ids:
+        return {}
+    if audio_root is None:
+        raise ImportConflict('Speaking evidence requires --local-audio-root to verify the original recordings.')
+    try:
+        root = Path(audio_root).resolve(strict=True)
+        if not root.is_dir():
+            raise ValueError('Not an audio directory.')
+        sessions = {row['id']: row for row in tables['live_conversation_sessions']['rows']}
+        reviews = {row['session_id']: row for row in tables['speaking_reviews']['rows']}
+        verified = {}
+        for sid in session_ids:
+            session = sessions[sid]
+            review = reviews[sid]
+            if session['state'] not in ('completed', 'interrupted', 'failed') or review['state'] != 'ready':
+                raise ValueError('Speaking evidence needs a finished recording and saved review.')
+            source = json.loads(review['report_json'])['audio_source']
+            recordings = sorted((row for row in tables['live_conversation_recordings']['rows']
+                                 if row['session_id'] == sid), key=lambda row: row['ordinal'])
+            from services.speaking_evidence import recorded_audio_source
+            current = recorded_audio_source(recordings, root)
+            if current != source:
+                raise ValueError('Original audio no longer matches its reviewed manifest.')
+            verified.update({str(root / row['filename']): item['sha256']
+                             for row, item in zip(recordings, current['recordings'])})
+        return verified
+    except (OSError, ValueError, TypeError, KeyError, wave.Error, EOFError) as error:
+        raise ImportConflict('Original speaking audio could not be verified; no artifact was produced.') from error
+
+
+def build_account_import(local_path, hosted_path, output_path, *, local_audio_root=None):
     """Create an integrity-checked output file; never modify either input.
 
-    Inputs must be offline snapshots. The returned report contains counts and
-    ID mappings, not lesson content or credentials. Metadata alternatives are
+    Inputs must be offline snapshots. Speaking criterion reports additionally
+    require local_audio_root so original recording bytes can be verified. Media
+    copying remains separate. The returned report contains counts and ID
+    mappings, not lesson content or credentials. Metadata alternatives are
     archived inside the private output database.
     """
     local_path, hosted_path = Path(local_path).resolve(strict=True), Path(hosted_path).resolve(strict=True)
@@ -250,9 +368,11 @@ def build_account_import(local_path, hosted_path, output_path):
             local, hosted = inspect(left), inspect(right)
             _assert_inactive_jobs(local)
             _assert_inactive_jobs(hosted)
+            _assert_baseline_course_enrolments(hosted)
             unsupported = [name for name, table in hosted.items() if table['rows'] and name not in HOSTED_OVERLAY_TABLES]
             if unsupported:
                 raise ImportConflict('Hosted history needs an additional merge policy: ' + ', '.join(sorted(unsupported)))
+            verified_audio = _verify_speaking_audio(local, local_audio_root)
             if set(local) != set(hosted):
                 raise ImportConflict('Both snapshots must use the current application schema.')
             for name in local:
@@ -293,6 +413,7 @@ def build_account_import(local_path, hosted_path, output_path):
             merged[name] = list(values.values())
 
         _repair_card_projections(merged)
+        _assert_audio_filenames(merged['live_conversation_recordings'])
 
         artifact = Path(temporary) / 'merged.db'
         with closing(sqlite3.connect(artifact)) as conn:
@@ -317,10 +438,17 @@ def build_account_import(local_path, hosted_path, output_path):
                 raise ImportConflict('Merged data has broken foreign keys; artifact was not produced.')
             if conn.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
                 raise ImportConflict('Merged database failed integrity validation.')
+            from services.activity_evidence import validate_saved_evidence
+            try:
+                validate_saved_evidence(conn)
+            except (ValueError, LookupError, TypeError, KeyError) as error:
+                raise ImportConflict('Imported activity evidence does not match its frozen task and response.') from error
             conn.commit()
             conn.execute('PRAGMA journal_mode=DELETE')
         if hashes != {'local': digest(local_path), 'hosted': digest(hosted_path)}:
             raise ImportConflict('An input snapshot changed during the import; retry from offline snapshots.')
+        if verified_audio != _verify_speaking_audio(local, local_audio_root):
+            raise ImportConflict('Original speaking audio changed during the import; retry from offline snapshots.')
         # Exclusive creation prevents an existing destination being replaced if
         # a second importer runs while the first one is assembling its output.
         with output_path.open('xb') as output, artifact.open('rb') as source:
@@ -333,4 +461,5 @@ def build_account_import(local_path, hosted_path, output_path):
             'hosted_id_mappings': {name: {str(k): v for k, v in values.items() if k != v} for name, values in hosted_maps.items()},
             'metadata_conflicts_archived': dict(decisions),
             'excluded_credentials': sorted(AUTH_TABLES),
+            'verified_speaking_recordings': len(verified_audio),
             'media_copied': False}

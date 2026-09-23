@@ -21,6 +21,9 @@ foreign key in the output.
   are rebuilt using the existing flashcard contracts.
 - Existing hosted writing URLs keep their meaning. Colliding local writing IDs
   move together with their titles, drafts and other declared references.
+- Writing criterion contracts follow their typed task and attempt references.
+  Frozen contract and report text stays unchanged. Embedded identities that
+  would require rewriting a frozen payload stop the import for review.
 - The original study timezone is kept. The hosted account name is retained.
   Completed introductions from either workspace remain completed.
 - Local review history, schedules, lessons, other profiles and Anki records are
@@ -52,6 +55,14 @@ python scripts/import_local_account.py \
   --output /private/import/merged.db \
   --report /private/import/merge-report.json
 ```
+
+If the local snapshot contains Speaking criterion reports, also supply
+`--local-audio-root /private/import/local/live-conversation-audio`.
+The importer checks original recording bytes, sample timing and the assembled
+audio hash before producing the database. It refuses missing or altered
+recordings and conflicting filenames. It does not copy media or rebuild audio
+evidence from captions. Imports with hosted criterion history remain unsupported
+until a separate merge policy exists.
 
 ## Verification and installation
 

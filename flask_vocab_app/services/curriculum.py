@@ -107,7 +107,7 @@ def generation_context(topic_id, level, activity):
         raise ValueError('Unknown curriculum activity.')
     level = normalize_level(level, legacy=activity)
     topic = get_topic(topic_id)
-    return {
+    context = {
         'curriculum_version': _catalogue()['version'],
         'topic_id': topic['id'] if topic else topic_id,
         'topic_band': topic['band'] if topic else None,
@@ -127,6 +127,16 @@ def generation_context(topic_id, level, activity):
             'relevant saved words with new words. Do not force every listed word into one task.'
         ),
     }
+    if level == 'A1' and topic and topic['band'] == 'A1':
+        # The target registry validates against this syllabus. Keep this import
+        # lazy so catalogue validation does not form an import/load cycle.
+        from services.curriculum_targets import target_intent_for_activity
+        context.update(target_intent_for_activity(topic['id'], activity))
+    from services.torfl_requirements import generation_reference
+    reference = generation_reference(topic_id, level, activity)
+    if reference:
+        context['proficiency_reference'] = reference
+    return context
 
 
 def band_summaries(language='en'):

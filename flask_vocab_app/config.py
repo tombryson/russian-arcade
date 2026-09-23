@@ -102,6 +102,7 @@ def app_config():
 
     return {
         'SECRET_KEY': SECRET_KEY,
+        'COURSE_DEFAULT_RELEASE': os.environ.get('COURSE_DEFAULT_RELEASE') or None,
         'DB_PATH': path('VOCAB_DB_PATH', app_root / 'vocab.db'),
         'ANKI_MEDIA_DIR': path('ANKI_MEDIA_DIR', Path.home() / 'Library/Application Support/Anki2/User 1/collection.media'),
         'APP_MEDIA_DIR': path('APP_MEDIA_DIR', app_root / 'static/media'),

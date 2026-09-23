@@ -703,7 +703,7 @@
             event.preventDefault();
             return;
         }
-        if (getRequestPath(event) === '/comprehension/save' && workspace) {
+        if (['/comprehension/save', '/comprehension/answer'].includes(getRequestPath(event)) && workspace) {
             event.detail.elt.dataset.saveRevision = workspace.dataset.revision || '0';
         }
         if (event.detail.elt?.closest('.reading-workspace')) {
@@ -716,8 +716,20 @@
         // Start only after request cancellation/validation and form serialization.
         const form = event.detail.elt?.closest?.('#comprehension-form');
         if (form) setReadingGenerationState(form, true);
+        if (['/comprehension/answer', '/comprehension/save', '/comprehension/generate_more_questions'].includes(getRequestPath(event))) {
+            event.detail.xhr.arcadeReadingTask = document.querySelector('#question-form input[name="task_id"]')?.value;
+            event.detail.xhr.arcadeReadingForm = document.getElementById('question-form');
+        }
     });
     document.body.addEventListener('htmx:beforeSwap', (event) => {
+        const issuedTask = event.detail.xhr?.arcadeReadingTask;
+        if (issuedTask && (issuedTask !== document.querySelector('#question-form input[name="task_id"]')?.value
+            || event.detail.xhr.arcadeReadingForm !== document.getElementById('question-form'))) {
+            // A slow response from an earlier question set must not replace the
+            // current task's feedback or its out-of-band submission identity.
+            event.detail.shouldSwap = false;
+            return;
+        }
         const feedback = document.getElementById('reading-action-feedback');
         if (feedback && event.detail.xhr?.status >= 400 &&
             event.detail.target?.closest('.reading-workspace')) {
@@ -731,7 +743,10 @@
         const xhrText = event.detail?.xhr?.response || 'Unknown error';
         setSubmittingState(event.detail.elt, false);
 
-        if (path === '/comprehension/save' && event.detail.successful) {
+        const issuedTask = event.detail.xhr?.arcadeReadingTask;
+        const sameReadingTask = !issuedTask || (issuedTask === document.querySelector('#question-form input[name="task_id"]')?.value
+            && event.detail.xhr.arcadeReadingForm === document.getElementById('question-form'));
+        if (['/comprehension/save', '/comprehension/answer'].includes(path) && event.detail.successful && sameReadingTask) {
             const workspace = document.querySelector('.reading-workspace');
             if (workspace && (workspace.dataset.revision || '0') === event.detail.elt.dataset.saveRevision) {
                 workspace.dataset.dirty = 'false';
@@ -802,7 +817,7 @@
                     document.getElementById(id)?.removeAttribute('open');
                 }
                 const workspace = document.querySelector('.reading-workspace');
-                if (workspace) workspace.dataset.dirty = 'true';
+                if (workspace) workspace.dataset.dirty = document.querySelector('#question-form input[name="task_id"]') ? 'false' : 'true';
                 document.getElementById('reading-story-title')?.focus();
             }
         }

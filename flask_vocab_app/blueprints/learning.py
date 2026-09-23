@@ -9,6 +9,7 @@ from repositories.learning_repository import LearningError, require_access, time
 from services.onboarding import GUEST_ONBOARDING_KEY, onboarding_state
 from utils.household_access import access_id, access_policy, csrf_token
 from utils.navigation import browser_navigation_layout
+from utils.course_context import selected_course_progress
 
 
 def create_learning_blueprint(household, content, learning, store):
@@ -56,6 +57,7 @@ def create_learning_blueprint(household, content, learning, store):
             assets = {'styles': []}
         from blueprints.user_sessions import selected_skill_progress
         return render_template('household.html', state=state, versions=versions, selected=selected, assets=assets,
+                               profile_course_progress=selected_course_progress(),
                                profile_skill_progress=selected_skill_progress())
 
     @bp.get('/api/v1/household')
@@ -167,6 +169,16 @@ def create_learning_blueprint(household, content, learning, store):
     @access_policy('child')
     def help_item(session_id):
         return jsonify(learning.command(access_id(), session_id, 'help', body({'submission_id','expected_revision','item_id'})))
+
+    @bp.post('/api/v1/learning-sessions/<session_id>/listened')
+    @access_policy('child')
+    def listened_item(session_id):
+        return jsonify(learning.command(access_id(), session_id, 'listened', body({'submission_id','expected_revision','item_id'})))
+
+    @bp.post('/api/v1/learning-sessions/<session_id>/transcript')
+    @access_policy('child')
+    def transcript_item(session_id):
+        return jsonify(learning.command(access_id(), session_id, 'transcript', body({'submission_id','expected_revision','item_id'})))
 
     @bp.get('/api/v1/assets/<asset_id>')
     @access_policy('public')

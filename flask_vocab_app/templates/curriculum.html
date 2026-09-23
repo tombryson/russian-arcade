@@ -15,42 +15,30 @@
         <h2 id="heading-{{ band.id }}">{{ band.id|replace('-', '–') }} <span>{{ band.label }}</span></h2>
         <p>{{ band.summary }}</p>
       </header>
-      <div class="curriculum-topic-list">
-        {% for topic in band.topics %}
-        <details class="curriculum-topic" id="topic-{{ topic.id }}">
-          <summary><span class="curriculum-order">{{ '%02d'|format(topic.order) }}</span><h3>{{ topic.title_ru if russian else topic.title_en }}</h3><span class="curriculum-expand" aria-hidden="true">+</span></summary>
-          <div class="curriculum-topic-content">
-            <div class="curriculum-objectives" lang="en">
-              <h4>{{ 'Learning objectives' }}</h4>
-              <ul>{% for objective in topic.objectives %}<li>{{ objective }}</li>{% endfor %}</ul>
-              <h4>Grammar</h4>
-              <ul>{% for item in topic.grammar_focus %}<li>{{ item }}</li>{% endfor %}</ul>
-            </div>
-            <div class="curriculum-vocabulary">
-              <h4>{{ 'Лексика' if russian else 'Vocabulary' }}</h4>
-              <p lang="ru">{{ topic.lemmas|join(' · ') }}</p>
-              {% if topic.phrases %}<h4>{{ 'Выражения' if russian else 'Useful expressions' }}</h4><p lang="ru">{{ topic.phrases|join(' · ') }}</p>{% endif %}
-              <details class="curriculum-speaking-brief"><summary>{{ 'Задание для разговора (на английском)' if russian else 'Speaking task' }}</summary><p lang="en">{{ topic.practice.speaking }}</p></details>
-            </div>
-            <div class="curriculum-practice">
-              <h4>{{ 'Практика' if russian else 'Practise this topic' }}</h4>
-              {% set levels = ['C1', 'C2'] if band.id == 'C1-C2' else [band.id] %}
-              {% for level in levels %}
-              <div class="curriculum-practice-links">
-                {% if levels|length > 1 %}<strong>{{ level }}</strong>{% endif %}
-                <a href="/comprehension?topic={{ topic.id }}&amp;level={{ level }}" hx-boost="false">{{ 'Чтение' if russian else 'Reading' }}</a>
-                <a href="/writing?topic={{ topic.id }}&amp;level={{ level }}" hx-boost="false">{{ 'Письмо' if russian else 'Writing' }}</a>
-                <a href="/sentences?topic={{ topic.id }}&amp;level={{ level }}" hx-boost="false">{{ 'Перевод' if russian else 'Translation' }}</a>
-                <a href="/word_jumble?topic={{ topic.id }}&amp;level={{ level }}" hx-boost="false">{{ 'Составь предложение' if russian else 'Word Jumble' }}</a>
-                {% set scenario = speaking_scenario(topic.id, level) %}
-                {% if scenario %}<a href="/#speaking/scenario/{{ scenario }}?level={{ level }}" hx-boost="false">{{ 'Разговорная практика' if russian else 'Speaking' }}</a>{% endif %}
-              </div>
+      {% set reference = requirement_groups(band.id, language) %}
+      {% if reference %}
+      <details class="curriculum-requirements">
+        <summary>{{ 'Требования уровня' if russian else 'Level requirements' }}</summary>
+        <p>{{ 'Чтение, аудирование, письмо, говорение, лексика и грамматика.' if russian else 'Reading, listening, writing, speaking, and language use.' }}{% if reference.extends %} {{ 'В дополнение к требованиям' if russian else 'Builds on' }} <a href="#level-{{ reference.extends }}" hx-boost="false">{{ reference.extends }}</a>.{% endif %}</p>
+        <div class="curriculum-requirement-groups">
+          {% for group in reference.groups %}
+          <details class="curriculum-requirement-domain">
+            <summary><h3 id="requirements-{{ band.id }}-{{ group.id }}">{{ group.label }}</h3></summary>
+            {% if group.sections %}
+              {% for section in group.sections %}
+              <div class="curriculum-grammar-section"><h4>{{ section.label }}</h4><ul>{% for item in section['items'] %}<li>{{ item.label }}</li>{% endfor %}</ul></div>
               {% endfor %}
-            </div>
-          </div>
-        </details>
-        {% endfor %}
-      </div>
+            {% else %}
+              <ul>{% for item in group['items'] %}<li>{{ item.label }}</li>{% endfor %}</ul>
+            {% endif %}
+          </details>
+          {% endfor %}
+        </div>
+        <p class="curriculum-reference-note">{{ 'Материалы для обучения на основе опубликованных требований ТРКИ. Этапы путешествия не заменяют полный экзамен.' if russian else 'A teaching reference based on published TORFL requirements. Journey milestones do not replace a full proficiency assessment.' }}</p>
+        <div class="curriculum-reference-links">{% for source in reference.sources %}<a href="{{ source.url }}">{{ source.title }}</a>{% endfor %}</div>
+      </details>
+      {% endif %}
+      <div class="curriculum-topic-list">{% for topic in band.topics %}{% include '_curriculum_topic.html' %}{% endfor %}</div>
     </section>
     {% endfor %}
   </div>

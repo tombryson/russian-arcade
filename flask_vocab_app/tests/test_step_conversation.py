@@ -164,8 +164,20 @@ class StepConversationTests(unittest.TestCase):
                 self.assertTrue(coverage['assisted'])
             from services.course_progression import course_snapshot
             course = course_snapshot(conn, self.headers['X-Profile-ID'])
-            places = next(topic for chapter in course['chapters'] for topic in chapter['topics'] if topic['id'] == 'places')
-            self.assertEqual(places['successful_tasks'], 1)
+            destination = next(chapter for chapter in course['chapters'] if chapter['id'] == 'leavingtown')
+            self.assertEqual(destination['status'], 'locked')
+            self.assertEqual(destination['topics'], [])
+            self.assertEqual(destination['title'], '')
+            # Both completions retain their owned source receipt, but replaying
+            # the same variant still provides only one distinct practice task.
+            evidence = conn.execute('''SELECT c.profile_id,c.topic_id,c.activity,c.content_key,c.score,c.target_level
+                FROM course_evidence c JOIN progression_events e ON e.id=c.event_id
+                WHERE c.profile_id=? AND e.profile_id=c.profile_id AND e.activity='speaking_step'
+                AND e.reversed_at IS NULL''', (self.headers['X-Profile-ID'],)).fetchall()
+            self.assertEqual(len(evidence), 2)
+            variant = conn.execute('SELECT variant_id FROM step_conversation_sessions WHERE id=?', (sid,)).fetchone()[0]
+            self.assertEqual({tuple(row) for row in evidence},
+                             {(self.headers['X-Profile-ID'], 'places', 'speaking', variant, 1, 'A1')})
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM progression_events WHERE activity='speaking'").fetchone()[0], 0)
 
     def test_start_prepares_only_opening_audio_and_playback_is_owned_and_cached(self):
