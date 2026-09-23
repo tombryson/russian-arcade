@@ -18,6 +18,10 @@ class AccountImportTests(unittest.TestCase):
         self.local, self.hosted, self.output = [self.root / name for name in ('local.db', 'hosted.db', 'merged.db')]
         for path in (self.local, self.hosted):
             upgrade_database(path, backup=False)
+            # These import fixtures represent pre-v2 accounts, rather than a
+            # new installation whose first command now chooses the new course.
+            with sqlite3.connect(path) as conn:
+                conn.execute("INSERT INTO course_enrolments SELECT id,'A1','a1-v1',created_at,'schema-044' FROM learning_profiles")
         with sqlite3.connect(self.local) as conn:
             conn.execute("UPDATE learning_profiles SET study_timezone='Australia/Melbourne' WHERE id='personal-learning'")
             conn.execute("INSERT INTO words(id,lemma,pos,lemma_difficulty,mnemonic) VALUES (1,'кот','NOUN',1,'local cat'),(2,'письмо','NOUN',1,'local letter')")
@@ -108,7 +112,7 @@ class AccountImportTests(unittest.TestCase):
             # A local learner's explicitly started course is authoritative over
             # an unused hosted migration default for the same release.
             conn.execute("UPDATE course_enrolments SET started_at=100,migration_source=NULL WHERE profile_id='personal-learning'")
-            for chapter in course.course_catalogue()['chapters']:
+            for chapter in course.course_catalogue('a1-v1')['chapters']:
                 attempt = course.checkpoint_start(conn, 'personal-learning', chapter['id'], 'start-' + chapter['id'], True)
                 frozen = json.loads(conn.execute('SELECT frozen_json FROM course_checkpoint_attempts WHERE id=?', (attempt['id'],)).fetchone()[0])
                 answers = {question['id']: question['answer'] for question in frozen['variant']['questions']}
@@ -151,7 +155,7 @@ class AccountImportTests(unittest.TestCase):
 
     def test_hosted_course_attempts_remain_unsupported(self):
         with sqlite3.connect(self.hosted) as conn:
-            chapter = course.course_catalogue()['chapters'][0]['id']
+            chapter = course.course_catalogue('a1-v1')['chapters'][0]['id']
             course.checkpoint_start(conn, 'personal-learning', chapter, 'hosted-start', True)
         with self.assertRaisesRegex(ImportConflict, 'additional merge policy: .*course_checkpoint_attempts'):
             build_account_import(self.local, self.hosted, self.output)

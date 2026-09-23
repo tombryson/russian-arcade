@@ -1,8 +1,8 @@
 """Offline validation for authored course releases; never enrols a learner.
 
-The internal A1 pilot is deliberately separate from course_progression's
-published v1 catalogue. Passing draft validation is not permission to publish:
-publication also requires every section, editorial sign-off and real audio.
+Authored A1 content stays separate from published course loading. Passing
+draft validation is not permission to publish: publication also requires
+every section, editorial sign-off and real audio.
 Checks here verify declared contracts and source anchors, not Russian semantics.
 """
 from collections import Counter
@@ -112,8 +112,11 @@ def validate_course_release(data, *, publication=False, target_data=None, static
                 'release', 'draft must stay internal, unplayable and outside default enrolment')
     if publication:
         require(data.get('status') == 'published', 'release', 'draft publication is forbidden')
-        require(_mapping(data.get('editorial_review')).get('status') == 'approved',
+        require(_mapping(data.get('editorial_review')).get('status') in ('approved', 'author_reviewed'),
                 'release', 'publication requires completed editorial review')
+        require(_mapping(data.get('editorial_review')).get('semantic_review_status') in ('approved', 'author_reviewed')
+                and _mapping(data.get('editorial_review')).get('unresolved_editorial_items') == [],
+                'release', 'unresolved semantic review blocks publication')
         require(data.get('publication_blockers') == [], 'release', 'unresolved publication blockers remain')
 
     chapters = _items(data.get('chapters'))
@@ -218,6 +221,15 @@ def validate_course_release(data, *, publication=False, target_data=None, static
             if _text(pid):
                 teaching_paths[(sid, pid)] = set(taught)
             target_ids(prep.get('practises_target_ids'), location + '/preparation', topics)
+            check = _mapping(prep.get('guided_check'))
+            assessed = target_ids(check.get('target_ids'), location + '/guided-check', topics)
+            require(set(assessed) <= set(taught), location, 'guided check assesses an untaught target')
+            require(not any(targets.get(t, {}).get('response_mode') in ('independent_writing', 'independent_speaking', 'listening_selection')
+                            for t in assessed), location, 'written guided check cannot establish production or listening')
+            choices = _items(check.get('choices'))
+            require(len(choices) == 3 and sum(_mapping(choice).get('id') == check.get('answer') for choice in choices) == 1,
+                    location, 'guided check requires three choices and one accepted answer')
+            require(check.get('pass_awarded') is False, location, 'guided check cannot award a milestone')
         variants = _items(chapter.get('variants'))
         if status == 'pending_content':
             require(not variants and not preparation, location, 'pending content must not pretend to be authored')
@@ -227,6 +239,10 @@ def validate_course_release(data, *, publication=False, target_data=None, static
             require(chapter.get('pending_work') == [], location, 'unresolved section work remains')
         require(len(variants) == 3, location, 'authored section requires three equivalent variants')
         require(set(required) <= introduced, location, 'required targets lack teaching before assessment')
+        variation_ids = blueprint.get('variation_fact_ids')
+        require(_strings(variation_ids) and len(variation_ids) >= 3
+                and len(set(variation_ids)) == len(variation_ids),
+                location, 'at least three explicit variation facts are required')
         fingerprints = []
         for variant_value in variants:
             variant = _mapping(variant_value)
@@ -244,7 +260,20 @@ def validate_course_release(data, *, publication=False, target_data=None, static
                     vloc, 'named sender required')
             for field in ('content_version', 'rubric_version', 'reason_for_arrival', 'expected_consequence'):
                 require(_text(variant.get(field)), vloc, f'{field} required')
+            require(all(_text(variant.get(field)) for field in ('sender_name_en', 'reason_for_arrival_en', 'reason_for_arrival_ru')),
+                    vloc, 'sender and nonspoiling arrival context require English and Russian')
             require(variant.get('original_letter_state') == 'sealed', vloc, 'original letter must remain sealed')
+            consequence = _mapping(variant.get('consequence'))
+            require(_text(consequence.get('text')) and _text(consequence.get('text_ru'))
+                    and consequence.get('original_letter_state') == 'sealed', vloc, 'bilingual consequence must keep the original letter sealed')
+            require(consequence.get('next_section_id') == (list(SECTION_TOPICS)[number] if number < 4 else None),
+                    vloc, 'story consequence must continue the authored route')
+            writing = _mapping(variant.get('writing_task'))
+            require(all(_text(writing.get(field)) for field in ('title', 'title_en', 'task', 'task_en'))
+                    and writing.get('topic_id') in all_topics
+                    and _strings(writing.get('required_words')) and len(writing['required_words']) == 3
+                    and writing.get('optional') is True and writing.get('affects_milestone_pass') is False,
+                    vloc, 'optional writing task requires a complete bilingual brief and three taught words')
             require(_mapping(variant.get('support_policy')) == {
                 'hints': 'supported_attempt', 'transcript': 'supported_attempt',
                 'audio_replay': 'independent', 'explanations': 'after_submission',
@@ -253,6 +282,9 @@ def validate_course_release(data, *, publication=False, target_data=None, static
             audio = _mapping(variant.get('listening'))
             transcript = audio.get('transcript') if isinstance(audio.get('transcript'), str) else ''
             require(_text(transcript) and transcript != letter, vloc, 'separate spoken update required')
+            require(all(isinstance(writing.get(field), str) and letter in writing[field] and transcript in writing[field]
+                        for field in ('task', 'task_en')),
+                    vloc, 'writing continuation must preserve the letter and spoken update context')
             require(audio.get('text_sha256') == hashlib.sha256(str(transcript).encode()).hexdigest(),
                     vloc, 'audio transcript hash mismatch')
             require(isinstance(audio.get('id'), str) and KEY.fullmatch(audio['id'])
@@ -288,8 +320,10 @@ def validate_course_release(data, *, publication=False, target_data=None, static
                 quote = fact.get('source_quote')
                 require(_text(fact.get('value_ru')) and _text(quote) and quote in source,
                         vloc, f'fact {fact_id} lacks a literal source anchor')
+            require(variant.get('variation_fact_ids') == variation_ids, vloc, 'variant variation facts differ from blueprint')
+            require(all(key in facts for key in _items(variation_ids)), vloc, 'variation fact is missing')
             fingerprints.append(tuple(_normal_choice(_mapping(facts.get(key)).get('value_ru'))
-                                      for key in ('object', 'written_location', 'updated_location', 'new_relationship')))
+                                      for key in _items(variation_ids)))
             language = _mapping(variant.get('language_manifest'))
             require(language.get('review_scope') == ['letter', 'listening', 'prompts', 'choices', 'hints', 'explanations'],
                     vloc, 'language review must include prompts and distractors')
@@ -298,7 +332,19 @@ def validate_course_release(data, *, publication=False, target_data=None, static
                     vloc, 'language manifest references missing teaching')
             require(_items(language.get('contextual_forms')), vloc, 'contextual forms manifest required')
             if publication:
-                require(language.get('review_status') == 'approved', vloc, 'variant language review remains incomplete')
+                require(language.get('review_status') in ('approved', 'author_reviewed'), vloc, 'variant language review remains incomplete')
+                require(language.get('unresolved_editorial_items') == [], vloc, 'unresolved variant editorial items block publication')
+            vocabulary = _items(variant.get('flashcard_candidates'))
+            require(1 <= len(vocabulary) <= 2, vloc, 'one or two contextual flashcard candidates required')
+            for candidate_value in vocabulary:
+                candidate = _mapping(candidate_value)
+                sentence = candidate.get('sentence', '')
+                require(all(_text(candidate.get(field)) for field in ('lemma', 'form', 'pos', 'sentence', 'translation', 'target_meaning'))
+                        and isinstance(candidate.get('grammar'), dict), vloc, 'flashcard candidate needs contextual meaning and morphology')
+                require(_text(sentence) and sentence in letter, vloc, 'flashcard sentence must come from the received letter')
+                require(_text(sentence) and _text(candidate.get('form'))
+                        and bool(re.search(r'(?<![А-Яа-яЁё])' + re.escape(candidate['form']) + r'(?![А-Яа-яЁё])', sentence, re.I)),
+                        vloc, 'flashcard form must occur as a word in its source sentence')
             for entry in _items(variant.get('glossary')):
                 entry = _mapping(entry)
                 require(_text(entry.get('ru')) and _text(entry.get('en')) and entry.get('role') == 'incidental',
@@ -352,6 +398,10 @@ def validate_course_release(data, *, publication=False, target_data=None, static
                 require(question.get('partial_credit') == 'none' and question.get('score_points') == 1,
                         qloc, 'selected decisions use one point and no partial credit')
         require(len(set(fingerprints)) == len(fingerprints), location, 'variants must vary meaningful facts, not only names')
+        for left in range(len(fingerprints)):
+            for right in range(left + 1, len(fingerprints)):
+                require(sum(a != b for a, b in zip(fingerprints[left], fingerprints[right])) >= 3,
+                        location, 'variant pairs must vary at least three meaningful facts')
 
     coverage = _items(data.get('target_coverage'))
     coverage_ids = [_mapping(item).get('target_id') for item in coverage]

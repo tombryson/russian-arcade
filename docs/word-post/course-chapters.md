@@ -1,6 +1,6 @@
 # Guided A1 chapters
 
-Status: **published course release `a1-v1`**. The [journey and milestones build plan](journey-milestones-build-plan.md) specifies the next revision: a home-first route, letters received by Barsik and a cumulative A1 ending. Its release foundation is implemented; the revised story remains an unpublished draft. The content and assessment rules documented here are unchanged.
+Status: **retained course release `a1-v1`**. This page documents the earlier course for its existing learners and saved assessments. The current [A1 journey milestones](course-milestones.md) start at home and end with a cumulative received-letter assessment. The earlier content and assessment rules documented here are unchanged.
 
 The guided course has four authored A1 chapters. It uses the existing [curriculum](../curriculum.md) and preserves free practice, Lingocoins, game ownership, historical skill ratings and FSRS schedules. These course rules supersede the earlier coin-gated campaign and skill-rating header proposals where they describe the main guided route.
 

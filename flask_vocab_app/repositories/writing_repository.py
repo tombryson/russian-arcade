@@ -77,20 +77,25 @@ class WritingRepository:
             raise ValueError('Invalid task words')
 
     def create(self, task, topic, difficulty, target_words):
-        self.validate_task(task)
+        with connect_db(self.db_path) as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            return self.create_in_transaction(conn, task, topic, difficulty, target_words, activity_profile_id(conn))
+
+    @staticmethod
+    def create_in_transaction(conn, task, topic, difficulty, target_words, profile_id):
+        """Use the same validated task store for generated and authored work."""
+        WritingRepository.validate_task(task)
         normalize_level(difficulty, legacy='writing')
         if target_words not in (30,100,300):
             raise ValueError('Invalid setup')
         if not isinstance(topic,str) or not topic.strip() or len(topic) > 100:
             raise ValueError('Invalid topic')
-        with connect_db(self.db_path) as conn:
-            conn.execute('BEGIN IMMEDIATE')
-            cursor = conn.execute('''INSERT INTO writing_exercises
-                (topic,difficulty,task,required_words,min_words,user_response,created_at,owner_profile_id) VALUES (?,?,?,?,?,'',?,?)''',
-                (topic,difficulty,task['task'],json.dumps(task['required_words'],ensure_ascii=False),target_words,timestamp(),activity_profile_id(conn)))
-            exercise_id = cursor.lastrowid
-            conn.execute('INSERT INTO writing_details(exercise_id,title,title_en,task_en) VALUES (?,?,?,?)',
-                         (exercise_id,task['title'],task['title_en'],task['task_en']))
+        cursor = conn.execute('''INSERT INTO writing_exercises
+            (topic,difficulty,task,required_words,min_words,user_response,created_at,owner_profile_id) VALUES (?,?,?,?,?,'',?,?)''',
+            (topic,difficulty,task['task'],json.dumps(task['required_words'],ensure_ascii=False),target_words,timestamp(),profile_id))
+        exercise_id = cursor.lastrowid
+        conn.execute('INSERT INTO writing_details(exercise_id,title,title_en,task_en) VALUES (?,?,?,?)',
+                     (exercise_id,task['title'],task['title_en'],task['task_en']))
         return exercise_id
 
     @staticmethod

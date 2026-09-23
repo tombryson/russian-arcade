@@ -97,7 +97,8 @@ def create_word_post_blueprint():
         except BuildUnavailable:
             current_app.logger.warning('Word Post build missing or invalid; rebuild the UI package')
             return render_template('word_post_unavailable.html'), 503
-        return render_template('word_post.html', view=view, assets=assets)
+        from services.course_releases import default_release_id
+        return render_template('word_post.html', view=view, assets=assets, default_course_release=default_release_id())
 
     @blueprint.get('/')
     def home():

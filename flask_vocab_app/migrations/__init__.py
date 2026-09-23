@@ -90,6 +90,11 @@ def upgrade_database(db_path, backup=True):
                 if version == 42:
                     from repositories.speaking_repository import seed_curriculum
                     seed_curriculum(conn)
+                if version == 45 and not has_tables:
+                    # Migration 025 creates the local bootstrap profile. In a
+                    # brand-new database it has never used the legacy course;
+                    # leave enrolment to its first command and current release.
+                    conn.execute("DELETE FROM course_enrolments WHERE migration_source='schema-044'")
                 conn.execute('INSERT INTO schema_migrations(version) VALUES (?)', (version,))
             if conn.execute('PRAGMA foreign_key_check').fetchone():
                 raise ValueError('Migration would leave orphaned references; no changes were committed.')

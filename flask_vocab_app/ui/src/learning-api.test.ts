@@ -29,3 +29,14 @@ describe('Page identity binding',()=>{
     expect(fetch.mock.calls[3][1]).toMatchObject({keepalive:true,method:'POST'});
   });
 });
+
+it('does not reload the progression summary for each autosaved answer draft',async()=>{
+  vi.stubGlobal('fetch',vi.fn(async()=>({ok:true,json:async()=>({})})));
+  const changed=vi.fn();window.addEventListener('lingo:progression',changed);
+  try {
+    await api('/api/v1/course/checkpoints/letter/draft',{answers:{q:'a'},revision:0});
+    expect(changed).not.toHaveBeenCalled();
+    await api('/api/v1/course/checkpoints/letter/answer',{answers:{q:'a'},submission_id:'checked'});
+    expect(changed).toHaveBeenCalledOnce();
+  } finally {window.removeEventListener('lingo:progression',changed);}
+});

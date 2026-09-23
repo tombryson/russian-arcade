@@ -13,10 +13,12 @@ import re
 import sqlite3
 from urllib.parse import urlencode
 
+from flask import current_app, has_app_context
+
 from contracts.learning import key
 from repositories.learning_repository import LearningError, encoded, identifier, payload_hash, timestamp
 from services.curriculum import curriculum
-from services.course_releases import DEFAULT_RELEASE_ID, load_release, release_metadata
+from services.course_releases import DEFAULT_RELEASE_ID, load_release, release_metadata, default_release_id
 from services.speaking_curriculum import scenario_for_topic
 
 DATA_FILE = Path(__file__).resolve().parents[1] / 'data' / 'course_chapters.json'
@@ -50,6 +52,11 @@ def validate_course(data, release=None):
             raise ValueError(message)
 
     release = release or release_metadata()
+    if release['schema_version'] == 2:
+        from services.course_authoring import validate_course_release
+        require(data.get('release_id') == release['release_id'], 'Course release identity mismatch.')
+        validate_course_release(data, publication=True)
+        return data
     band = release['band']
     require(isinstance(data, dict) and type(data.get('version')) is int and data['version'] == release['schema_version'],
             'Course content must use its release schema version.')
@@ -144,7 +151,7 @@ def _catalogue(release_id=DEFAULT_RELEASE_ID):
 
 
 def course_catalogue(release_id=None):
-    release = release_metadata(DEFAULT_RELEASE_ID if release_id is None else release_id)
+    release = release_metadata(default_release_id() if release_id is None else release_id)
     return deepcopy(_catalogue(release['release_id'])) | {
         name: release[name] for name in ('release_id', 'chapter_count', 'requirement_version')}
 
@@ -210,8 +217,8 @@ def course_snapshot(conn, profile_id):
     # A read never creates enrolment. New learners receive the complete default
     # edition on their first checkpoint command; migration pins existing ones.
     enrolment = _execute(conn, 'SELECT release_id FROM course_enrolments WHERE profile_id=? AND band=?',
-                         (profile_id, release_metadata()['band'])).fetchone()
-    release = release_metadata(enrolment['release_id'] if enrolment else DEFAULT_RELEASE_ID)
+                         (profile_id, release_metadata(default_release_id())['band'])).fetchone()
+    release = release_metadata(enrolment['release_id'] if enrolment else default_release_id())
     release_id, band = release['release_id'], release['band']
     catalogue = _catalogue(release_id)
     topics = {topic['id']: topic for topic in curriculum()['topics']}
@@ -233,6 +240,11 @@ def course_snapshot(conn, profile_id):
         activity_count = len({row['activity'] for row in rows})
         task_fraction = sum(min(item['successful_tasks'], REQUIRED_TASKS) for item in projected_topics) / (len(projected_topics) * REQUIRED_TASKS)
         preparation = min(task_fraction, activity_count / REQUIRED_ACTIVITIES, 1.0)
+        coverage = None
+        if catalogue.get('schema_version') == 2:
+            from services.course_targets import target_coverage
+            coverage = target_coverage(conn, profile_id, chapter['id'])
+            preparation = min(preparation, coverage['prepared_count'] / max(coverage['required_count'], 1))
         if chapter['id'] in passed:
             status, progress = 'passed', 1.0
         elif current_id is None:
@@ -240,13 +252,15 @@ def course_snapshot(conn, profile_id):
             status, progress = ('ready' if preparation == 1 else 'practice'), preparation
         else:
             status, progress = 'locked', preparation
-        last = _execute(conn, 'SELECT id FROM course_checkpoint_attempts WHERE profile_id=? AND release_id=? AND chapter_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1',
+        last = _execute(conn, 'SELECT id,status FROM course_checkpoint_attempts WHERE profile_id=? AND release_id=? AND chapter_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1',
                             (profile_id, release_id, chapter['id'])).fetchone()
         chapters.append({name: chapter[name] for name in ('id', 'number', 'title', 'title_ru', 'intro', 'intro_ru')} | {
             'status': status, 'progress': progress, 'topics': projected_topics, 'activity_count': activity_count,
             'release_id': release_id, 'preparation_progress': preparation,
             'assessment_ready': status == 'ready', 'milestone_passed': status == 'passed',
             'required_activity_count': REQUIRED_ACTIVITIES, 'last_attempt_id': last['id'] if last else None,
+            'active_attempt_id': last['id'] if last and last['status'] == 'active' else None,
+            'target_coverage': coverage,
             'objectives': deepcopy(chapter.get('objectives', [])), 'preparation': deepcopy(chapter.get('preparation', []))})
     completed = all(chapter['status'] == 'passed' for chapter in chapters)
     active_progress = next((chapter['progress'] for chapter in chapters if chapter['id'] == current_id), 0)
@@ -257,7 +271,9 @@ def course_snapshot(conn, profile_id):
             'unlocked_levels': [level for level in ('A1', 'A2', 'B1', 'B2', 'C1', 'C2') if level == 'A1' or level in entitled],
             'current_chapter_id': current_id,
             'progress': 1.0 if completed else active_progress,
-            'completed': completed, 'chapters': chapters}
+            'completed': completed, 'chapters': chapters,
+            'release_upgrade': _release_upgrade(conn, profile_id, release_id, entitled),
+            'previous_courses': _previous_courses(conn, profile_id, release_id)}
 
 
 def _attempt(conn, profile_id, attempt_id):
@@ -278,7 +294,10 @@ def _public_attempt(conn, profile_id, row):
         listening['transcript'] = variant['listening']['transcript']
     questions = []
     for question in variant['questions']:
-        item = {field: deepcopy(question[field]) for field in ('id', 'kind', 'prompt', 'prompt_ru', 'choices')}
+        item = {field: deepcopy(question[field]) for field in ('id', 'kind', 'prompt', 'prompt_ru')}
+        # Authoring annotations include the correct role and distractor rationale.
+        # Only the offered labels belong in an unanswered assessment.
+        item['choices'] = [{field: choice[field] for field in ('id', 'text')} for choice in question['choices']]
         if finished or 'hint:' + question['id'] in support:
             item.update(hint=question['hint'], hint_ru=question['hint_ru'])
         questions.append(item)
@@ -292,11 +311,31 @@ def _public_attempt(conn, profile_id, row):
                   letter_title_ru=variant['letter_title_ru'], glossary=deepcopy(variant.get('glossary', [])),
                   listening=listening, questions=questions, status=row['status'], support_used=bool(support),
                   listened=row['listened_at'] is not None, course=course_snapshot(conn, profile_id))
+    if 'draft_json' in row.keys():
+        result.update(draft_answers=json.loads(row['draft_json']), draft_revision=row['draft_revision'])
+    if frozen.get('blueprint'):
+        result.update(sender=variant.get('sender_name_en', variant['sender_name_ru']), sender_ru=variant['sender_name_ru'],
+                      letter_purpose=variant.get('reason_for_arrival_en', ''), letter_purpose_ru=variant.get('reason_for_arrival_ru', ''),
+                      original_letter_state=variant.get('original_letter_state'),
+                      component_minima=frozen['blueprint']['component_minima'])
     if finished and row['result_json']:
         result['result'] = json.loads(row['result_json'])
         answers = json.loads(row['answers_json'])
         for item in result['result']['feedback']:
             item['selected_answer'] = answers[item['question_id']]
+        consequence = variant.get('consequence', {})
+        if result['result']['passed']:
+            result.update(consequence=consequence.get('text'), consequence_ru=consequence.get('text_ru'), achieved=True)
+        else:
+            result['achieved'] = False
+        # Capture is offered only after checking; no link reveals assessed words early.
+        words = list(dict.fromkeys(re.findall(r'[А-Яа-яЁё]+(?:-[А-Яа-яЁё]+)*', variant['letter'])))
+        # Anonymous sample sessions cannot save AI-backed follow-ups. Signed-in
+        # workspaces use their existing metered services and collection stores.
+        followups_available = not (has_app_context() and current_app.config.get('PUBLIC_DEMO'))
+        result['vocabulary'] = [{'word': word, 'context': variant['letter']} for word in words] if followups_available else []
+        result['writing_available'] = followups_available and bool(variant.get('writing_task'))
+        result['flashcards_available'] = followups_available and bool(variant.get('flashcard_candidates'))
     return result
 
 
@@ -357,6 +396,11 @@ def checkpoint_start(conn, profile_id, chapter_id, request_id, challenge=False, 
                   'title_ru': chapter['title_ru'], 'variant': variant, 'rubric': deepcopy(RUBRIC),
                   'release_id': release_id, 'band': release['band'], 'chapter_count': len(catalogue['chapters']),
                   'requirement_version': release['requirement_version']}
+        if chapter.get('checkpoint_blueprint'):
+            blueprint = deepcopy(chapter['checkpoint_blueprint'])
+            frozen['blueprint'] = blueprint
+            frozen['rubric'].update(minimum_correct=blueprint['minimum_correct'],
+                                    component_minima=blueprint['component_minima'])
         _execute(conn, 'INSERT INTO course_checkpoint_attempts(id,profile_id,chapter_id,chapter_number,variant_id,content_version,rubric_version,frozen_json,status,created_at,release_id,band) '
                      "VALUES (?,?,?,?,?,?,?,?,'active',?,?,?)", (attempt_id, profile_id, chapter_id, chapter['number'], variant['id'],
                       catalogue['version'], catalogue['rubric_version'], encoded(frozen), now, release_id, release['band']))
@@ -387,7 +431,7 @@ def checkpoint_answer(conn, profile_id, attempt_id, answers, submission_id, now=
     for question in questions:
         if answers[question['id']] not in {choice['id'] for choice in question['choices']}:
             raise LearningError('invalid_input', 'Choose one of the offered answers for each question.')
-    if rubric['require_listened'] and row['listened_at'] is None:
+    if rubric['require_listened'] and row['listened_at'] is None and 'transcript' not in json.loads(row['support_json']):
         raise LearningError('listening_required', 'Listen to the message before checking your answers.', 409)
     feedback = [{'question_id': question['id'], 'correct': answers[question['id']] == question['answer'],
                  'answer': question['answer'], 'explanation': question['explanation'], 'explanation_ru': question['explanation_ru']}
@@ -395,13 +439,26 @@ def checkpoint_answer(conn, profile_id, attempt_id, answers, submission_id, now=
     score = sum(item['correct'] for item in feedback)
     essential = all(answers[question['id']] == question['answer'] for question in questions if question['essential'])
     independent = not json.loads(row['support_json'])
-    passed = (score / len(questions) >= rubric['minimum_score'] and (essential or not rubric['require_essential'])
+    component_results = [{'kind': kind, 'score': sum(answers[q['id']] == q['answer'] for q in questions if q['kind'] == kind),
+                          'total': sum(q['kind'] == kind for q in questions), 'required': minimum}
+                         for kind, minimum in rubric.get('component_minima', {}).items()]
+    for item in component_results:
+        item['passed'] = item['score'] >= item['required']
+    enough = score >= rubric['minimum_correct'] if 'minimum_correct' in rubric else score / len(questions) >= rubric['minimum_score']
+    passed = (enough and all(item['passed'] for item in component_results) and (essential or not rubric['require_essential'])
               and (independent or not rubric['require_independent']))
     result = {'score': score, 'total': len(questions), 'passed': passed,
               'essential_passed': essential, 'feedback': feedback}
+    if frozen.get('blueprint'):
+        result['component_results'] = component_results
+        missed_topics = {target.split('.')[1] for q in questions if answers[q['id']] != q['answer'] for target in q.get('target_ids', [])}
+        result['next_practice'] = [link for topic in sorted(missed_topics) for link in _links(topic, row['band'])[:1]]
     now = timestamp() if now is None else now
     _execute(conn, 'UPDATE course_checkpoint_attempts SET status=?,answers_json=?,result_json=?,completed_at=? WHERE id=?',
                  ('passed' if passed else 'retry', encoded(answers), encoded(result), now, attempt_id))
+    if frozen.get('blueprint'):
+        from services.course_targets import record_checkpoint_targets
+        record_checkpoint_targets(conn, profile_id, attempt_id, frozen, answers, not independent, now)
     if passed:
         _execute(conn, 'INSERT OR IGNORE INTO course_chapter_passes(profile_id,chapter_id,attempt_id,passed_at,release_id,requirement_version) VALUES (?,?,?,?,?,?)',
                  (profile_id, row['chapter_id'], attempt_id, now, row['release_id'], frozen.get('requirement_version', row['rubric_version'])))
@@ -450,4 +507,71 @@ def checkpoint_listened(conn, profile_id, attempt_id, now=None):
     row = _attempt(conn, profile_id, attempt_id)
     if row['status'] == 'active' and row['listened_at'] is None:
         _execute(conn, 'UPDATE course_checkpoint_attempts SET listened_at=? WHERE id=?', (timestamp() if now is None else now, attempt_id))
+    return checkpoint_read(conn, profile_id, attempt_id)
+
+def _previous_courses(conn, profile_id, current_release):
+    rows = _execute(conn, 'SELECT id,release_id,status,frozen_json FROM course_checkpoint_attempts WHERE profile_id=? AND release_id!=? ORDER BY created_at DESC',
+                    (profile_id, current_release)).fetchall()
+    grouped = {}
+    for row in rows:
+        frozen = json.loads(row['frozen_json'])
+        group = grouped.setdefault(row['release_id'], {'release_id': row['release_id'], 'title': 'Earlier journey',
+                                    'title_ru': 'Предыдущее путешествие', 'attempts': []})
+        group['attempts'].append({'id': row['id'], 'title': frozen['title'], 'title_ru': frozen['title_ru'], 'status': row['status']})
+    return list(grouped.values())
+
+
+def _release_upgrade(conn, profile_id, current_release, entitled):
+    target = default_release_id()
+    if current_release == target or target == DEFAULT_RELEASE_ID:
+        return None
+    pending = _execute(conn, "SELECT id,frozen_json FROM course_checkpoint_attempts WHERE profile_id=? AND release_id=? AND status='active' ORDER BY created_at", (profile_id, current_release)).fetchall()
+    count = _execute(conn, 'SELECT COUNT(*) FROM course_chapter_passes WHERE profile_id=? AND release_id=?', (profile_id, current_release)).fetchone()[0]
+    first = _catalogue(target)['chapters'][0]
+    return {'release_id': target, 'title': 'The journey from home', 'title_ru': 'Путешествие из дома',
+            'retained_access': sorted(entitled), 'retained_milestones': count,
+            'starting_chapter': first['id'], 'starting_chapter_title': first['title'], 'starting_chapter_title_ru': first['title_ru'],
+            'active_attempts': [{'id': row['id'], 'title': json.loads(row['frozen_json'])['title'],
+                                'title_ru': json.loads(row['frozen_json'])['title_ru']} for row in pending]}
+
+
+def switch_release(conn, profile_id, to_release, from_release, request_id, now=None):
+    key(request_id, 'Request ID')
+    if not isinstance(from_release, str):
+        raise LearningError('invalid_input', 'Reopen your journey before switching.')
+    fingerprint = payload_hash({'from_release_id': from_release, 'to_release_id': to_release})
+    previous = _execute(conn, 'SELECT payload_hash FROM course_release_switches WHERE profile_id=? AND request_id=?', (profile_id, request_id)).fetchone()
+    if previous:
+        if previous['payload_hash'] != fingerprint:
+            raise LearningError('idempotency_conflict', 'This switch was already used for a different journey.', 409)
+        return course_snapshot(conn, profile_id)
+    state = course_snapshot(conn, profile_id)
+    offered = state.get('release_upgrade')
+    if state['release_id'] != from_release or not offered or offered['release_id'] != to_release:
+        raise LearningError('course_release_mismatch', 'Your journey has changed. Reload before switching.', 409)
+    release = release_metadata(to_release)
+    now = timestamp() if now is None else now
+    _execute(conn, 'INSERT INTO course_enrolments(profile_id,band,release_id,started_at,migration_source) VALUES (?,?,?,?,?) '
+                  'ON CONFLICT(profile_id,band) DO UPDATE SET release_id=excluded.release_id,started_at=excluded.started_at,migration_source=excluded.migration_source',
+             (profile_id, release['band'], to_release, now, from_release))
+    state = course_snapshot(conn, profile_id)
+    _execute(conn, 'INSERT INTO course_release_switches VALUES (?,?,?,?,?,?,?)',
+             (profile_id, request_id, fingerprint, from_release, to_release, now, encoded(state)))
+    return state
+
+
+def checkpoint_draft(conn, profile_id, attempt_id, answers, revision):
+    row = _attempt(conn, profile_id, attempt_id)
+    if row['status'] != 'active':
+        raise LearningError('checkpoint_completed', 'This letter has already been checked.', 409)
+    if not isinstance(answers, dict) or type(revision) is not int or revision < 0:
+        raise LearningError('invalid_input', 'Send your saved answers and revision.')
+    questions = {q['id']: q for q in json.loads(row['frozen_json'])['variant']['questions']}
+    if any(qid not in questions or not isinstance(choice, str) or choice not in {c['id'] for c in questions[qid]['choices']} for qid, choice in answers.items()):
+        raise LearningError('invalid_input', 'Choose an offered answer for this letter.')
+    if json.loads(row['draft_json']) == answers:
+        return checkpoint_read(conn, profile_id, attempt_id)
+    if row['draft_revision'] != revision:
+        raise LearningError('draft_conflict', 'A newer draft is saved. Reload the letter before changing it.', 409)
+    _execute(conn, 'UPDATE course_checkpoint_attempts SET draft_json=?,draft_revision=draft_revision+1 WHERE id=?', (encoded(answers), attempt_id))
     return checkpoint_read(conn, profile_id, attempt_id)

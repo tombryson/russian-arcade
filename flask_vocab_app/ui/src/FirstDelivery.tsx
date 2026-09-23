@@ -7,7 +7,7 @@ import './styles/tutorial.css';
 type NextAction = { href: string; label: string; description: string };
 type RetryRequest={action:FirstDeliveryAction;body:unknown}|{action:'load'};
 
-export function FirstDelivery({ next, onIntroduce, profileHref='/post/profiles' }: { next: NextAction; onIntroduce?: (milestone: 'coins' | 'progress') => void; profileHref?:string }) {
+export function FirstDelivery({ next, onIntroduce, profileHref='/post/profiles', courseJourney=false }: { next: NextAction; onIntroduce?: (milestone: 'coins' | 'progress') => void; profileHref?:string;courseJourney?:boolean }) {
   const [step, setStep] = useState(0);
   const [practice,setPractice]=useState<FirstDeliveryState>();
   const [busy,setBusy]=useState(false);
@@ -73,7 +73,7 @@ export function FirstDelivery({ next, onIntroduce, profileHref='/post/profiles' 
 
   return <section class="page first-delivery lesson-player">
     <div class="lesson-player-nav">
-    <div class="lesson-head"><a class="text-link" href="#first-steps">All five lessons</a><span class="quiet">Lesson 1 of 5</span></div>
+    <div class="lesson-head"><a class="text-link" href={courseJourney ? "#journey" : "#first-steps"}>{courseJourney ? "Your journey" : "All five lessons"}</a><span class="quiet">{courseJourney ? "Before the journey" : "Lesson 1 of 5"}</span></div>
     <ol class="tutorial-steps" aria-label="Tutorial progress">
       {['Lingocoins', 'Your progress', 'Your first words', 'Complete'].map((label, index) => <li key={label} aria-current={tutorialStep === index ? 'step' : undefined}><span aria-hidden="true">{index + 1}</span><span class="tutorial-step-label">{label}</span></li>)}
     </ol>
@@ -95,9 +95,9 @@ export function FirstDelivery({ next, onIntroduce, profileHref='/post/profiles' 
       <div class="action-row"><button class="cta" onClick={() => setStep(1)}>Continue <span aria-hidden="true">→</span></button><a class="text-link" href="#activities">Go straight to activities</a></div>
     </> : step === 1 ? <>
       <p class="kicker">One word at a time</p><h1 ref={heading} tabIndex={-1}>Help Barsik reach the next stop.</h1>
-      <p class="intro">Practise the topics in each chapter to move Barsik along the bar.</p>
+      <p class="intro">Practise the topics at each stop to move Barsik along the bar.</p>
       <Sheet><div class="tutorial-progress-introduction"><img class="tutorial-progress-barsik" src="/static/images/barsik-running-v1.webp" width="92" height="68" alt="Barsik running with his letter bag." />
-          <div><h2>A message at every stop</h2><p>Use what you have learned to read a message and continue the journey. After four A1 chapters, Barsik delivers your letter.</p><p>Tap Barsik to see your chapter and choose what to practise.</p></div></div>
+          <div><h2>A message at every stop</h2><p>{courseJourney ? 'Barsik receives letters that help him on his way. Read each letter, listen to the update and choose a reply to pass a milestone. Your letter stays sealed in his bag.' : 'Use what you have learned to read a message and continue the journey. After four A1 chapters, Barsik delivers your letter.'}</p><p>Tap Barsik to see your next stop and choose what to practise.</p></div></div>
       </Sheet>
       <div class="action-row"><button class="cta" disabled={busy} onClick={openActivity}>Learn your first words <span aria-hidden="true">→</span></button><button class="text-link" onClick={() => setStep(0)}>Back to Lingocoins</button></div>
     </> : step === 2 ? <>
@@ -125,7 +125,7 @@ export function FirstDelivery({ next, onIntroduce, profileHref='/post/profiles' 
       <button class="text-link tutorial-back" disabled={busy} onClick={replay}>Back to the introduction</button>
     </> : <>
       <p class="kicker">Hello, Barsik!</p><h1 ref={heading} tabIndex={-1}>Your first lesson is complete.</h1>
-      <Sheet><p>You’ve met Barsik and practised your first three Russian words. Next, help him check what’s in his bag.</p>
+      <Sheet><p>{courseJourney ? 'You’ve met Barsik and practised your first three Russian words. His journey starts at home, with a message from a friend.' : 'You’ve met Barsik and practised your first three Russian words. Next, help him check what’s in his bag.'}</p>
         {practice?.reward && practice.reward.amount>0 && (practice.reward.status==='pending' ? <div class="tutorial-reward"><p><strong>{practice.reward.amount} Lingocoins earned</strong></p><p>{profileHref.startsWith('/post/household') ? 'Choose a learner to start saving your practice.' : 'Create a profile to save your coins and first activity.'}</p><>{profileHref !== next.href && <a class="text-link" href={profileHref}>{profileHref.startsWith('/post/household') ? 'Choose a learner' : 'Create a profile'} <span aria-hidden="true">→</span></a>}</></div> : <div class="tutorial-reward" role="status"><p><strong>{practice.reward.awarded_now ? `+${practice.reward.amount} Lingocoins` : `${practice.reward.amount} Lingocoins earned`}</strong></p><p>{practice.reward.awarded_now ? 'Your first activity bonus is saved.' : 'Your first activity bonus is already saved.'}</p></div>)}
         {!!practice?.teaching_cards?.length && <details class="coin-rules"><summary>Revisit your first words</summary><ul class="tutorial-answer-review">{practice.teaching_cards.map(item=><li key={item.id}><p><strong lang="ru">{item.word}</strong> · {item.meaning}</p><p>{item.explanation}</p></li>)}</ul></details>}
         {!!attempt?.answers.length && <details class="coin-rules"><summary>Look back at your answers</summary><ol class="tutorial-answer-review">{attempt.answers.map(item=><li key={item.question_id}><p><strong>{item.answer_text}</strong></p><p>{item.feedback}</p></li>)}</ol></details>}

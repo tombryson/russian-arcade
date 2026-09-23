@@ -322,3 +322,11 @@ describe('Stepwise header introduction',()=>{
     expect(screen.queryByText(/Loading skill progress/)).toBeNull();
   });
 });
+
+it('uses the published course welcome for a signed-out visitor',async()=>{
+  window.history.replaceState(null,'','/#home');
+  vi.stubGlobal('fetch',vi.fn((url:string)=>response(url==='/api/v1/first-steps'?{profile_id:null,lessons:[{id:'hello',position:1,title:'Hello, Barsik!',description:'Learn your first words.',status:'available',href:'#first-delivery'}],next_lesson:{id:'hello',position:1,title:'Hello, Barsik!',description:'Learn your first words.',status:'available',href:'#first-delivery'},complete:false}:{})));
+  render(<App initialProfile={null} defaultCourseRelease="a1-journey-v2"/>);
+  expect(await screen.findByText('Your first delivery · a little adventure')).toBeTruthy();
+  expect(screen.getByRole('link',{name:/See the journey/})).toBeTruthy();expect(screen.queryByRole('link',{name:/See all five lessons/})).toBeNull();
+});

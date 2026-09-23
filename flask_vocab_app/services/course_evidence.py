@@ -40,6 +40,8 @@ def _coverage(topic, level, score, maximum, activity, assisted=False):
 def freeze_course_evidence(conn, profile_id, activity, content_key, source_key, evidence):
     result = dict(evidence or {})
     result.pop('_course', None)
+    # Browser/provider aggregate metadata cannot declare objective mastery.
+    result.pop('_course_targets', None)
     if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='course_evidence'").fetchone():
         return result
     coverage = None

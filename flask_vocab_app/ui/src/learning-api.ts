@@ -46,6 +46,6 @@ export async function api<T>(url: string, body?: unknown, signal?: AbortSignal):
   const result = await response.json();
   if (!response.ok) throw new ApiError(result.error?.message ?? 'Your practice could not be saved. Please try again.', result.error?.code ?? 'request_failed', result.error?.current_session);
   if (result.csrf_token) csrf = result.csrf_token;
-  if (body!==undefined && !/\/(?:heartbeat|connect)$/.test(url)) window.dispatchEvent(new Event('lingo:progression'));
+  if (body!==undefined && !/\/(?:heartbeat|connect|draft)$/.test(url)) window.dispatchEvent(new Event('lingo:progression'));
   return result as T;
 }

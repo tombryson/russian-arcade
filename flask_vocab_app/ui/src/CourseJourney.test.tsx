@@ -74,12 +74,38 @@ describe('Guided chapter journey',()=>{
     expect(screen.getByText(/1\/2 activities used/)).toBeTruthy();
     expect(screen.getByText(/Try another activity, such as Writing or Speaking/)).toBeTruthy();
   });
+  it('keeps v2 preparation compact while retaining real readiness requirements',async()=>{
+    const current=course({release_id:'a1-journey-v2'});
+    current.chapters[0].target_coverage={required_count:1,prepared_count:0,ready:false,targets:[{id:'name',title:'Introduce yourself',title_ru:'Представиться',topic_id:'greetings',required:true,introduced:false,practised:false,demonstrated:false,needs_practice:true}]};
+    mockServer(()=>current);render(<CourseJourney chapterId="first" progression={progression()}/>);
+    expect(await screen.findByRole('link',{name:'Practise these skills →'})).toBeTruthy();
+    expect(screen.queryByText('Understand a short greeting.')).toBeNull();
+    const examples=screen.getByText('Notes and examples').closest('details');
+    expect(examples?.open).toBe(false);
+    const readiness=screen.getByText('0/1 learning targets practised').closest('details');
+    expect(readiness?.open).toBe(false);
+    expect(readiness?.textContent).toContain('two successful tasks in each topic using at least two activities');
+    expect(screen.getByRole('heading',{name:'More practice by topic'})).toBeTruthy();
+  });
   it('shows honest A1 completion and available A2 practice',async()=>{
     mockServer(()=>course({completed:true,completed_milestones:4,unlocked_levels:['A1','A2']}));render(<CourseJourney progression={progression()}/>);
     await screen.findByRole('heading',{name:'A1 course complete'});expect(screen.getByText('A1 · 4 of 4 milestones complete')).toBeTruthy();expect(screen.queryByText(/A2 journey/)).toBeNull();expect(screen.getByRole('link',{name:'Explore A2 practice →'}).getAttribute('href')).toBe('/curriculum#level-A2');
   });
 });
 describe('Chapter checkpoints',()=>{
+  it('allows explicit transcript support to finish practice when audio is inaccessible',async()=>{
+    let supported=false;let submitted=false;
+    const assisted=()=>attempt({support_used:true,listened:false,listening:{audio_url:'/static/audio/course/first.mp3',transcript:'Встреча в четыре.'}});
+    const fetch=mockServer(url=>{if(url.endsWith('/support')){supported=true;return assisted();}if(url.endsWith('/answer')){submitted=true;return {...result(false),support_used:true,listened:false};}return submitted ? {...result(false),support_used:true,listened:false} : supported ? assisted() : attempt();});
+    render(<CourseJourney attemptId="attempt-1" progression={progression()}/>);
+    await selectAnswers();expect(screen.getByRole('button',{name:'Check my answers'}).hasAttribute('disabled')).toBe(true);
+    fireEvent.click(screen.getByRole('button',{name:'Read transcript · practice only'}));
+    await screen.findByText('Transcript support is on. You can finish this as practice.');
+    expect(screen.getByRole('button',{name:'Check my answers'}).hasAttribute('disabled')).toBe(false);
+    fireEvent.click(screen.getByRole('button',{name:'Check my answers'}));
+    await screen.findByRole('heading',{name:'A little more practice'});
+    expect(fetch.mock.calls.some(([url])=>String(url).endsWith('/listened'))).toBe(false);
+  });
   it('refreshes an answer receipt when both the page and receipt still show the previous enrolment',async()=>{
     const receipt=result();
     const canonical={...result(),course:course({release_id:'a1-journey-v2'})};
@@ -241,5 +267,79 @@ describe('Chapter checkpoints',()=>{
   it('does not show another profile’s course and offers retry after a load error',async()=>{
     mockServer(()=>course({profile_id:'another'}));render(<CourseJourney progression={progression()}/>);
     expect(await screen.findByRole('alert')).toBeTruthy();expect(screen.queryByRole('heading',{name:'Your journey'})).toBeNull();expect(screen.getByRole('button',{name:'Try again'})).toBeTruthy();
+  });
+});
+
+describe('Received-letter milestone course',()=>{
+  const received=(patch:Partial<CourseAttempt>={})=>attempt({release_id:'a1-journey-v2',sender:'Anna',sender_ru:'Анна',letter_purpose:'Anna has left a message to help Barsik get ready.',letter_purpose_ru:'Анна оставила записку Барсику.',course:course({release_id:'a1-journey-v2'}),...patch});
+  it('opens a received letter and groups the assessment without leaking later answer sets',async()=>{
+    const current=received({questions:[...attempt().questions,{id:'form',kind:'language',prompt:'Choose the ending.',prompt_ru:'Выберите окончание.',choices:[{id:'a',text:'моя сестра'},{id:'b',text:'мой сестра'}]}]});
+    mockServer(()=>current);render(<CourseJourney attemptId="attempt-1" progression={progression()}/>);
+    await screen.findByText('Anna');expect(screen.queryByText(current.letter)).toBeNull();expect(screen.queryByRole('radio')).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'Read the letter →'}));expect(screen.getByText(current.letter)).toBeTruthy();
+    expect(screen.getByRole('radio',{name:'Анна'})).toBeTruthy();expect(screen.queryByRole('radio',{name:'В четыре часа'})).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'Choose the form 0/1'}));expect(screen.getByRole('radio',{name:'моя сестра'})).toBeTruthy();
+    expect(screen.queryByRole('button',{name:'Check my answers'})).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'Reply to the letter 0/1'}));expect(screen.getByRole('button',{name:'Check my answers'})).toBeTruthy();
+  });
+  it('shows component minima and next useful practice without claiming a pass',async()=>{
+    const current=received({...result(),release_id:'a1-journey-v2',chapter_number:4,chapter_count:4,consequence:'Barsik is ready to leave town. Your letter stays sealed in his bag.',result:{...result().result!,passed:false,component_results:[{kind:'reading',score:7,total:8,required:6,passed:true},{kind:'language',score:1,total:3,required:2,passed:false}],next_practice:[{label:'Choosing a location',label_ru:'Местоположение',href:'/sentences?topic=home&level=A1'}]},course:course({release_id:'a1-journey-v2',completed:true,completed_milestones:4})});
+    mockServer(()=>current);render(<CourseJourney attemptId="attempt-1" progression={progression()}/>);
+    expect(await screen.findByRole('heading',{name:'A little more practice'})).toBeTruthy();expect(screen.queryByText(current.consequence!)).toBeNull();expect(screen.getByText('Needs 2')).toBeTruthy();expect(screen.getByRole('link',{name:'Choosing a location →'}).getAttribute('href')).toBe('/sentences?topic=home&level=A1');
+  });
+  it('completes A1 with an onward consequence while preserving the original letter',async()=>{
+    const current=received({...result(),release_id:'a1-journey-v2',chapter_number:4,chapter_count:4,consequence:'Barsik is ready to leave town. Your letter stays sealed in his bag.',course:course({release_id:'a1-journey-v2',completed:true,completed_milestones:4})});
+    mockServer(()=>current);render(<CourseJourney attemptId="attempt-1" progression={progression()}/>);
+    expect(await screen.findByRole('heading',{name:'A1 course complete'})).toBeTruthy();expect(screen.getByText(current.consequence!)).toBeTruthy();expect(screen.getByText('A1 · 4 of 4 milestones complete')).toBeTruthy();
+  });
+  it('switches only on explicit request, keeps the same command after failure and retains old letters',async()=>{
+    const old=course({release_upgrade:{release_id:'a1-journey-v2',title:'Home to the next village',title_ru:'От дома до следующей деревни',retained_access:['A1','A2'],active_attempts:[{id:'saved-old',title:'An unfinished letter',title_ru:'Незаконченное письмо'}],retained_milestones:4,starting_chapter:'Home'}});
+    const updated=course({release_id:'a1-journey-v2',previous_courses:[{release_id:'a1-v1',title:'Earlier A1 journey',title_ru:'Прежнее путешествие A1',attempts:[{id:'saved-old',title:'An unfinished letter',title_ru:'Незаконченное письмо',status:'active'}]}]});
+    let fail=true;const fetch=mockServer(url=>{if(url.endsWith('/switch')){if(fail)throw new Error('Offline');return updated;}return old;});
+    render(<CourseJourney progression={progression()}/>);await screen.findByText('Updated journey available');
+    expect(fetch.mock.calls.every(([,options])=>options?.method==='GET')).toBe(true);expect(screen.getByRole('link',{name:'An unfinished letter'}).getAttribute('href')).toBe('#journey/checkpoint/saved-old');
+    fireEvent.click(screen.getByRole('button',{name:'Move to the updated journey →'}));await screen.findByRole('alert');fail=false;fireEvent.click(screen.getByRole('button',{name:'Move to the updated journey →'}));
+    await screen.findByText('Earlier journeys and saved letters');expect(screen.getByRole('link',{name:'An unfinished letter · Continue'}).getAttribute('href')).toBe('#journey/checkpoint/saved-old');
+    const writes=fetch.mock.calls.filter(([,options])=>options?.method==='POST');expect(writes).toHaveLength(2);expect(writes[0][1]?.body).toBe(writes[1][1]?.body);expect(JSON.parse(String(writes[0][1]?.body)).from_release_id).toBe('a1-v1');
+  });
+  it('saves vocabulary only after submission and asks for ambiguous lemma selection',async()=>{
+    const saved=received({...result(),release_id:'a1-journey-v2',result:{...result().result!,vocabulary:[{word:'стали',context:'Они стали читать.'}]}});
+    const fetch=mockServer((url,body)=>url.endsWith('/vocabulary') ? body?.lemma ? {word_id:7,href:'/vocab?word_id=7',flashcards_href:'#generate?word_id=7',enrichment_pending:true} : {needs_choice:true,choices:[{lemma:'стать',pos:'VERB',label:'стать · verb'},{lemma:'сталь',pos:'NOUN',label:'сталь · noun'}]} : saved);
+    render(<CourseJourney attemptId="attempt-1" progression={progression()}/>);await screen.findByText('Keep words from this letter');
+    fireEvent.click(screen.getByRole('button',{name:'Add word'}));fireEvent.click(await screen.findByRole('button',{name:'стать · verb'}));
+    expect(await screen.findByRole('link',{name:'Saved in My words'})).toBeTruthy();expect(screen.getByText('Word saved. Details could not be prepared.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'Retry details'}));await waitFor(()=>expect(fetch.mock.calls.filter(([,options])=>options?.method==='POST')).toHaveLength(3));
+    const writes=fetch.mock.calls.filter(([,options])=>options?.method==='POST');expect(JSON.parse(String(writes[1][1]?.body))).toMatchObject({word:'стали',lemma:'стать',pos:'VERB'});expect(JSON.parse(String(writes[1][1]?.body))).not.toHaveProperty('context');expect(JSON.parse(String(writes[2][1]?.body))).toMatchObject({word:'стали',lemma:'стать',pos:'VERB'});expect(JSON.parse(String(writes[2][1]?.body)).request_id).not.toBe(JSON.parse(String(writes[1][1]?.body)).request_id);
+  });
+  it('loads saved account answers and saves later changes with the server revision',async()=>{
+    const current=attempt({draft_answers:{read:'anna'},draft_revision:4});
+    const fetch=mockServer((url,body)=>url.endsWith('/draft')?{...current,draft_answers:body!.answers,draft_revision:5}:current);
+    render(<CourseJourney attemptId="attempt-1" progression={progression()}/>);
+    expect((await screen.findByRole('radio',{name:'Анна'}) as HTMLInputElement).checked).toBe(true);fireEvent.click(screen.getByRole('radio',{name:'Миша'}));
+    await waitFor(()=>expect(fetch.mock.calls.filter(([url])=>String(url).endsWith('/draft'))).toHaveLength(1));
+    const saved=fetch.mock.calls.find(([url])=>String(url).endsWith('/draft'))!;expect(JSON.parse(String(saved[1]?.body))).toEqual({answers:{read:'misha'},revision:4});
+  });
+});
+
+describe('Saved answer draft conflicts',()=>{
+  it('does not overwrite a newer account draft with an older browser draft',async()=>{
+    sessionStorage.setItem('word-post:checkpoint:learner:attempt-1',JSON.stringify({answers:{read:'misha'},revision:2}));
+    const fetch=mockServer(()=>attempt({draft_answers:{read:'anna'},draft_revision:3,listened:true}));
+    render(<CourseJourney attemptId="attempt-1" progression={progression()}/>);
+    expect(await screen.findByText(/These answers changed in another tab or device/)).toBeTruthy();expect((screen.getByRole('radio',{name:'Миша'}) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole('button',{name:'Use saved answers'}));expect((screen.getByRole('radio',{name:'Анна'}) as HTMLInputElement).checked).toBe(true);
+    await new Promise(resolve=>setTimeout(resolve,500));expect(fetch.mock.calls.every(([,options])=>options?.method==='GET')).toBe(true);
+  });
+  it('fetches a conflicting draft and waits for an explicit choice',async()=>{
+    let conflicting=false;
+    const fetch=vi.fn(async(url:string,_options?:RequestInit)=>{
+      if(url.endsWith('/draft')){conflicting=true;return respond({error:{code:'draft_conflict',message:'A newer draft is saved.'}},false);}
+      return respond(attempt({draft_answers:{read:conflicting?'misha':'anna'},draft_revision:conflicting?3:2}));
+    });vi.stubGlobal('fetch',fetch);render(<CourseJourney attemptId="attempt-1" progression={progression()}/>);
+    fireEvent.click(await screen.findByRole('radio',{name:'В четыре часа'}));
+    await screen.findByText(/These answers changed in another tab or device/);
+    expect((screen.getByRole('radio',{name:'Анна'}) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole('button',{name:'Use saved answers'}));expect((screen.getByRole('radio',{name:'Миша'}) as HTMLInputElement).checked).toBe(true);
+    await new Promise(resolve=>setTimeout(resolve,500));expect(fetch.mock.calls.filter(([url])=>url.endsWith('/draft'))).toHaveLength(1);
   });
 });

@@ -1,5 +1,7 @@
 # Word Post migration programme
 
+Current guided course: [A1 journey milestones](course-milestones.md). The home-first route, received letters and cumulative assessment implement the [milestone build plan](journey-milestones-build-plan.md).
+
 The [curriculum](../curriculum.md) is the current reference for the fifty A1–C2 topics, target vocabulary, grammar and activity briefs. Earlier migration proposals remain historical context.
 
 [Describe the scene](scene-builder.md) replaces Postcard Pairs in the catalogue with focused grammar practice. Learners select Russian words and endings to describe a simple illustration and situation. Existing Postcard Pairs sessions remain available.

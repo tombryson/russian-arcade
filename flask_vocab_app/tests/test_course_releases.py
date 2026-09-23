@@ -12,13 +12,13 @@ fixture_catalogue = legacy.fixture_catalogue
 
 
 class ReleaseCatalogueTests(unittest.TestCase):
-    def test_published_v1_is_the_default_and_callers_receive_copies(self):
-        first = course.course_catalogue()
+    def test_published_v1_remains_available_and_callers_receive_copies(self):
+        first = course.course_catalogue('a1-v1')
         self.assertEqual((first['release_id'], first['band'], first['chapter_count']), ('a1-v1', 'A1', 4))
         self.assertEqual(first['chapters'][0]['id'], 'a1-post-office')
         first['chapters'][0]['title'] = 'Changed locally'
         self.assertNotEqual(course.course_catalogue('a1-v1')['chapters'][0]['title'], 'Changed locally')
-        self.assertEqual(set(releases.RELEASES), {'a1-v1'})
+        self.assertIn('a1-v1', releases.RELEASES)
 
     def test_unknown_and_draft_releases_cannot_be_loaded(self):
         draft = deepcopy(releases.RELEASES['a1-v1']) | {'release_id': 'a1-home-pilot', 'status': 'draft'}

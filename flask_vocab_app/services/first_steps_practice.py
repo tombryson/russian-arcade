@@ -203,7 +203,7 @@ def _create_context_flashcards(generator, credential, source_loader):
                     continue
                 word = _game_word(conn, candidate) if origin['lesson_id'].startswith('game:') else LessonCards.resolve(conn, {**candidate, 'surface': candidate['form']})
                 word['first_steps_source'] = {'identity': identity, 'title': title, 'url': source['url'],
-                                             'kind': 'game' if origin['lesson_id'].startswith('game:') else 'lesson'}
+                                             'kind': origin.get('kind', 'game' if origin['lesson_id'].startswith('game:') else 'lesson')}
                 if candidate.get('assets'):
                     word['reused_assets'] = candidate['assets']
                 if candidate.get('source'):

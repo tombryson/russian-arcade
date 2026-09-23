@@ -4,7 +4,10 @@ from contracts.learning import fields
 from repositories.learning_repository import LearningError, require_access, timestamp, transaction
 from services.progression import LEVELS, snapshot, journey_read, journey_answer
 from services.course_progression import (course_snapshot, checkpoint_start, checkpoint_read,
-                                        checkpoint_answer, checkpoint_support, checkpoint_listened)
+                                        checkpoint_answer, checkpoint_support, checkpoint_listened,
+                                        checkpoint_draft, switch_release)
+from services.course_targets import practice_start, practice_get, practice_action
+from services.course_followups import writing_followup, capture_vocabulary
 from utils.household_access import access_id, access_policy, csrf_token
 
 
@@ -107,5 +110,66 @@ def create_progression_blueprint(db_path):
         with transaction(db_path, write=True) as conn:
             profile = course_profile(conn)
             return jsonify(checkpoint_listened(conn, profile['id'], attempt_id))
+
+    @bp.post('/course/releases/<release_id>/switch')
+    @access_policy('child')
+    def change_course(release_id):
+        data = body({'request_id', 'from_release_id'})
+        with transaction(db_path, write=True) as conn:
+            profile = course_profile(conn)
+            return jsonify(switch_release(conn, profile['id'], release_id, data['from_release_id'], data['request_id']))
+
+    @bp.post('/course/checkpoints/<attempt_id>/draft')
+    @access_policy('child')
+    def save_checkpoint_draft(attempt_id):
+        data = body({'answers', 'revision'})
+        with transaction(db_path, write=True) as conn:
+            profile = course_profile(conn)
+            return jsonify(checkpoint_draft(conn, profile['id'], attempt_id, data['answers'], data['revision']))
+
+    @bp.post('/course/checkpoints/<attempt_id>/writing')
+    @access_policy('child')
+    def write_reply(attempt_id):
+        data = body({'request_id'})
+        with transaction(db_path, write=True) as conn:
+            profile = course_profile(conn)
+            return jsonify(writing_followup(conn, profile['id'], attempt_id, data['request_id']))
+
+    @bp.post('/course/checkpoints/<attempt_id>/vocabulary')
+    @access_policy('child')
+    def keep_word(attempt_id):
+        data = body({'word', 'request_id'}, {'lemma', 'pos'})
+        with transaction(db_path) as conn:
+            profile = course_profile(conn)
+        return jsonify(capture_vocabulary(db_path, profile['id'], attempt_id, data['word'], data['request_id'], data.get('lemma'), data.get('pos')))
+
+    @bp.post('/course/chapters/<section_id>/practice')
+    @access_policy('child')
+    def start_preparation(section_id):
+        data = body({'request_id'}, {'release_id'})
+        with transaction(db_path, write=True) as conn:
+            profile = course_profile(conn)
+            state = course_snapshot(conn, profile['id'])
+            if state['release_id'] != 'a1-journey-v2' or data.get('release_id', state['release_id']) != state['release_id']:
+                raise LearningError('course_release_mismatch', 'Reopen your current journey before starting this practice.', 409)
+            conn.execute('INSERT OR IGNORE INTO course_enrolments(profile_id,band,release_id,started_at) VALUES (?,?,?,?)',
+                         (profile['id'], state['band'], state['release_id'], timestamp()))
+            return jsonify(practice_start(conn, profile['id'], section_id, data['request_id']))
+
+    @bp.get('/course/practice/<attempt_id>')
+    @access_policy('child')
+    def read_preparation(attempt_id):
+        with transaction(db_path) as conn:
+            profile = course_profile(conn)
+            return jsonify(practice_get(conn, profile['id'], attempt_id))
+
+    @bp.post('/course/practice/<attempt_id>/<action>')
+    @access_policy('child')
+    def act_preparation(attempt_id, action):
+        required = {'request_id', 'item_id'} | ({'choice_id'} if action == 'answer' else set())
+        data = body(required)
+        with transaction(db_path, write=True) as conn:
+            profile = course_profile(conn)
+            return jsonify(practice_action(conn, profile['id'], attempt_id, action, data, data['request_id']))
 
     return bp

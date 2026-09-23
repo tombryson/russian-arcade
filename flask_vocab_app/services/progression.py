@@ -135,6 +135,8 @@ def award(conn, profile_id, *, activity, content_key, source_key, title, now=Non
         (event_id,profile_id,activity,str(source_key),str(content_key),title,category,target_level,encoded(evidence or {}),now))
     from services.course_progression import record_evidence
     record_evidence(conn, profile_id, event_id, activity, content_key, target_level, evidence, now)
+    from services.course_targets import record_event_targets
+    record_event_targets(conn, profile_id, event_id, now)
     claim_key = activity+':'+str(content_key)
     old = conn.execute('SELECT amount FROM progression_claims WHERE profile_id=? AND category=? AND content_key=? AND study_day=?',(profile_id,category,claim_key,day)).fetchone()
     if old and old[0]:

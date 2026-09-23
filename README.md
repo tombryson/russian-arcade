@@ -31,7 +31,7 @@ Google Drive and SQLite have separate roles. Drive supports quick word capture, 
 | **Speaking** | Talk freely in a scenario, or choose replies one exchange at a time in Step-through mode. Live conversations receive an audio review; Step-through offers optional hints and explanations. |
 | **Tutor lessons** | Upload a PDF or image, save revisions, and practise with exercises based on the document. Select words on its pages for flashcards. |
 | **My words** | Browse words, forms and grammatical details. See card counts and manage saved vocabulary. |
-| **Guided A1 course** | Complete four [chapters](docs/word-post/course-chapters.md) covering all ten A1 topics. Help Barsik with new notes, separate listening updates and checkpoint replies, then open your letter. |
+| **Guided A1 course** | Complete four [milestones](docs/word-post/course-milestones.md), from home to the edge of town. Read letters sent to Barsik, listen to updates and complete a cumulative A1 assessment. |
 | **Barsik’s journey** | Learn your first words through the introduction, earn Lingocoins and choose optional games while following the guided course. |
 | **Anki tools** | Use the existing automated card-generation workflow when you prefer to study in Anki. Native and Anki review schedules remain separate. |
 
@@ -60,7 +60,7 @@ The [curriculum](docs/curriculum.md) defines **50 topics from A1 to C2**, with t
 
 Reading, Writing, Translation and Word Jumble draw from this shared material. A topic has a default course level; learners can choose another level when revisiting it. Word and form difficulty remain separate vocabulary filters.
 
-The guided course adds four authored A1 chapters and independent checkpoints to the catalogue. Passing all four unlocks the A2 guided level; this release does not include authored A2 chapters or award a proficiency qualification. Higher-level free practice remains accessible. See [chapter content and progression](docs/word-post/course-chapters.md).
+The guided course adds four A1 milestones, three assessment variants per stop and a cumulative final letter. Target-specific preparation connects to normal activities. Completed letters can become contextual flashcards or Writing tasks. Passing all four preserves access to A2 practice; the guided A2 region remains future content. See [course content and progression](docs/word-post/course-milestones.md).
 
 The [course catalogue](https://russian-arcade.fly.dev/curriculum) lists the topics and opens practice for each one. It does not add words automatically. Saving vocabulary still uses the existing lemma, form, topic and mnemonic pipeline.
 

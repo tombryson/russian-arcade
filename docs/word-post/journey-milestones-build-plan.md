@@ -1,24 +1,25 @@
 # Journey and curriculum milestones: build plan
 
-Status: **implementation started, 23 September 2026**. The release foundation and milestone views are implemented on `codex/journey-milestones`. The revised story is an internal draft. The published A1 course remains `a1-v1`; this branch has not been deployed.
-
+Status: **A1 implementation complete; release verification in progress, 23 September 2026**. The `codex/journey-milestones` branch contains the complete new A1 route. See [the implemented course](course-milestones.md) for current behaviour. Existing v1 content and enrolments are retained.
 Baseline reviewed: public repository commit `8c98e12`, schema 044. The [chapter specification](course-chapters.md) describes that shipped version. This document governs the next journey revision where the two differ. The [curriculum](../curriculum.md) remains the authority for topics, language targets and activity levels.
 
 Key sections: [A1 sequence](#4-revised-a1-sequence) · [Assessment](#6-received-letter-assessments) · [Interface](#7-learner-facing-structure) · [Technical design](#9-data-and-service-design) · [Migration](#11-migration-of-existing-learners) · [Build phases](#12-implementation-sequence).
 
 ## Implementation status
 
-| Area | Implemented in the first pass | Still needed |
-| --- | --- | --- |
-| Course releases | Schema 045 adds release-specific enrolment, attempts and passes. Earned A2 access is retained. Existing content and saved answer receipts are unchanged. | A reviewed switch to the complete new release; no learner is moved to the draft. |
-| Curriculum targets | 110 stable A1 target IDs cover the existing objectives and grammar. Targets distinguish understanding, selected responses, writing and speaking. | Activity adapters that record evidence from individual responses. Intended generation targets are not proof of success. |
-| Milestone views | Curriculum groups A1 topics by the learner's current course. Journey and Profile show permanent milestone counts separately from preparation. | Revised route artwork and the full received-letter presentation. |
-| Home pilot | Three internal assessment variants, teaching examples and a target map. Offline validation checks question contracts, coverage, support and media requirements. | Narrative and language review, recordings and a playable internal pilot. |
-| Remaining sections | Ordered section definitions and a 16-question cumulative blueprint covering all ten topics. | Post office, Market and Leaving town teaching, three variants each, recordings and review. |
+| Area | Delivered |
+| --- | --- |
+| Course releases | Versioned enrolment, frozen assessments, permanent passes and retained A2 access. Explicit switch preview; earlier work remains readable. |
+| Curriculum targets | 110 target definitions; 32 required targets with short preparation tasks. Saved individual decisions carry support and source evidence. Aggregate activity scores remain topic evidence. |
+| A1 content | Home, Post office, Market and Leaving town; three variants each, 120 scored decisions and separate recorded updates. Final variants sample all ten topics. |
+| Assessment flow | Received-letter opening, grouped final assessment, revision-checked drafts, support tracking, feedback and permanent milestones. |
+| Shared presentation | Curriculum, Journey, Home, header and Profile use the same course projection. New learners complete one welcome before entering Home. |
+| Content reuse | Shared vocabulary enrichment, 22 authored native cloze candidates and optional saved Writing replies. Existing media generation and FSRS are reused. |
+| Release checks | Deterministic content validation, model peer review, migration rehearsal and application tests. A human learner pilot remains outstanding. |
 
-The new draft is not registered as a playable course. Validation rejects publication while sections, recordings or editorial review are incomplete. These checks verify the content structure; they do not establish that the Russian or story is suitable for learners.
+JM-01–12 are implemented for the A1 release. JM-13 (independent spoken replies) and JM-14 (authored A2 regions) remain subsequent work, as scoped below. Spoken production does not become a hidden progression requirement.
 
-Next, add response-level evidence to existing activities and finish the Home pilot with reviewed content and audio. Then author the remaining sections. Publish only when the complete route and the migration checks pass. Coins, game purchases, vocabulary processing and flashcard schedules remain separate.
+The following sections retain the agreed design and its acceptance criteria. They distinguish current A1 requirements from later-region proposals. Publication must pass the checks in section 14; pilot observations should inform the next content release.
 
 ## 1. Product direction
 

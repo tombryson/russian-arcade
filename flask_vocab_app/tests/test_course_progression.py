@@ -74,7 +74,11 @@ class CourseProgressionTests(unittest.TestCase):
         self.patcher = patch.object(course, '_catalogue', return_value=self.catalogue)
         self.patcher.start()
         self.addCleanup(self.patcher.stop)
+        default = patch.object(course, 'default_release_id', return_value='a1-v1')
+        default.start()
+        self.addCleanup(default.stop)
         self.app = isolated_app(self)
+        self.app.config['COURSE_DEFAULT_RELEASE'] = 'a1-v1'
         self.db = self.app.config['DB_PATH']
         self.client = self.app.test_client()
         response = self.client.get('/api/v1/course')

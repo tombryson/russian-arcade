@@ -111,11 +111,18 @@ class ActivityProgressionTests(unittest.TestCase):
         self.jumble._assess.return_value['score'] = 3
         self.jumble.mark_response(game['id'], 'Сейчас два часа.', 0)
         course = self.progress()['course']
+        self.assertEqual(course['release_id'], 'a1-journey-v2')
         chapter = course['chapters'][0]
         self.assertEqual({t['id']:t['successful_tasks'] for t in chapter['topics']},
-                         {'greetings':1,'numbers':1,'family':1})
-        self.assertEqual(chapter['activity_count'], 3)
-        self.assertAlmostEqual(chapter['progress'], .5)
+                         {'greetings':1,'family':1,'home':0})
+        self.assertEqual(chapter['activity_count'], 2)
+        post_office = course['chapters'][1]
+        self.assertEqual({t['id']:t['successful_tasks'] for t in post_office['topics']},
+                         {'numbers':1,'daily_activities':0})
+        self.assertEqual(post_office['activity_count'], 1)
+        # Aggregate activity scores remain useful topic evidence; they do not
+        # claim that each new preparation target was taught and attempted.
+        self.assertEqual(chapter['progress'], 0)
 
     def test_repeat_check_is_capped_per_content_and_a_new_day_can_earn_again(self):
         sid = self.sentence()

@@ -87,6 +87,8 @@ class SpeakingReviewService:
                 conn.execute("UPDATE speaking_reviews SET state='ready',report_json=?,error=NULL,lease_until=0,updated_at=? WHERE session_id=?", (encoded(report),timestamp(),sid))
                 from services.progression import award_speaking
                 award_speaking(conn, session, report)
+                from services.course_targets import record_speaking_targets
+                record_speaking_targets(conn, session['profile_id'], sid)
         except Exception as error:
             message = str(error) if isinstance(error, SpeechError) else 'Your speaking review could not finish. The recordings are saved; please try again.'
             with transaction(self.db_path, write=True) as conn:

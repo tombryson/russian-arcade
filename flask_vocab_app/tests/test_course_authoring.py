@@ -1,4 +1,4 @@
-"""The internal Home pilot cannot silently replace the complete live course."""
+"""Authored A1 content is complete and cannot bypass release validation."""
 from collections import Counter
 from copy import deepcopy
 import hashlib
@@ -42,19 +42,19 @@ class CourseAuthoringTests(unittest.TestCase):
         self.assertFalse(first['playable'])
         self.assertFalse(first['default_enrolment'])
 
-    def test_v1_remains_complete_default_with_its_original_ids(self):
+    def test_v1_remains_complete_with_its_original_ids(self):
         from services.course_progression import course_catalogue
-        live = course_catalogue()
+        live = course_catalogue('a1-v1')
         self.assertEqual(live['version'], 1)
         self.assertEqual([c['id'] for c in live['chapters']],
                          ['a1-post-office', 'a1-home', 'a1-market', 'a1-delivery'])
         self.assertTrue(all(len(c['variants']) == 3 for c in live['chapters']))
 
-    def test_draft_publication_reports_missing_route_audio_and_review(self):
+    def test_draft_publication_reports_unfinished_release_state_and_audio(self):
         errors = self.rejects('draft publication is forbidden', publication=True)
         self.assertTrue(any('incomplete section' in error for error in errors))
-        self.assertEqual(sum('missing audio blocks publication' in error for error in errors), 3)
-        self.assertTrue(any('editorial review' in error for error in errors))
+        self.assertEqual(sum('missing audio blocks publication' in error for error in errors), 12)
+        self.assertTrue(any('unresolved publication blockers' in error for error in errors))
 
     def test_claimed_published_status_cannot_skip_publication_gate(self):
         self.draft['status'] = 'published'
@@ -78,19 +78,37 @@ class CourseAuthoringTests(unittest.TestCase):
         self.home['topic_ids'].append('places')
         self.rejects('primary topic allocation mismatch')
 
-    def test_pending_sections_have_no_fake_letters_or_playable_claim(self):
-        for chapter in self.draft['chapters'][1:]:
-            self.assertEqual(chapter['content_status'], 'pending_content')
-            self.assertEqual(chapter['variants'], [])
-            self.assertEqual(chapter['preparation'], [])
+    def test_all_sections_are_authored_without_a_false_public_playability_claim(self):
+        for chapter in self.draft['chapters']:
+            self.assertEqual(chapter['content_status'], 'authored_draft')
+            self.assertEqual(len(chapter['variants']), 3)
+            self.assertEqual({p['topic_id'] for p in chapter['preparation']}, set(chapter['topic_ids']))
             self.assertFalse(chapter['playable'])
             self.assertTrue(chapter['pending_work'])
         self.draft['chapters'][1]['playable'] = True
         self.rejects('unfinished section must not advertise playability')
 
     def test_pending_section_cannot_contain_a_placeholder_assessment(self):
-        self.draft['chapters'][1]['variants'] = [deepcopy(self.variant)]
+        self.draft['chapters'][1]['content_status'] = 'pending_content'
         self.rejects('pending content must not pretend to be authored')
+
+    def test_every_section_has_equivalent_authored_decisions(self):
+        self.assertEqual(sum(len(v['questions']) for c in self.draft['chapters'] for v in c['variants']), 120)
+        for chapter in self.draft['chapters']:
+            expected = chapter['checkpoint_blueprint']['counts']
+            for variant in chapter['variants']:
+                self.assertEqual(Counter(q['kind'] for q in variant['questions']), expected)
+                self.assertEqual([q['target_ids'] for q in variant['questions']],
+                                 [s['target_ids'] for s in chapter['checkpoint_blueprint']['slots']])
+
+    def test_every_cumulative_variant_actually_scores_all_ten_topics(self):
+        for variant in self.draft['chapters'][-1]['variants']:
+            topics = {t for q in variant['questions'] for t in q['topic_ids']}
+            self.assertEqual(len(topics), 10)
+            self.assertEqual(len(variant['questions']), 16)
+            self.assertEqual(variant['consequence']['result'], 'a1_course_complete')
+            self.assertIsNone(variant['consequence']['next_section_id'])
+            self.assertEqual(variant['consequence']['original_letter_state'], 'sealed')
 
     def test_home_has_three_equivalent_eight_question_letters(self):
         expected_targets = self.home['required_target_ids']
@@ -109,6 +127,22 @@ class CourseAuthoringTests(unittest.TestCase):
         self.assertLessEqual(set(self.home['required_target_ids']), introduced)
         self.home['preparation'][0]['introduces_target_ids'].remove('a1.greetings.exchange-names.read')
         self.rejects('required targets lack teaching before assessment')
+
+    def test_every_target_has_authored_teaching_and_an_explicit_assessment_policy(self):
+        for row in self.draft['target_coverage']:
+            self.assertEqual(row['teaching']['status'], 'authored_draft')
+            self.assertTrue(row['teaching']['preparation_id'])
+            self.assertEqual(row['practice']['status'], 'authored_brief')
+
+    def test_guided_checks_only_credit_their_narrow_scored_targets(self):
+        for chapter in self.draft['chapters']:
+            for prep in chapter['preparation']:
+                check = prep['guided_check']
+                self.assertLessEqual(len(check['target_ids']), 2)
+                self.assertLess(set(check['target_ids']), set(prep['introduces_target_ids']))
+                self.assertFalse(check['pass_awarded'])
+        self.home['preparation'][0]['guided_check']['target_ids'] = ['a1.greetings.polite-greeting.speak']
+        self.rejects('written guided check cannot establish production or listening')
 
     def test_source_curriculum_coverage_is_explicit_for_every_target(self):
         self.assertEqual({r['target_id'] for r in self.draft['target_coverage']},
@@ -193,6 +227,13 @@ class CourseAuthoringTests(unittest.TestCase):
         self.home['variants'][1] = duplicate
         self.rejects('variants must vary meaningful facts, not only names')
 
+    def test_variants_must_change_at_least_three_substantive_facts(self):
+        chapter = self.draft['chapters'][1]
+        a, b = chapter['variants'][:2]
+        for fid in chapter['checkpoint_blueprint']['variation_fact_ids'][:-2]:
+            b['story_facts'][fid] = deepcopy(a['story_facts'][fid])
+        self.rejects('variant pairs must vary at least three meaningful facts')
+
     def test_essential_details_need_justification_and_exact_designation(self):
         self.home['checkpoint_blueprint']['essential_justifications'].pop('l1')
         self.rejects('essential details need story justifications')
@@ -206,7 +247,7 @@ class CourseAuthoringTests(unittest.TestCase):
         self.rejects('support policy mismatch')
 
     def test_audio_is_honestly_missing_and_transcript_is_versioned(self):
-        for variant in self.home['variants']:
+        for variant in [v for c in self.draft['chapters'] for v in c['variants']]:
             audio = variant['listening']
             self.assertEqual(audio['status'], 'missing')
             self.assertIsNone(audio['audio_url'])
@@ -215,6 +256,88 @@ class CourseAuthoringTests(unittest.TestCase):
             self.assertEqual(audio['text_sha256'], hashlib.sha256(audio['transcript'].encode()).hexdigest())
         self.variant['listening']['audio_url'] = '/static/audio/course/nonexistent.mp3'
         self.rejects('missing audio must not have fabricated asset metadata')
+
+    def test_every_listening_question_requires_new_spoken_information(self):
+        for chapter in self.draft['chapters']:
+            for variant in chapter['variants']:
+                for question in variant['questions']:
+                    if question['kind'] == 'listening':
+                        for fid in question['evidence']:
+                            fact = variant['story_facts'][fid]
+                            self.assertEqual(fact['source'], 'listening')
+                            self.assertNotIn(fact['source_quote'], variant['letter'])
+
+    def test_request_targets_require_a_full_request_rather_than_a_food_label(self):
+        request_targets = {'a1.food.make-request.read', 'a1.food.make-request.listen'}
+        for chapter in self.draft['chapters']:
+            for variant in chapter['variants']:
+                for question in variant['questions']:
+                    if request_targets.intersection(question['target_ids']):
+                        self.assertTrue(question['accepted_answer_text'].startswith('Можно '))
+                        self.assertTrue(question['accepted_answer_text'].endswith(', пожалуйста?'))
+
+    def test_final_garment_question_needs_both_spoken_colour_and_size(self):
+        for variant in self.draft['chapters'][-1]['variants']:
+            question = next(q for q in variant['questions'] if q['id'] == 'l4')
+            answer = question['accepted_answer_text'].rstrip('.').split()
+            self.assertIn(answer[0], ('Большая', 'Маленькая'))
+            distractors = [c['text'].rstrip('.').split() for c in question['choices'] if c['id'] != question['answer']]
+            self.assertTrue(any(wrong[0] != answer[0] and wrong[1:] == answer[1:] for wrong in distractors))
+            self.assertTrue(any(wrong[0] == answer[0] and wrong[1] != answer[1] and wrong[2:] == answer[2:]
+                                for wrong in distractors))
+            self.assertIn('update-v2', variant['listening']['id'])
+
+    def test_valid_russian_weather_synonym_is_not_marked_wrong(self):
+        for variant in self.draft['chapters'][-1]['variants']:
+            question = next(q for q in variant['questions'] if q['id'] == 'c3')
+            distractors = [c['text'] for c in question['choices'] if c['id'] != question['answer']]
+            self.assertNotIn('Сегодня жара.', distractors)
+            self.assertNotIn('Сегодня холод.', distractors)
+
+    def test_direction_prompt_does_not_supply_the_tested_russian_case_form(self):
+        for variant in self.draft['chapters'][-1]['variants']:
+            question = next(q for q in variant['questions'] if q['id'] == 'c1')
+            for answer_phrase in ('в библиотеку', 'в школу', 'на почту'):
+                self.assertNotIn(answer_phrase, question['prompt_ru'])
+
+    def test_writing_continuations_keep_both_sources_and_remain_optional(self):
+        for chapter in self.draft['chapters']:
+            for variant in chapter['variants']:
+                task = variant['writing_task']
+                self.assertTrue(task['optional'])
+                self.assertFalse(task['affects_milestone_pass'])
+                for field in ('task', 'task_en'):
+                    self.assertIn(variant['letter'], task[field])
+                    self.assertIn(variant['listening']['transcript'], task[field])
+        self.variant['writing_task']['task_en'] = 'Reply to the letter.'
+        self.rejects('writing continuation must preserve the letter and spoken update context')
+
+    def test_contextual_cards_have_real_inflected_sources_and_resolvable_morphology(self):
+        from services.card_metadata import GRAMMAR
+        from utils.story_processing import get_morph
+        count = 0
+        for chapter in self.draft['chapters']:
+            for variant in chapter['variants']:
+                for candidate in variant['flashcard_candidates']:
+                    count += 1
+                    self.assertIn(candidate['sentence'], variant['letter'])
+                    self.assertTrue(candidate['translation'])
+                    self.assertTrue(candidate['target_meaning'])
+                    parses = [p for p in get_morph().parse(candidate['form']) if p.is_known
+                              and p.normal_form == candidate['lemma'] and p.tag.POS == candidate['pos']
+                              and all(getattr(p.tag, k, None) == value for k, value in candidate['grammar'].items())]
+                    signatures = {tuple(getattr(p.tag, k, None) for k in GRAMMAR) for p in parses}
+                    self.assertEqual(len(signatures), 1, candidate)
+        self.assertEqual(count, 22)
+        self.variant['flashcard_candidates'][0]['sentence'] = 'Неподтверждённый пример.'
+        self.rejects('flashcard sentence must come from the received letter')
+
+    def test_review_records_do_not_claim_external_review_or_a_learner_pilot(self):
+        self.assertEqual(self.draft['editorial_review']['status'], 'author_reviewed')
+        self.assertEqual(self.draft['editorial_review']['learner_pilot_status'], 'not_run')
+        self.assertEqual(self.draft['editorial_review']['independent_review'], 'pending')
+        self.draft['editorial_review']['unresolved_editorial_items'] = ['An unresolved semantic error.']
+        self.rejects('unresolved semantic review blocks publication', publication=True)
 
     def test_changed_transcript_requires_new_metadata(self):
         self.variant['listening']['transcript'] += ' До встречи!'
@@ -276,11 +399,13 @@ class CourseAuthoringTests(unittest.TestCase):
     def test_editorial_limitations_remain_explicit_before_publication(self):
         review = self.draft['editorial_review']
         self.assertEqual(review['independent_review'], 'pending')
-        self.assertEqual(review['semantic_review_status'], 'pending')
-        self.assertGreaterEqual(len(review['unresolved_editorial_items']), 2)
+        self.assertEqual(review['semantic_review_status'], 'author_reviewed')
+        self.assertIn('not a learner pilot', review['limitations'])
+        self.assertEqual(review['unresolved_editorial_items'], [])
         for variant in self.home['variants']:
             self.assertEqual(variant['language_manifest']['independent_editorial_review'], 'pending')
-            self.assertFalse(variant['consequence']['continuation_playable'])
+            self.assertEqual(variant['listening']['status'], 'missing')
+        self.assertFalse(self.draft['playable'])
 
 
 if __name__ == '__main__':
