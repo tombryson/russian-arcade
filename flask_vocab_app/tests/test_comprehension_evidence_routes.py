@@ -138,7 +138,7 @@ class ComprehensionEvidenceRouteTests(unittest.TestCase):
         reloaded = self.client.get('/comprehension/load/' + fields['story_id'])
         self.assertEqual(reloaded.status_code, 200)
         html = reloaded.get_data(as_text=True)
-        self.assertIn('Understanding the text', html)
+        self.assertIn('Understanding the message', html)
         self.assertIn('  Анна в аптеке.\n</textarea>', html)
         self.assertEqual(HiddenFields(html).fields['task_revision'], '1')
         self.assertEqual(self.snapshot(), before_reload)
