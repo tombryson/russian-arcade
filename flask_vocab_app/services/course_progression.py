@@ -19,6 +19,7 @@ from contracts.learning import key
 from repositories.learning_repository import LearningError, encoded, identifier, payload_hash, timestamp
 from services.curriculum import curriculum
 from services.course_releases import DEFAULT_RELEASE_ID, load_release, release_metadata, default_release_id
+from services.course_reference_notes import reference_groups
 from services.speaking_curriculum import scenario_for_topic
 
 DATA_FILE = Path(__file__).resolve().parents[1] / 'data' / 'course_chapters.json'
@@ -226,6 +227,10 @@ def _reveal_course(course):
                            topics=[], objectives=[], preparation=[], target_coverage=None,
                            progress=0, preparation_progress=0, activity_count=0,
                            last_attempt_id=None, active_attempt_id=None)
+        elif chapter.get('preparation'):
+            chapter = dict(chapter, preparation=[dict(item, groups=reference_groups(
+                chapter.get('release_id', course.get('release_id')), item.get('id')))
+                for item in chapter['preparation']])
         chapters.append(chapter)
     return dict(course, chapters=chapters)
 

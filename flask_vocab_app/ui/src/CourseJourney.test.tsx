@@ -39,7 +39,8 @@ describe('Guided chapter journey',()=>{
   it('teaches the topic and offers explicit early test-out with a stable request ID on retry',async()=>{
     let fail=true;const fetch=mockServer((url)=>{if (url.endsWith('/checkpoint')) {if(fail) throw new Error('Connection lost');return attempt();}if(url==='/api/v1/course/checkpoints/attempt-1') return attempt();return course();});
     render(<CourseJourney chapterId="first" progression={progression()}/>);
-    expect(await screen.findByText('Use this phrase to introduce yourself.')).toBeTruthy();
+    expect(await screen.findByText('Меня зовут Анна.')).toBeTruthy();
+    expect(screen.queryByText('Use this phrase to introduce yourself.')).toBeNull();
     expect(screen.getByText('Меня зовут Анна.')).toBeTruthy();expect(screen.getByRole('link',{name:'Read a greeting →'}).getAttribute('href')).toContain('topic=greetings');
     fireEvent.click(screen.getByRole('button',{name:'Test out of this milestone →'}));await screen.findByRole('alert');
     fail=false;fireEvent.click(screen.getByRole('button',{name:'Test out of this milestone →'}));
@@ -109,6 +110,29 @@ describe('Guided chapter journey',()=>{
     expect(readiness?.open).toBe(false);
     expect(readiness?.textContent).toContain('two successful tasks in each topic using at least two activities');
     expect(screen.getByRole('heading',{name:'More practice by topic'})).toBeTruthy();
+  });
+  it.each([['en','Greetings','Formal','Informal'],['ru','Приветствия','Официально','Неформально']] as const)('groups reference examples by function and register in %s',async(language,title,formal,informal)=>{
+    const current=course({release_id:'a1-journey-v2'});
+    current.chapters[0].preparation![0].groups=[{id:'greetings',title:'Greetings',title_ru:'Приветствия',items:[
+      {label:'Formal',label_ru:'Официально',ru:'Здравствуйте!',en:'Hello!'},
+      {label:'Informal',label_ru:'Неформально',ru:'Привет!',en:'Hi!'},
+    ]}];
+    mockServer(()=>current);render(<CourseJourney chapterId="first" language={language} progression={progression()}/>);
+    await screen.findByRole('heading',{name:language==='ru' ? 'Короткое сообщение' : 'A small message'});
+    const summary=screen.getByText(language==='ru' ? 'Пояснения и примеры' : 'Notes and examples');
+    const reference=summary.closest('details')!;
+    expect(reference.open).toBe(false);
+    fireEvent.click(summary);
+    const category=reference.querySelector('h4')!;
+    expect(category.textContent).toBe(title);
+    const rows=reference.querySelectorAll('dl>div');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].querySelector('dt')?.textContent).toBe(formal);
+    expect(rows[0].querySelector('[lang="ru"]')?.textContent).toBe('Здравствуйте!');
+    expect(rows[1].querySelector('dt')?.textContent).toBe(informal);
+    expect(rows[1].querySelector('[lang="ru"]')?.textContent).toBe('Привет!');
+    expect(reference.textContent).not.toContain('Use this phrase to introduce yourself.');
+    expect(reference.textContent).not.toContain('Меня зовут Анна.');
   });
   it('shows honest A1 completion and available A2 practice',async()=>{
     mockServer(()=>course({completed:true,completed_milestones:4,unlocked_levels:['A1','A2']}));render(<CourseJourney progression={progression()}/>);

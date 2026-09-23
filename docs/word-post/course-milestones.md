@@ -23,6 +23,12 @@ If a recording fails, the learner can retry it or open the transcript. If saving
 
 ## Preparation and evidence
 
+Topic reference examples live in `flask_vocab_app/data/course_reference_notes.json`. Each preparation item has named language categories, such as Greetings, with labelled examples such as Formal and Informal. Titles and labels are bilingual; every Russian example has an English translation. Use short examples that isolate the named distinction. Do not replace these categories with an explanatory paragraph or infer them from sentence text.
+
+The file uses schema version 1 and maps release IDs to the preparation IDs in that release. Each entry has `groups`; each group has a distinct `id`, `title`, `title_ru` and `items`. Items contain `label`, `label_ru`, `ru` and `en`. Validation checks complete preparation coverage, known IDs and bounded, nonempty content.
+
+Reference notes are presentation data. The API joins them to unlocked preparation when returning course state, including saved receipt responses. Future milestones remain hidden. Editing these notes does not change published course files, assessment questions, grades or stored attempts.
+
 Normal readiness requires two successful distinct tasks per topic, at least 70%, across two activity families in the section. Reading, Writing, Speaking, Translation and Word Jumble remain the main practice routes. Daily coin limits do not stop their saved practice from contributing.
 
 The course also checks a defined set of 32 comprehension and form-selection targets. Each must have been introduced and attempted. Short preparation items teach an example before asking a question. They fill specific gaps; they do not replace the activity baseline or award extra coins.

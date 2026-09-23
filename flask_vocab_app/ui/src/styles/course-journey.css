@@ -74,6 +74,15 @@
 .is-milestone .course-preparation {grid-column:1/-1;font-size:13px}
 .is-milestone .course-preparation summary {width:fit-content;min-height:32px;align-content:center;cursor:pointer;color:var(--wp-text-secondary)}
 .is-milestone .course-preparation[open] {padding-bottom:6px}
+.course-reference-groups {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 32px;padding:6px 0 10px}
+.course-reference-group {min-width:0}
+.course-reference-group h4 {margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid var(--wp-border-subtle);font-size:14px;font-weight:500;line-height:1.4}
+.course-preparation .course-reference-group dl {gap:12px}
+.course-preparation .course-reference-group dl>div {grid-template-columns:100px minmax(0,1fr);gap:12px;align-items:start}
+.course-reference-group dt {font-size:12px;font-weight:400;color:var(--wp-text-secondary)}
+.course-reference-group dd {display:grid;gap:2px;line-height:1.5;overflow-wrap:anywhere}
+.course-reference-group dd>span[lang="ru"] {color:var(--wp-text-primary);font-size:15px}
+.course-reference-group dd>span[lang="en"] {font-size:12px}
 .is-milestone .course-target-coverage {margin-top:12px;border-top:1px solid var(--wp-border-subtle)}
 .is-milestone .course-target-coverage summary {padding-block:6px;color:var(--wp-text-secondary)}
 @media(max-width:720px) {
@@ -83,6 +92,8 @@
   .is-milestone .course-topics>li {grid-template-columns:1fr;gap:4px;padding:12px 14px}
   .is-milestone .course-practice-links {gap:0 20px}
   .course-milestone-actions {gap:4px 16px}
+  .course-reference-groups {grid-template-columns:1fr;gap:22px}
+  .course-preparation .course-reference-group dl>div {grid-template-columns:88px minmax(0,1fr)}
 }
 
 /* Blurred content shapes preserve the card without sending future story details. */
