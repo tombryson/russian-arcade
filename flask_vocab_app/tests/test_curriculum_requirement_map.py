@@ -61,3 +61,19 @@ class CurriculumRequirementMapTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location('coverage_renderer', root / 'scripts/render_curriculum_coverage.py')
         renderer = importlib.util.module_from_spec(spec); spec.loader.exec_module(renderer)
         self.assertEqual((root / 'docs/curriculum-coverage.md').read_text(encoding='utf-8'), renderer.render())
+
+    def test_new_units_are_counted_without_inventing_unprepared_listening(self):
+        report = maps.coverage_report()
+        tasks = report['direct_task_contracts']
+        listening = [item for item in tasks if item['kind'] == 'unit_listening_choice']
+        self.assertEqual(len(listening), 6)
+        self.assertEqual({item['id'].split(':')[0] for item in listening},
+                         {'location-destination-v1', 'possession-absence-v1'})
+        for unit_id, forms in (('possession-absence-v1', 4), ('objects-recipients-v1', 4), ('time-routine-v1', 5),
+                               ('noun-adjective-agreement-v1', 4), ('personal-reference-v1', 4), ('basic-motion-v1', 4)):
+            authored = [item for item in tasks if item['id'].startswith(unit_id + ':')]
+            self.assertEqual(sum(item['kind'] == 'unit_choice' for item in authored), 6)
+            self.assertEqual(sum(item['kind'] == 'unit_controlled_text' for item in authored), forms)
+            self.assertEqual(sum(item['kind'] == 'unit_writing' for item in authored), 1)
+            self.assertEqual(sum(item['kind'] == 'unit_listening_choice' for item in authored),
+                             3 if unit_id == 'possession-absence-v1' else 0)

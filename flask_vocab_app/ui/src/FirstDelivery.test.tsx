@@ -67,7 +67,11 @@ afterEach(()=>vi.unstubAllGlobals());
 
 describe('Your first words',()=>{
   it('introduces coins then progress without a dummy quiz or an early reward',async()=>{
-    const api=server();const onIntroduce=vi.fn();render(<FirstDelivery next={next} onIntroduce={onIntroduce} />);
+    const api=server();const onIntroduce=vi.fn();render(<FirstDelivery next={next} onIntroduce={onIntroduce} courseJourney />);
+    expect(screen.getByRole('link',{name:'First steps'}).getAttribute('href')).toBe('#first-steps');
+    expect(screen.queryByText('Lesson 1 of 5')).toBeNull();
+    expect(screen.queryByRole('list',{name:'Tutorial progress'})).toBeNull();
+    expect(screen.queryByText('Before the journey')).toBeNull();
     expect(onIntroduce.mock.calls).toEqual([['coins']]);
     fireEvent.click(screen.getByRole('button',{name:'Continue',exact:true}));
     expect(onIntroduce.mock.calls).toEqual([['coins'],['progress']]);

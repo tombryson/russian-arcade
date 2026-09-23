@@ -145,7 +145,7 @@ def coverage_report():
     items, unattributed = _shipped_items()
     # Import lazily: unit validation itself uses this module's reference index.
     # These functions read authored content only; they never start an activity.
-    from services.curriculum_units import UNIT_IDS, get_unit, writing_task, listening_content
+    from services.curriculum_units import UNIT_IDS, LISTENING_IDS, get_unit, writing_task, listening_content
     direct = []
     for unit_id in UNIT_IDS:
         unit = get_unit(unit_id)
@@ -159,8 +159,8 @@ def coverage_report():
                            'kind': 'unit_controlled_text', 'requirement_id': question['requirement_id'],
                            'source': f'curriculum_units/{unit_id}.json',
                            'content_sha256': content_digest(question)})
-        listening = listening_content(unit_id)
-        for question in listening['items']:
+        listening = listening_content(unit_id) if unit_id in LISTENING_IDS else None
+        for question in listening['items'] if listening else []:
             direct.append({'id': f"{unit_id}:{listening['version']}:{question['id']}",
                            'kind': 'unit_listening_choice', 'requirement_id': question['requirement_id'],
                            'source': f"curriculum_units/{listening['id']}.json",

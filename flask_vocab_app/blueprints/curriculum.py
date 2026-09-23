@@ -1,7 +1,7 @@
 """Read-only course catalogue. Activity links prefill existing generators."""
 from flask import Blueprint, abort, current_app, redirect, request, session
 
-from services.curriculum import band_summaries
+from services.curriculum import band_summaries, get_topic
 from services.speaking_curriculum import scenario_for_topic
 from services.torfl_requirements import requirement_groups
 from services.curriculum_units import get_unit, unit_summaries, start_practice, start_writing
@@ -19,8 +19,28 @@ def create_curriculum_blueprint():
         language = 'ru' if session.get('ui_lang') == 'ru' else 'en'
         return render_page('curriculum.html', active_page='curriculum',
                            bands=band_summaries(language), language=language,
-                           speaking_scenario=scenario_for_topic,
-                           requirement_groups=requirement_groups, units=unit_summaries())
+                           requirement_groups=requirement_groups)
+
+    @blueprint.get('/curriculum/levels/<level>')
+    @access_policy('public')
+    def outcomes_page(level):
+        language = 'ru' if session.get('ui_lang') == 'ru' else 'en'
+        reference = requirement_groups(level, language)
+        if reference is None:
+            abort(404)
+        return render_page('curriculum_outcomes.html', active_page='curriculum',
+                           language=language, reference=reference)
+
+    @blueprint.get('/curriculum/topics/<topic_id>')
+    @access_policy('public')
+    def topic_page(topic_id):
+        topic = get_topic(topic_id)
+        if topic is None:
+            abort(404)
+        language = 'ru' if session.get('ui_lang') == 'ru' else 'en'
+        return render_page('curriculum_topic.html', active_page='curriculum',
+                           language=language, topic=topic, band={'id': topic['band']},
+                           speaking_scenario=scenario_for_topic, units=unit_summaries())
 
     def unit_or_404(unit_id):
         try:

@@ -17,10 +17,13 @@ def main():
     parser.add_argument('--report', required=True, type=Path, help='New JSON report path')
     parser.add_argument('--local-audio-root', type=Path,
                         help='Original live-conversation-audio directory; required for saved speaking criterion evidence')
+    parser.add_argument('--local-pilot-audio-root', type=Path,
+                        help='Original assessment-pilot-audio directory; required for pilot Speaking recordings')
     args = parser.parse_args()
     if args.report.exists():
         parser.error('Report path already exists.')
-    report = build_account_import(args.local, args.hosted, args.output, local_audio_root=args.local_audio_root)
+    report = build_account_import(args.local, args.hosted, args.output, local_audio_root=args.local_audio_root,
+                                  local_pilot_audio_root=args.local_pilot_audio_root)
     with args.report.open('x') as output:
         json.dump(report, output, ensure_ascii=False, indent=2)
         output.write('\n')

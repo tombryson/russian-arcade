@@ -119,6 +119,38 @@ class CurriculumUnitAudioCommandTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'invalid recording metadata'):
                 self.prepare()
 
+    def test_new_pack_preserves_identity_and_cannot_reuse_another_packs_url(self):
+        content_id = 'objects-recipients-listening-v1'
+        self.source = json.loads((ROOT / 'flask_vocab_app/data/curriculum_units' / (content_id + '.json')).read_text())
+        self.prepare()
+        manifest = json.loads((self.directory / 'manifest.json').read_text())
+        self.assertEqual(manifest['content_id'], content_id)
+        self.factory.reset_mock()
+        self.source['items'][0]['audio_url'] = '/static/audio/course/curriculum/other/hand-over-envelope.mp3'
+        with self.assertRaisesRegex(ValueError, 'does not match'):
+            self.prepare()
+        self.factory.assert_not_called()
+
+    def test_pilot_has_its_own_explicit_two_clip_limit_and_media_paths(self):
+        self.source = json.loads((ROOT / 'flask_vocab_app/data/assessment_pilot/a1-pilot-listening-v1.json').read_text())
+        self.prepare()
+        self.assertEqual(self.provider.speak.call_count, 2)
+        manifest = json.loads((self.directory / 'manifest.json').read_text())
+        self.assertEqual(manifest['content_id'], command.PILOT_CONTENT_ID)
+        self.assertEqual(set(manifest['clips']), {'a1-pilot-a-v1', 'a1-pilot-b-v1'})
+        self.factory.reset_mock()
+        self.source['items'].append(copy.deepcopy(self.source['items'][0]))
+        with self.assertRaisesRegex(ValueError, 'exactly 2'):
+            self.prepare()
+        self.factory.assert_not_called()
+
+    def test_unknown_source_and_path_like_ids_are_rejected_before_provider(self):
+        for content_id in ('../outside', 'unapproved-listening-v1', None):
+            self.source['id'] = content_id
+            with self.subTest(content=content_id), self.assertRaisesRegex(ValueError, 'Unsupported'):
+                self.prepare()
+        self.factory.assert_not_called()
+
 
 class CurriculumUnitPublishedAudioTests(unittest.TestCase):
     def test_three_authored_listening_messages_have_matching_playable_recordings(self):
@@ -135,6 +167,17 @@ class CurriculumUnitPublishedAudioTests(unittest.TestCase):
                 self.assertIn(item['answer'], {choice['id'] for choice in item['choices']})
                 self.assertGreater(manifest['clips'][item['id']]['duration'], 3)
                 self.assertLess(manifest['clips'][item['id']]['duration'], 30)
+
+    def test_every_exposed_unit_has_complete_immutable_playable_media(self):
+        from services.curriculum_units import LISTENING_IDS
+        for content_id in LISTENING_IDS.values():
+            source_path, directory, count = command.content_layout(content_id)
+            source = json.loads((ROOT / 'flask_vocab_app/data' / source_path).read_text())
+            with self.subTest(content=content_id):
+                manifest, todo = command.plan_recordings(
+                    source, ROOT / 'flask_vocab_app/static/audio/course' / directory, audio_info)
+                self.assertEqual(todo, [])
+                self.assertEqual(len(manifest['clips']), count)
 
 
 if __name__ == '__main__':

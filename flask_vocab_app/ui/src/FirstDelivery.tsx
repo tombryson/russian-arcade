@@ -19,7 +19,6 @@ export function FirstDelivery({ next, onIntroduce, profileHref='/post/profiles',
   const attempt=practice?.attempt;
   const question=attempt?.question;
   const feedback=attempt?.answers.find(item=>item.question_id===question?.id);
-  const tutorialStep=step<3 ? step : 3;
   useEffect(() => {
     const milestone = step === 0 ? 'coins' : step === 1 ? 'progress' : null;
     if (!onIntroduce || !milestone || introduced.current.has(milestone)) return;
@@ -73,10 +72,7 @@ export function FirstDelivery({ next, onIntroduce, profileHref='/post/profiles',
 
   return <section class="page first-delivery lesson-player">
     <div class="lesson-player-nav">
-    <div class="lesson-head"><a class="text-link" href={courseJourney ? "#journey" : "#first-steps"}>{courseJourney ? "Your journey" : "All five lessons"}</a><span class="quiet">{courseJourney ? "Before the journey" : "Lesson 1 of 5"}</span></div>
-    <ol class="tutorial-steps" aria-label="Tutorial progress">
-      {['Lingocoins', 'Your progress', 'Your first words', 'Complete'].map((label, index) => <li key={label} aria-current={tutorialStep === index ? 'step' : undefined}><span aria-hidden="true">{index + 1}</span><span class="tutorial-step-label">{label}</span></li>)}
-    </ol>
+      <a class="text-link" href="#first-steps"><span aria-hidden="true">← </span>First steps</a>
     </div>
     {step === 0 ? <>
       <div class="tutorial-welcome">

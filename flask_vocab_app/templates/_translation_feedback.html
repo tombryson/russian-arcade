@@ -1,6 +1,7 @@
 {% macro advice(attempt) %}
   <blockquote class="sentence-checked-answer" lang="ru">{{ attempt.response }}</blockquote>
   <div class="sentence-feedback-grid"><div><h4>{{ ui_t('word_jumble.strength') }}</h4><p lang="{{ attempt.ui_language }}">{{ attempt.strength }}</p></div><div><h4>{{ ui_t('word_jumble.next_step') }}</h4><p lang="{{ attempt.ui_language }}">{{ attempt.next_step }}</p></div></div>
+  {% include '_sentence_criterion_feedback.html' %}
 {% endmacro %}
 {% if practice.attempts %}{% set latest = practice.attempts[0] %}
 <section class="sentence-feedback-card" aria-labelledby="translation-feedback-heading">

@@ -48,6 +48,11 @@
                     hx-target="#comprehension-content"
                     hx-swap="innerHTML"
                 >
+                    <fieldset class="comprehension-mode">
+                        <legend>{{ 'Практика' if ui_lang == 'ru' else 'Practice' }}</legend>
+                        <label><input type="radio" name="practice_mode" value="reading" {% if practice_mode|default('reading') != 'listening' %}checked{% endif %}> {{ 'Чтение' if ui_lang == 'ru' else 'Reading' }}</label>
+                        <label><input type="radio" name="practice_mode" value="listening" {% if practice_mode|default('reading') == 'listening' %}checked{% endif %}> {{ 'Аудирование' if ui_lang == 'ru' else 'Listening' }}</label>
+                    </fieldset>
                     <div class="mb-3">
                         <label for="topic" class="form-label">{{ ui_t('comprehension.topic') }}</label>
                         <select id="topic" name="topic" class="form-select" data-curriculum-topic>

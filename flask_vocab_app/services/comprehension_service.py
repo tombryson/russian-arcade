@@ -22,12 +22,20 @@ from config import OPENAI_MODEL_STORY, OPENAI_STORY_REASONING_EFFORT, OPENAI_MOD
 from utils.story_content import story_schema, validate_story_content, validate_story_title
 from repositories.story_repository import has_title_translations
 from services.curriculum import generation_context, normalize_level, topic_options
-from services.comprehension_evidence import reading_candidates, validate_contracts
+from services.comprehension_evidence import reading_candidates, listening_candidates, validate_contracts
 from services.vocabulary_topics import TOPICS
 from contracts.curriculum import validate_judgements
 from services.writing_service import _criterion_report_schema, _ground_criterion_spans
 
 logger = logging.getLogger(__name__)
+
+
+def _generation_context(topic, level, practice_mode):
+    context = generation_context(topic, level, 'reading')
+    if practice_mode == 'listening':
+        context['activity_brief'] = 'Present a coherent spoken message about this topic. Check its heard meaning using the supplied listening objectives.'
+        context['activity_brief_ru'] = 'Связное устное сообщение по теме и вопросы на понимание услышанного.'
+    return context
 
 class ComprehensionService:
     def __init__(self, db_path, openai_service, elevenlabs_service, media_dir, api_key: str,
@@ -204,9 +212,14 @@ class ComprehensionService:
             logger.error(f"Image generation error: {str(e)}")
             return ""
 
-    def _request_story(self, prompt, include_text=True, *, reading_level=None, topic=None, passage=None):
+    def _request_story(self, prompt, include_text=True, *, reading_level=None, topic=None, passage=None, practice_mode='reading'):
         """Require a complete typed document; never manufacture a missing title."""
-        candidates = reading_candidates(reading_level) if reading_level else {}
+        if practice_mode not in ('reading', 'listening'):
+            raise ValueError('Choose reading or listening practice.')
+        listening = practice_mode == 'listening'
+        candidates = (listening_candidates(reading_level) if listening else reading_candidates(reading_level)) if reading_level else {}
+        if listening and not candidates:
+            raise ValueError('Listening practice is available at A1–B2.')
         topics = TOPICS if topic == 'any' else (topic,)
         focus_instruction = ''
         if candidates:
@@ -222,13 +235,22 @@ class ComprehensionService:
                 'topic_id is the requested canonical topic; for any, select the passage’s actual subject from the permitted IDs. '
                 'Do not return scores, contracts, mastery or proficiency claims.'
             )
+        schema = story_schema(include_text, reading_ids=candidates, topic_ids=topics)
+        if listening:
+            focus_instruction = focus_instruction.replace('reading_focus', 'listening_focus').replace('reading requirement', 'listening requirement')
+            focus_instruction += (' This passage will be heard as a recording while its text is hidden. '
+                                  'Make its spoken meaning clear without punctuation, typography or seeing written words. '
+                                  'Use the supplied listening objectives, never written decoding or spelling objectives. '
+                                  'Questions should elicit the message, relevant details or supported intention, not identify printed forms.')
+            schema['properties']['listening_focus'] = schema['properties'].pop('reading_focus')
+            schema['required'] = ['listening_focus' if key == 'reading_focus' else key for key in schema['required']]
         for attempt in range(2):
             response = self.client.responses.create(
                 model=self.story_model,
                 reasoning={"effort": self.story_reasoning_effort},
                 input=[
                     {"role": "system", "content": (
-                        "You prepare coherent reading activities for learners of Russian. "
+                        f"You prepare coherent {practice_mode} activities for learners of Russian. "
                         "Give each story a natural Russian title of 2–8 words, at most 100 characters, "
                         "that names its main subject or event. Do not use the opening sentence as a title. "
                         "Also provide title_en: a natural English version of that title, with the same meaning "
@@ -241,8 +263,8 @@ class ComprehensionService:
                     )},
                     {"role": "user", "content": prompt},
                 ],
-                text={"format": {"type": "json_schema", "name": "russian_reading_activity",
-                                 "schema": story_schema(include_text, reading_ids=candidates, topic_ids=topics), "strict": True}},
+                text={"format": {"type": "json_schema", "name": f"russian_{practice_mode}_activity",
+                                 "schema": schema, "strict": True}},
                 max_output_tokens=4096,
                 store=False,
             )
@@ -251,46 +273,54 @@ class ComprehensionService:
             if not response.output_text:
                 raise ValueError("Story preparation returned no content or was refused.")
             try:
-                return validate_story_content(json.loads(response.output_text), include_text,
-                                              reading_ids=candidates, topic_ids=topics, passage=passage)
+                data = json.loads(response.output_text)
+                if listening:
+                    if not isinstance(data, dict) or 'reading_focus' in data or 'listening_focus' not in data:
+                        raise ValueError('Return the requested listening focus.')
+                    data['reading_focus'] = data.pop('listening_focus')
+                result = validate_story_content(data, include_text, reading_ids=candidates, topic_ids=topics, passage=passage)
+                if listening:
+                    result['listening_focus'] = result.pop('reading_focus')
+                return result
             except (ValueError, TypeError):
                 logger.warning("Story output did not meet the content contract (attempt %s)", attempt + 1)
                 if attempt == 1:
                     raise ValueError("Story preparation returned an invalid title, text or questions.") from None
 
-    async def generate_story(self, topic, difficulty):
+    async def generate_story(self, topic, difficulty, *, practice_mode='reading'):
         cefr_level = normalize_level(difficulty, legacy='reading')
         vocab = self.get_vocab_for_topic(topic, difficulty)
         brief = {
             "task": "Write an original Russian passage with Russian and English titles and five questions. Choose a story, report or discussion that suits the curriculum objective.",
             "target_words": {"A1": [100, 150], "A2": [150, 200], "B1": [200, 300], "B2": [300, 400], "C1": [350, 500], "C2": [400, 550]}[cefr_level],
-            "curriculum": generation_context(topic, cefr_level, "reading"),
+            "curriculum": _generation_context(topic, cefr_level, practice_mode),
             "level": cefr_level,
             "topic": topic,
             "use_when_relevant": vocab[:10] if vocab else [],
             "style": "Follow the target level and curriculum objectives. Build a coherent passage; do not turn the vocabulary list into disconnected sentences. Use familiar vocabulary where relevant and introduce useful new words in context.",
         }
-        candidates = reading_candidates(cefr_level)
+        candidates = listening_candidates(cefr_level) if practice_mode == 'listening' else reading_candidates(cefr_level)
         if candidates:
-            brief['reading_focus_candidates'] = [{key: item[key] for key in ('id', 'label_en', 'expectation')}
+            brief[f'{practice_mode}_focus_candidates'] = [{key: item[key] for key in ('id', 'label_en', 'expectation')}
                                                   for item in candidates.values()]
         story = await asyncio.to_thread(self._request_story, json.dumps(brief, ensure_ascii=False),
-                                        reading_level=cefr_level, topic=topic)
-        story["image_url"] = self.generate_image(story["text"])
+                                        reading_level=cefr_level, topic=topic, **({'practice_mode': practice_mode} if practice_mode != 'reading' else {}))
+        story["image_url"] = self.generate_image(story["text"]) if practice_mode == 'reading' else ''
         return story
 
-    async def prepare_story_from_text(self, story_text, topic, difficulty):
+    async def prepare_story_from_text(self, story_text, topic, difficulty, *, practice_mode='reading'):
         """Name and add questions to a supplied passage without rewriting it."""
         cefr_level = normalize_level(difficulty, legacy='reading')
         brief = {"task": "Create Russian and English titles and five Russian questions for this passage. Do not rewrite the passage.",
                  "level": cefr_level, "topic": topic, "passage": story_text,
-                 "curriculum": generation_context(topic, cefr_level, "reading")}
-        candidates = reading_candidates(cefr_level)
+                 "curriculum": _generation_context(topic, cefr_level, practice_mode)}
+        candidates = listening_candidates(cefr_level) if practice_mode == 'listening' else reading_candidates(cefr_level)
         if candidates:
-            brief['reading_focus_candidates'] = [{key: item[key] for key in ('id', 'label_en', 'expectation')}
+            brief[f'{practice_mode}_focus_candidates'] = [{key: item[key] for key in ('id', 'label_en', 'expectation')}
                                                   for item in candidates.values()]
         prepared = await asyncio.to_thread(self._request_story, json.dumps(brief, ensure_ascii=False), False,
-                                           reading_level=cefr_level, topic=topic, passage=story_text)
+                                           reading_level=cefr_level, topic=topic, passage=story_text,
+                                           **({'practice_mode': practice_mode} if practice_mode != 'reading' else {}))
         return {**prepared, "text": story_text, "image_url": ""}
 
     def generate_additional_questions(self, story_text, topic, difficulty, existing_questions):
@@ -441,7 +471,7 @@ class ComprehensionService:
                 raise ValueError('The answers could not be checked. Please try again.') from None
 
     def assess_task(self, task, answers):
-        """Assess a saved reading task once; persistence and rewards stay outside."""
+        """Assess a saved comprehension task; persistence and rewards stay outside."""
         if not task.get('contracts'):
             feedback, scores, total = self._evaluate_answers(
                 task['text'], task['questions'], answers, task['topic'], task['difficulty'])
@@ -478,6 +508,14 @@ Every scored criterion cites verbatim spans from ONLY that question's raw learne
 question, corrected text or your feedback. quote must match exactly; start/end are zero-based Unicode code-point offsets,
 end exclusive, including spaces and line breaks. Do not repair the quoted Russian. Give criterion feedback in {language}.
 Do not add a grammar criterion or claim listening skill because story audio exists. Never claim to save or award progress."""
+        listening = task.get('practice_mode') == 'listening'
+        if listening:
+            instruction = instruction.replace('reading tutor', 'listening tutor').replace('reading score', 'listening score')
+            instruction = instruction.replace('reading comprehension', 'listening comprehension').replace('reading observations', 'listening observations')
+            instruction = instruction.replace('Do not add a grammar criterion or claim listening skill because story audio exists.',
+                'This is an issued audio-first task with frozen listening objectives. The server verifies recording identity and '
+                'saves playback and transcript/translation receipts separately; never infer independence or attention from an answer. '
+                'Use the supplied recording transcript only as the answer reference. Do not grade reading, spelling or written form.')
         payload = {'text': task['text'], 'questions': task['questions'], 'answers': answers,
                    'topic': task['topic'], 'difficulty': task['difficulty'], 'contracts': contracts}
         try:
@@ -504,6 +542,14 @@ Do not add a grammar criterion or claim listening skill because story audio exis
             for key, contract in contracts.items():
                 report = _ground_criterion_spans(reports[key], answers[int(key)])
                 grounded[key] = validate_judgements(contract, report, response_text=answers[int(key)])
+            if listening and task.get('audio') is None:
+                # Text-only fallback keeps useful feedback without manufacturing
+                # listening performance when a recording never existed.
+                for report in grounded.values():
+                    for judgement in report['judgements']:
+                        judgement.update(outcome='insufficient_evidence', score=None, evidence=[], feedback=(
+                            'Аудиозапись недоступна; это обратная связь по тексту.' if language == 'Russian' else
+                            'No recording was available; this feedback uses the transcript.'))
             return {'feedback': feedback, 'scores': scores, 'total_score': sum(scores) / count,
                     'criterion_reports': grounded}
         except TrialDenied:

@@ -12,12 +12,19 @@ from repositories.writing_repository import WritingRepository
 from services.activity_evidence import load_contract, save_contract, save_report
 from services.curriculum_requirement_map import requirement_index
 
-UNIT_IDS = ('location-destination-v1',)
+UNIT_IDS = ('location-destination-v1', 'possession-absence-v1',
+            'objects-recipients-v1', 'time-routine-v1',
+            'noun-adjective-agreement-v1', 'personal-reference-v1', 'basic-motion-v1')
 DATA_DIR = Path(__file__).resolve().parents[1] / 'data' / 'curriculum_units'
-LISTENING_IDS = {'location-destination-v1': 'location-destination-listening-v1'}
+LISTENING_IDS = {
+    'location-destination-v1': 'location-destination-listening-v1',
+    'possession-absence-v1': 'possession-absence-listening-v1',
+}
 
 
 def listening_content(unit_id):
+    if unit_id not in LISTENING_IDS:
+        raise LearningError('content_unavailable', 'Listening is not available for this unit yet.', 404)
     identity = LISTENING_IDS[unit_id]
     content = json.loads((DATA_DIR / (identity + '.json')).read_text(encoding='utf-8'))
     directory = Path(__file__).resolve().parents[1] / 'static/audio/course/curriculum' / identity
@@ -44,16 +51,27 @@ def _load(unit_id):
         raise ValueError('Learning unit identity changed.')
     # Each issued stage has its own immutable pack identity. The original
     # choice pack stays unchanged when a later response mode is introduced.
-    for stage in ('practice', 'forms', 'listening'):
+    for stage in ('practice', 'forms') + (('listening',) if unit_id in LISTENING_IDS else ()):
         pack = validate_pack(_pack(unit, stage))
         for question, item in zip(_questions(unit, stage), pack['items']):
             _practice_contract(unit, item, question, 'validation')
-    writing_task(unit)
+    task = writing_task(unit)
+    WritingRepository.validate_task(task)
+    WritingRepository.validate_curriculum_contract(task['curriculum_contract'], task['task'],
+                                                   task['required_words'], unit['level'])
     return unit
 
 
 def get_unit(unit_id):
-    return deepcopy(_load(unit_id))
+    unit = deepcopy(_load(unit_id))
+    # Presentation availability is derived from prepared media, not a promise
+    # in a content draft. It is not included in an issued task contract.
+    unit['listening_available'] = unit_id in LISTENING_IDS
+    if unit['listening_available']:
+        listening = listening_content(unit_id)
+        unit['listening_title'] = listening['title']
+        unit['listening_title_ru'] = listening['title_ru']
+    return unit
 
 
 def unit_summaries():
@@ -92,7 +110,7 @@ def _spec(unit, task_id, activity, content, criteria):
     return {'schema_version': 1, 'contract_version': 'curriculum-task-v1',
             'reference_version': 'torfl-reference-v1', 'task_id': task_id, 'activity': activity,
             'content_version': unit['id'], 'level': unit['level'], 'topic_ids': [unit['topic_id']],
-            'purpose': 'practice', 'content': content, 'rubric_version': 'location-destination-v1',
+            'purpose': 'practice', 'content': content, 'rubric_version': unit['id'],
             'support': {'allowed': ['hint'], 'independence_breakers': ['hint']}, 'criteria': criteria}
 
 
@@ -128,7 +146,14 @@ def _unit_for_pack(pack):
     identity = pack['id'][len(prefix):]
     unit_id, separator, version = identity.partition(':')
     unit = get_unit(unit_id)
-    stage = 'practice' if not separator else 'forms' if version == unit['forms']['version'] else 'listening'
+    if not separator:
+        stage = 'practice'
+    elif version == unit['forms']['version']:
+        stage = 'forms'
+    elif unit_id in LISTENING_IDS and version == listening_content(unit_id)['version']:
+        stage = 'listening'
+    else:
+        raise ValueError('Unknown published unit stage version.')
     if _pack(unit, stage) != pack:
         raise ValueError('Published unit changed. Retain its original content and create a new version.')
     return unit, stage
@@ -202,10 +227,14 @@ def start_practice(db_path, credential, unit_id, request_id, *, expected_profile
 
 def writing_task(unit):
     task = deepcopy(unit['writing'])
+    # Retain the original unit's issued contract exactly. New versions carry
+    # their own communicative criterion, rather than inheriting a location task.
+    focus = unit.get('writing_focus', {
+        'requirement_id': 'a1.writing.personal-message', 'id': 'clear-meeting-message',
+        'expectation': 'Write an original message to a friend that identifies your current place, your destination and where you will wait. '
+                       'Accept short intelligible sentences and natural alternatives. Do not require a greeting, word count or a particular set of places.'})
     spec = _spec(unit, 'unit-writing:' + unit['id'], 'writing', deepcopy(task), [
-        _criterion('a1.writing.personal-message', 'clear-meeting-message', 'unit.' + unit['id'] + '.message',
-                   'Write an original message to a friend that identifies your current place, your destination and where you will wait. '
-                   'Accept short intelligible sentences and natural alternatives. Do not require a greeting, word count or a particular set of places.')])
+        _criterion(focus['requirement_id'], focus['id'], 'unit.' + unit['id'] + '.message', focus['expectation'])])
     spec['support'] = {'allowed': ['model_answer'], 'independence_breakers': ['model_answer']}
     # Grammar corrections remain useful tutor feedback. Original writing is not
     # relabelled as a multiple-choice or narrowly controlled form exercise.

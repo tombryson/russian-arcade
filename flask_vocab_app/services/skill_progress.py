@@ -77,12 +77,15 @@ def freeze_evidence(conn, activity, content_key, source_key, target_level, evide
         if not saved:
             return result
         result.update(comprehension_event_fields(saved))
-        if saved['assisted'] or not saved['first_fresh']:
+        if (saved['assisted'] or not saved['first_fresh']
+                or (saved['practice_mode'] == 'listening' and not saved['listened'])):
             return result
         difficulty = CURRICULUM_LEVELS.get(saved['difficulty'], THREE_LEVELS.get(saved['difficulty']))
         if difficulty is not None:
             result['_skill'] = {'policy_version': POLICY, 'task_rating': difficulty,
-                                'task_difficulty': saved['difficulty'], 'scores': {'reading': saved['score'] / 10}}
+                                'task_difficulty': saved['difficulty'],
+                                'comprehension_mode': saved['practice_mode'],
+                                'scores': {saved['practice_mode']: saved['score'] / 10}}
         return result
     if result.get('assisted') is True or result.get('hint_used') is True:
         return result
@@ -242,6 +245,8 @@ def snapshot(conn, profile_id):
         if difficulty not in CURRICULUM_LEVELS.values() or not isinstance(scores, dict):
             continue
         allowed = ('reading', 'listening') if activity == 'journey_game' else ('reading',) if activity in ('first_delivery', 'first_steps') else ('speaking_grammar', 'speaking_fluency') if activity == 'speaking' else (activity,) if activity in TASKS else ()
+        if activity == 'reading' and receipt.get('comprehension_mode') == 'listening':
+            allowed = ('listening',)
         for key in allowed:
             observed = scores.get(key)
             sample_day = receipt.get('study_day') if activity == 'speaking' else None

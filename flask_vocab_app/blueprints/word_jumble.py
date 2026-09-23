@@ -55,6 +55,8 @@ def create_word_jumble_blueprint(service):
             game['display_date'] = ''
         game['state'] = ('draft_state' if game.get('draft_saved_at') and game['draft'] != (game.get('user_response') or '')
                          else 'checked_state' if game.get('feedback') else 'ready_state')
+        from services.production_evidence import present_details
+        present_details(game, session.get('ui_lang', 'en'))
         return game
 
     def page(game=None, **context):

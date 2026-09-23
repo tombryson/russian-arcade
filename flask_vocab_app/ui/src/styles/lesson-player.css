@@ -9,10 +9,6 @@
 .lesson-player-nav .lesson-head { margin:0; gap:16px; }
 .lesson-player-nav .text-link { font-size:14px; }
 .lesson-player-nav .lesson-name { color:var(--wp-text-secondary); font-size:14px; }
-.lesson-player .tutorial-steps { gap:12px; margin:0; padding:0; border:0; }
-.lesson-player .tutorial-steps li { gap:6px; font-size:12px; }
-.lesson-player .tutorial-steps li > span:first-child { width:22px; height:22px; font-size:12px; }
-.lesson-player .tutorial-steps li > .tutorial-step-label { display:inline; width:auto; height:auto; border:0; border-radius:0; background:none; color:inherit; }
 .lesson-player > .letter { margin-top:0; padding:clamp(24px,3vw,40px); }
 .lesson-player .letter .lesson-counter { margin:0 0 12px; font-size:13px; color:var(--wp-text-secondary); }
 .lesson-player .lesson-task-heading { font:500 clamp(26px,2.6vw,34px)/1.35 var(--wp-font-reading); letter-spacing:0; max-width:52ch; white-space:pre-line; }
@@ -26,15 +22,12 @@
 .lesson-player > .intro { margin-bottom:20px; }
 @media(max-width:900px) {
   .lesson-player-nav { gap:8px 20px; }
-  .lesson-player .tutorial-steps { padding-block:4px; }
-  .lesson-player .tutorial-steps li:not([aria-current]) > .tutorial-step-label { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 }
 @media(max-width:600px) {
   .page.lesson-player { padding:12px 16px 24px; }
   .lesson-player-nav { gap:2px 12px; margin-bottom:12px; padding-bottom:8px; }
   .lesson-player-nav .lesson-head { gap:10px; width:100%; }
   .lesson-player-nav .lesson-name { flex-basis:100%; }
-  .lesson-player .tutorial-steps { gap:10px; }
   .lesson-player > .letter { padding:22px 18px; }
   .lesson-player .word { flex:1 1 auto; min-width:100px; padding:14px 20px; }
   .lesson-player .tutorial-welcome { grid-template-columns:minmax(0,1fr); gap:12px; }

@@ -42,7 +42,10 @@ class CurriculumOverviewIsolationTests(unittest.TestCase):
              patch('utils.course_context.course_snapshot',
                    side_effect=AssertionError('Curriculum loaded learner course progress')):
             html = self.assert_complete_overview(self.client.get('/curriculum'))
-            self.assertIn('/comprehension?topic=food&amp;level=A1', html)
+            self.assertIn('/curriculum/topics/food', html)
+            topic = self.client.get('/curriculum/topics/food')
+            self.assertEqual(topic.status_code, 200)
+            self.assertIn('/comprehension?topic=food&amp;level=A1', topic.text)
             visitor = FlaskClient(self.app)
             self.assertEqual(self.assert_complete_overview(visitor.get('/curriculum')), html)
         with visitor.session_transaction() as session:

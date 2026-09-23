@@ -167,7 +167,7 @@ def install_household_policy(app):
     @app.after_request
     def private_response_policy(response):
         if request.endpoint not in {'word_post.assets','word_post.licenses','static'}:
-            response.headers['Cache-Control'] = 'no-store'
+            response.headers['Cache-Control'] = 'private, no-store' if request.endpoint in {'assessment_pilot.listening_audio', 'assessment_pilot.original_audio'} else 'no-store'
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['Referrer-Policy'] = 'same-origin'
         response.headers['X-Frame-Options'] = 'DENY'

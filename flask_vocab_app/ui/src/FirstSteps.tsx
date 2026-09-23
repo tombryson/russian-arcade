@@ -129,7 +129,7 @@ function FirstStepsPlayer({lessonId,profileHref}:{lessonId:string;profileHref:st
   }
   function retry(){const request=retryRequest.current;request.action==='load' ? void load() : void save(request.action,request.body);}
   return <section class="page first-steps lesson-player">
-    <div class="lesson-player-nav"><div class="lesson-head"><a class="text-link" href="#first-steps">All five lessons</a>{state && <span class="quiet lesson-name">{state.lesson.title} · Lesson {state.lesson.position} of {state.lesson.total_lessons}</span>}</div></div>
+    <div class="lesson-player-nav"><a class="text-link" href="#first-steps"><span aria-hidden="true">← </span>First steps</a>{state && <span class="quiet lesson-name">{state.lesson.title}</span>}</div>
     {!attempt && <h1 ref={heading} tabIndex={-1}>{state?.lesson.title ?? 'First steps with Barsik'}</h1>}
     {!attempt && !error && <p role="status" class="first-steps-empty">Opening your lesson…</p>}
     {state && attempt && (attempt.phase==='completed' ? <>
