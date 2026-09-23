@@ -40,7 +40,7 @@ describe('Guided chapter journey',()=>{
     expect(screen.queryByText('A new address')).toBeNull();
     expect(screen.queryByText('Your original letter')).toBeNull();
     expect(screen.queryByText('The next part of your journey.')).toBeNull();
-    expect(screen.getByRole('link',{name:'Choose practice level'}).getAttribute('href')).toBe('/curriculum');
+    expect(screen.getByRole('link',{name:'Curriculum'}).getAttribute('href')).toBe('/curriculum');
     expect(screen.getByRole('link',{name:'Browse all practice activities →'})).toBeTruthy();
     expect(screen.queryByText('Привет, Барсик! Меня зовут Анна.')).toBeNull();
   });
@@ -111,7 +111,7 @@ describe('Guided chapter journey',()=>{
     expect(screen.getByText(/1\/2 activities used/)).toBeTruthy();
     expect(screen.getByText(/Try another activity, such as Writing or Speaking/)).toBeTruthy();
   });
-  it('keeps v2 preparation compact while retaining real readiness requirements',async()=>{
+  it('keeps focused practice optional and separate from activity preparation',async()=>{
     const current=course({release_id:'a1-journey-v2'});
     current.chapters[0].target_coverage={required_count:1,prepared_count:0,ready:false,targets:[{id:'name',title:'Introduce yourself',title_ru:'Представиться',topic_id:'greetings',required:true,introduced:false,practised:false,demonstrated:false,needs_practice:true}]};
     mockServer(()=>current);render(<CourseJourney chapterId="first" progression={progression()}/>);
@@ -119,9 +119,9 @@ describe('Guided chapter journey',()=>{
     expect(screen.queryByText('Understand a short greeting.')).toBeNull();
     const examples=screen.getByText('Notes and examples').closest('details');
     expect(examples?.open).toBe(false);
-    const readiness=screen.getByText('0/1 learning targets practised').closest('details');
+    const readiness=screen.getByText('Focused practice · 0/1').closest('details');
     expect(readiness?.open).toBe(false);
-    expect(readiness?.textContent).toContain('two successful tasks in each topic using at least two activities');
+    expect(readiness?.textContent).toContain('Prepare through activities or these focused exercises.');
     expect(screen.getByRole('heading',{name:'More practice by topic'})).toBeTruthy();
   });
   it.each([['en','Greetings','Formal','Informal'],['ru','Приветствия','Официально','Неформально']] as const)('groups reference examples by function and register in %s',async(language,title,formal,informal)=>{

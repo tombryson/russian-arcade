@@ -42,16 +42,16 @@
       rail.classList.toggle('is-unavailable',!data && !preview);
       rail.style.setProperty('--skill-progress',String(progress));
       const chapterLabel=chapter ? t(`Chapter ${chapter.number} of ${course.chapters.length} · ${chapter.title}`,`Глава ${chapter.number} из ${course.chapters.length} · ${chapter.title_ru}`) : '';
-      const label=preview ? t('50% layout preview; saved progress unchanged','Предпросмотр 50%; сохранённый прогресс не изменён') : chapter ? `${chapterLabel} · ${Math.round(progress*100)}% ${t('complete','пройдено')}` : data ? '' : t('Chapter progress unavailable','Прогресс главы недоступен');
+      const label=preview ? t('50% layout preview; saved progress unchanged','Предпросмотр 50%; сохранённый прогресс не изменён') : chapter ? `${chapterLabel} · ${chapter.status==='passed' ? t('Milestone passed','Этап пройден') : t(`${Math.round(progress*100)}% prepared for checkpoint`,`${Math.round(progress*100)}% подготовки к проверке`)}` : data ? '' : t('Chapter progress unavailable','Прогресс главы недоступен');
       const stale=data && error ? t('Showing your last saved progress','Показан последний сохранённый прогресс') : '';
       const link=rail.querySelector('.skill-rail-link');
       link.setAttribute('href','/#journey');
       link.setAttribute('aria-label',[label,stale,t('Open your journey','Открыть путешествие')].filter(Boolean).join('. '));
       rail.querySelector('.skill-rail-runner').hidden=!data && !preview;
       const bar=rail.querySelector('[data-skill-bar]');
-      bar.setAttribute('aria-label',t('Progress through this chapter','Прогресс этой главы'));
+      bar.setAttribute('aria-label',t('Checkpoint preparation','Подготовка к проверке'));
       bar.hidden=!chapter && !preview;
-      if (chapter || preview) {bar.setAttribute('aria-valuenow',String(Math.round(progress*100)));bar.setAttribute('aria-valuetext',preview ? label : `${chapterLabel} · ${Math.round(progress*100)}%`);}
+      if (chapter || preview) {bar.setAttribute('aria-valuenow',String(Math.round(progress*100)));bar.setAttribute('aria-valuetext',label);}
       else {bar.removeAttribute('aria-valuenow');bar.removeAttribute('aria-valuetext');}
       railStates.set(rail,{key,progress,timer:moving ? setTimeout(()=>rail.classList.remove('is-moving'),800) : null});
     });

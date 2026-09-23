@@ -11,6 +11,7 @@ from repositories.learning_repository import LearningError, encoded, timestamp
 from services.course_targets import (practice_action, practice_catalogue, practice_get, practice_start,
     record_checkpoint_targets, record_event_targets, record_speaking_targets, target_coverage, validate_practice)
 from services.curriculum_targets import sections_for_level
+from services.course_progression import checkpoint_start, course_snapshot
 from services.progression import award, personal_profile, reverse
 
 
@@ -138,6 +139,65 @@ class CourseTargetTests(unittest.TestCase):
         self.assertEqual(self.conn.execute('SELECT demonstrated FROM course_target_observations WHERE checkpoint_id=?',(aid,)).fetchone()[0],0)
         aid=self.checkpoint();record_checkpoint_targets(self.conn,self.pid,aid,{}, {},True,self.now)
         self.assertEqual(tuple(self.conn.execute('SELECT introduced,practised,demonstrated FROM course_target_observations WHERE checkpoint_id=?',(aid,)).fetchone()),(0,1,1))
+
+    def test_independent_answer_prepares_target_without_an_intro_and_skips_it_in_gap_practice(self):
+        aid = self.checkpoint()
+        record_checkpoint_targets(self.conn, self.pid, aid, {}, {}, False, self.now)
+        coverage = target_coverage(self.conn, self.pid, 'home')
+        target = next(t for t in coverage['targets'] if t['id'] == 'a1.home.locate-object.read')
+        self.assertFalse(target['introduced'])
+        self.assertTrue(target['demonstrated'])
+        self.assertTrue(target['prepared'])
+        self.assertEqual(coverage['prepared_count'], 1)
+        state = practice_start(self.conn, self.pid, 'home', 'skip-demonstrated')
+        items = json.loads(self.conn.execute('SELECT content_json FROM course_target_practice_attempts WHERE id=?', (state['id'],)).fetchone()[0])
+        self.assertEqual(len(items), 7)
+        self.assertNotIn(target['id'], {item['target_id'] for item in items})
+
+    def test_wrong_and_hinted_answers_without_teaching_do_not_prepare_or_demonstrate(self):
+        for kwargs in ({'wrong': True}, {'support': ['hint:q1']}):
+            aid = self.checkpoint(**kwargs)
+            record_checkpoint_targets(self.conn, self.pid, aid, {}, {}, False, self.now)
+        coverage = target_coverage(self.conn, self.pid, 'home')
+        target = next(t for t in coverage['targets'] if t['id'] == 'a1.home.locate-object.read')
+        self.assertTrue(target['practised'])
+        self.assertFalse(target['demonstrated'])
+        self.assertFalse(target['prepared'])
+        self.assertEqual(coverage['prepared_count'], 0)
+
+    def test_latest_difficulty_can_still_recommend_a_previously_demonstrated_target(self):
+        for wrong in (False, True):
+            aid = self.checkpoint(wrong=wrong)
+            record_checkpoint_targets(self.conn, self.pid, aid, {}, {}, False, self.now)
+        coverage = target_coverage(self.conn, self.pid, 'home')
+        target = next(t for t in coverage['targets'] if t['id'] == 'a1.home.locate-object.read')
+        self.assertTrue(target['prepared'])
+        self.assertTrue(target['needs_practice'])
+        state = practice_start(self.conn, self.pid, 'home', 'review-difficulty')
+        self.assertEqual(state['total_count'], 8)
+
+    def test_target_practice_is_an_alternative_to_activity_preparation_not_a_pass(self):
+        state = practice_start(self.conn, self.pid, 'home', 'target-route')
+        while state['status'] == 'active':
+            state = self.action(state, 'learn')
+            if state['current_item']['question'].get('audio_url'):
+                state = self.action(state, 'listened')
+            state = self.action(state, 'answer', choice_id=self.correct(state))
+            state = self.action(state, 'next')
+        course = course_snapshot(self.conn, self.pid)
+        chapter = course['chapters'][0]
+        self.assertEqual(course['preparation_policy'], 'activity-or-target-practice-v1')
+        self.assertEqual((chapter['status'], chapter['progress']), ('ready', 1))
+        self.assertEqual(chapter['preparation_basis'], 'target_practice')
+        self.assertEqual((chapter['activity_preparation_progress'], chapter['target_preparation_progress']), (0, 1))
+        self.assertTrue(all(t['prepared'] and not t['demonstrated'] for t in chapter['target_coverage']['targets']))
+        self.assertEqual(course['completed_milestones'], 0)
+        self.assertEqual(course['assessment_scope'], 'journey_checkpoint')
+        self.assertFalse(course['awards_proficiency_level'])
+        self.assertEqual(self.conn.execute('SELECT COUNT(*) FROM course_evidence').fetchone()[0], 0)
+        attempt = checkpoint_start(self.conn, self.pid, 'home', 'normal-after-target-practice')
+        frozen = json.loads(self.conn.execute('SELECT frozen_json FROM course_checkpoint_attempts WHERE id=?', (attempt['id'],)).fetchone()[0])
+        self.assertEqual(frozen['preparation_policy'], course['preparation_policy'])
 
     def step(self,wrong=False,hint=False,quote='Где парк?'):
         seed,raw=self.conn.execute("SELECT id,payload_json FROM speaking_scenario_variants WHERE id='directions-a1-park-v2'").fetchone()

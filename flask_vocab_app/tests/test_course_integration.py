@@ -1,10 +1,12 @@
 """Complete published route, durable drafts and shared native follow-ups."""
+from hashlib import sha256
 import json
 import unittest
 from unittest.mock import patch
 
 from repositories.learning_repository import transaction
 from services.course_progression import course_catalogue
+from services import course_progression, course_releases
 from tests.support import isolated_app
 from tests.test_card_media import MediaProvider
 from tests.test_personal_flashcards import Provider
@@ -79,6 +81,8 @@ class CourseIntegrationTests(unittest.TestCase):
                 self.assertEqual(chapter[field], [])
             self.assertIsNone(chapter['target_coverage'])
             self.assertEqual((chapter['progress'], chapter['preparation_progress']), (0, 0))
+            self.assertEqual((chapter['activity_preparation_progress'], chapter['target_preparation_progress']), (0, 0))
+            self.assertEqual(chapter['preparation_basis'], 'none')
         self.post('chapters/market/checkpoint', {'request_id': 'later-letter', 'challenge': True}, 403)
         standalone = self.post('chapters/market/practice', {'request_id': 'later-free-practice'})
         self.assertEqual(standalone['status'], 'active')
@@ -150,6 +154,31 @@ class CourseIntegrationTests(unittest.TestCase):
         fresh = self.start()
         self.assertNotEqual(self.frozen(fresh['id'])['variant']['id'], self.frozen(attempt['id'])['variant']['id'])
         self.assertEqual(self.client.get('/api/v1/course/checkpoints/' + attempt['id']).json['draft_answers'], draft)
+
+    def test_preparation_policy_is_frozen_without_rewriting_content_or_earned_passes(self):
+        published = {release_id: (course_releases.DATA_DIR / release['catalogue_file']).read_bytes()
+                     for release_id, release in course_releases.RELEASES.items()}
+        attempt = self.start()
+        frozen = self.frozen(attempt['id'])
+        self.assertEqual(frozen['preparation_policy'], 'activity-or-target-practice-v1')
+        self.assertEqual(frozen['rubric']['minimum_correct'], 7)
+        self.assertTrue(self.finish(attempt)['result']['passed'])
+        tables = ('course_checkpoint_attempts', 'course_chapter_passes', 'course_continuation_entitlements')
+        with transaction(self.db) as conn:
+            saved = {table: [tuple(row) for row in conn.execute('SELECT * FROM ' + table)] for table in tables}
+        with patch.object(course_progression, 'JOURNEY_PREPARATION_POLICY', 'later-preparation-policy'):
+            current = self.client.get('/api/v1/course').json
+            self.assertEqual(current['preparation_policy'], 'later-preparation-policy')
+            self.assertEqual(current['completed_milestones'], 1)
+            self.assertEqual(self.post('chapters/home/checkpoint', {
+                'request_id': 'start-1', 'release_id': 'a1-journey-v2', 'challenge': True}), attempt)
+        self.assertEqual(self.frozen(attempt['id']), frozen)
+        with transaction(self.db) as conn:
+            self.assertEqual({table: [tuple(row) for row in conn.execute('SELECT * FROM ' + table)] for table in tables}, saved)
+        for release_id, content in published.items():
+            release = course_releases.RELEASES[release_id]
+            self.assertEqual((course_releases.DATA_DIR / release['catalogue_file']).read_bytes(), content)
+            self.assertEqual(sha256(content).hexdigest(), release['catalogue_sha256'])
 
     def test_transcript_allows_supported_practice_without_claiming_listening(self):
         attempt = self.start()

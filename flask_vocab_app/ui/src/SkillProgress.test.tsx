@@ -10,7 +10,7 @@ afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();});
 describe('Header chapter progress',()=>{
   it('links to the chapter journey and preserves the exact silent Barsik rail',()=>{
     const {container}=render(<><input aria-label="Draft" value="Мой ответ"/><SkillProgress progression={source()}/></>);
-    expect(screen.getByRole('link',{name:'Chapter 1 of 4 · A small message · 20% complete. Open your journey'}).getAttribute('href')).toBe('/#journey');
+    expect(screen.getByRole('link',{name:'Chapter 1 of 4 · A small message · 20% prepared for checkpoint. Open your journey'}).getAttribute('href')).toBe('/#journey');
     expect(container.querySelector('.skill-rail')?.textContent).toBe('');expect(container.querySelector('details')).toBeNull();
     expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('20');
     expect(container.querySelector('img')?.getAttribute('src')).toBe('/static/images/barsik-progress-run-v1.webp');
@@ -21,6 +21,15 @@ describe('Header chapter progress',()=>{
     expect(screen.getByRole('link',{name:'Open your journey'})).toBeTruthy();expect(screen.queryByRole('progressbar')).toBeNull();
     expect((container.querySelector('.skill-rail') as HTMLElement).style.getPropertyValue('--skill-progress')).toBe('0');
     expect(container.innerHTML).not.toMatch(/Elo|1,040|Getting started/);
+  });
+  it('distinguishes full preparation from a passed checkpoint',()=>{
+    const ready=data(1);ready.course!.chapters[0].status='ready';
+    const {rerender}=render(<SkillProgress progression={source(ready)}/>);
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuetext')).toContain('100% prepared for checkpoint');
+    expect(screen.queryByRole('link',{name:/Milestone passed/})).toBeNull();
+    const passed=data(1);passed.course!.chapters[0].status='passed';
+    rerender(<SkillProgress progression={source(passed)}/>);
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuetext')).toContain('Milestone passed');
   });
   it('keeps loading and failed states accessible',()=>{
     const {container,rerender}=render(<SkillProgress progression={{data:undefined,error:'',loading:true,refresh:vi.fn()}}/>);

@@ -21,6 +21,12 @@ JM-01–12 are implemented for the A1 release. JM-13 (independent spoken replies
 
 The following sections reflect the current design and its acceptance criteria, including the 23 September correction that Curriculum must remain the topic overview rather than a duplicate Journey. They distinguish current A1 requirements from later-region proposals. Publication must pass the checks in section 14; pilot observations should inform the next content release.
 
+## Research update — 23 September 2026
+
+The [TORFL review](../curriculum-research.md) adds a source-backed A1–B2 requirements reference. It also supersedes the preparation rule below: ordinary activity preparation and focused-target preparation are now alternatives for the current release. A demonstrated target does not require a separate introduction receipt. Early checkpoint challenges remain available. Published letters, grading and earned milestones are unchanged.
+
+The four letters complete this application's A1 journey course. They do not assess all five TORFL domains. A future full-level gate needs an explicit blueprint and independently assessed writing and speaking; it must not infer them from selected replies or Elo.
+
 ## 1. Product direction
 
 Barsik starts at home with a letter for the learner. He prepares his bag, visits the post office and leaves familiar surroundings. His route grows from a neighbourhood to nearby villages, other regions and eventually distant places.

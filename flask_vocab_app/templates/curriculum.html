@@ -15,6 +15,29 @@
         <h2 id="heading-{{ band.id }}">{{ band.id|replace('-', '–') }} <span>{{ band.label }}</span></h2>
         <p>{{ band.summary }}</p>
       </header>
+      {% set reference = requirement_groups(band.id, language) %}
+      {% if reference %}
+      <details class="curriculum-requirements">
+        <summary>{{ 'Требования уровня' if russian else 'Level requirements' }}</summary>
+        <p>{{ 'Чтение, аудирование, письмо, говорение, лексика и грамматика.' if russian else 'Reading, listening, writing, speaking, and language use.' }}{% if reference.extends %} {{ 'В дополнение к требованиям' if russian else 'Builds on' }} <a href="#level-{{ reference.extends }}" hx-boost="false">{{ reference.extends }}</a>.{% endif %}</p>
+        <div class="curriculum-requirement-groups">
+          {% for group in reference.groups %}
+          <details class="curriculum-requirement-domain">
+            <summary><h3 id="requirements-{{ band.id }}-{{ group.id }}">{{ group.label }}</h3></summary>
+            {% if group.sections %}
+              {% for section in group.sections %}
+              <div class="curriculum-grammar-section"><h4>{{ section.label }}</h4><ul>{% for item in section['items'] %}<li>{{ item.label }}</li>{% endfor %}</ul></div>
+              {% endfor %}
+            {% else %}
+              <ul>{% for item in group['items'] %}<li>{{ item.label }}</li>{% endfor %}</ul>
+            {% endif %}
+          </details>
+          {% endfor %}
+        </div>
+        <p class="curriculum-reference-note">{{ 'Материалы для обучения на основе опубликованных требований ТРКИ. Этапы путешествия не заменяют полный экзамен.' if russian else 'A teaching reference based on published TORFL requirements. Journey milestones do not replace a full proficiency assessment.' }}</p>
+        <div class="curriculum-reference-links">{% for source in reference.sources %}<a href="{{ source.url }}">{{ source.title }}</a>{% endfor %}</div>
+      </details>
+      {% endif %}
       <div class="curriculum-topic-list">{% for topic in band.topics %}{% include '_curriculum_topic.html' %}{% endfor %}</div>
     </section>
     {% endfor %}

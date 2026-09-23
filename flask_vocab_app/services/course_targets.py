@@ -77,6 +77,11 @@ def practice_catalogue():
     return validate_practice(json.loads(PRACTICE_FILE.read_text(encoding='utf-8')))
 
 
+def _target_prepared(target):
+    """Independent success can replace an introductory teaching receipt."""
+    return bool(target['demonstrated'] or (target['introduced'] and target['practised']))
+
+
 def target_coverage(conn, profile_id, section_id):
     section = get_section(section_id)
     if not section:
@@ -92,12 +97,14 @@ def target_coverage(conn, profile_id, section_id):
     for target in targets_for_section(section_id, required_only=True):
         observations = [r for r in records if r['target_id'] == target['id'] and r['target_version'] == target['version']]
         answered = [r for r in observations if r['practised']]
-        targets.append({name: target[name] for name in ('id', 'topic_id')} | {
+        summary = {name: target[name] for name in ('id', 'topic_id')} | {
             'title': target['title_en'], 'title_ru': target['title_ru'], 'required': True,
             'introduced': any(bool(r['introduced']) for r in observations),
             'practised': bool(answered), 'demonstrated': any(bool(r['demonstrated']) for r in answered),
-            'needs_practice': bool(answered and answered[-1]['needs_practice'])})
-    prepared = sum(t['introduced'] and t['practised'] for t in targets)
+            'needs_practice': bool(answered and answered[-1]['needs_practice'])}
+        summary['prepared'] = _target_prepared(summary)
+        targets.append(summary)
+    prepared = sum(t['prepared'] for t in targets)
     return {'section_id': section_id, 'targets': targets, 'required_count': len(targets),
             'prepared_count': prepared, 'ready': prepared == len(targets),
             'practice_href': '/#journey/practice/start/' + section_id}
@@ -180,7 +187,7 @@ def practice_start(conn, profile_id, section_id, request_id):
         attempt_id = active['id']
     else:
         required = {t['id'] for t in coverage['targets']}
-        gaps = {t['id'] for t in coverage['targets'] if not (t['introduced'] and t['practised']) or t['needs_practice']}
+        gaps = {t['id'] for t in coverage['targets'] if not t['prepared'] or t['needs_practice']}
         chosen = gaps or required
         items = [deepcopy(item) for item in practice_catalogue()['items'] if item['target_id'] in chosen]
         # Rotate answer positions per attempt without changing authored meaning.

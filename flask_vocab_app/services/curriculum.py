@@ -132,6 +132,10 @@ def generation_context(topic_id, level, activity):
         # lazy so catalogue validation does not form an import/load cycle.
         from services.curriculum_targets import target_intent_for_activity
         context.update(target_intent_for_activity(topic['id'], activity))
+    from services.torfl_requirements import generation_reference
+    reference = generation_reference(topic_id, level, activity)
+    if reference:
+        context['proficiency_reference'] = reference
     return context
 
 

@@ -320,7 +320,7 @@ export function LiveConversation({sessionId,language='en',initialScenarioId,init
       {catalogue ? practiceLevels.map(band=>{
         const choices=catalogue.scenarios.filter(item=>item.available!==false && item.variant_count>0 && (item.levels ?? ['A1']).includes(band));
         if (!choices.length) return null;
-        return <section class={`speaking-level-group${band==='A1' ? '' : ' speaking-level-group-muted'}`} key={band} aria-labelledby={`speaking-level-${band}`}>
+        return <section class="speaking-level-group" key={band} aria-labelledby={`speaking-level-${band}`}>
           <h2 id={`speaking-level-${band}`}>{band}</h2>
           <ul class="speaking-scenario-grid">{choices.map(item=>{const detail=item.level_details?.[band] ?? item;return <li key={item.id}>
             <button class="speaking-scenario-card" onClick={()=>chooseScenario(item.id,band)} aria-labelledby={`speaking-scenario-${band}-${item.id}`}>

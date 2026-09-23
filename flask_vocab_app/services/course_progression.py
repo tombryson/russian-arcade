@@ -24,6 +24,7 @@ from services.speaking_curriculum import scenario_for_topic
 
 DATA_FILE = Path(__file__).resolve().parents[1] / 'data' / 'course_chapters.json'
 PRACTICE_POLICY = 'a1-course-practice-v1'
+JOURNEY_PREPARATION_POLICY = 'activity-or-target-practice-v1'
 REQUIRED_TASKS = 2
 REQUIRED_ACTIVITIES = 2
 ACTIVITIES = ('reading', 'writing', 'translation', 'word_jumble', 'speaking')
@@ -227,6 +228,9 @@ def _reveal_course(course):
                            topics=[], objectives=[], preparation=[], target_coverage=None,
                            progress=0, preparation_progress=0, activity_count=0,
                            last_attempt_id=None, active_attempt_id=None)
+            if 'activity_preparation_progress' in chapter:
+                chapter.update(activity_preparation_progress=0, preparation_basis='none',
+                               target_preparation_progress=0 if chapter['target_preparation_progress'] is not None else None)
         elif chapter.get('preparation'):
             chapter = dict(chapter, preparation=[dict(item, groups=reference_groups(
                 chapter.get('release_id', course.get('release_id')), item.get('id')))
@@ -252,6 +256,8 @@ def course_snapshot(conn, profile_id):
     release = release_metadata(enrolment['release_id'] if enrolment else default_release_id())
     release_id, band = release['release_id'], release['band']
     catalogue = _catalogue(release_id)
+    targeted_preparation = catalogue.get('schema_version') == 2
+    preparation_policy = JOURNEY_PREPARATION_POLICY if targeted_preparation else PRACTICE_POLICY
     topics = {topic['id']: topic for topic in curriculum()['topics']}
     passed = {row['chapter_id'] for row in _execute(conn, 'SELECT chapter_id FROM course_chapter_passes WHERE profile_id=? AND release_id=?', (profile_id, release_id))}
     evidence = _execute(conn,
@@ -270,12 +276,21 @@ def course_snapshot(conn, profile_id):
                                      'successful_tasks': count, 'required_tasks': REQUIRED_TASKS, 'links': _links(topic_id, band)})
         activity_count = len({row['activity'] for row in rows})
         task_fraction = sum(min(item['successful_tasks'], REQUIRED_TASKS) for item in projected_topics) / (len(projected_topics) * REQUIRED_TASKS)
-        preparation = min(task_fraction, activity_count / REQUIRED_ACTIVITIES, 1.0)
+        activity_preparation = min(task_fraction, activity_count / REQUIRED_ACTIVITIES, 1.0)
+        preparation = activity_preparation
+        target_preparation = None
         coverage = None
-        if catalogue.get('schema_version') == 2:
+        if targeted_preparation:
             from services.course_targets import target_coverage
             coverage = target_coverage(conn, profile_id, chapter['id'])
-            preparation = min(preparation, coverage['prepared_count'] / max(coverage['required_count'], 1))
+            target_preparation = coverage['prepared_count'] / max(coverage['required_count'], 1)
+            # These are alternative preparation routes, not proficiency scores.
+            # Aggregate activity success never creates target observations.
+            preparation = max(activity_preparation, target_preparation)
+        preparation_basis = ('none' if preparation == 0 else
+                             'both' if target_preparation == activity_preparation else
+                             'target_practice' if target_preparation is not None and target_preparation > activity_preparation else
+                             'activity_practice')
         if chapter['id'] in passed:
             status, progress = 'passed', 1.0
         elif current_id is None:
@@ -288,6 +303,9 @@ def course_snapshot(conn, profile_id):
         chapters.append({name: chapter[name] for name in ('id', 'number', 'title', 'title_ru', 'intro', 'intro_ru')} | {
             'status': status, 'progress': progress, 'topics': projected_topics, 'activity_count': activity_count,
             'release_id': release_id, 'preparation_progress': preparation,
+            'preparation_policy': preparation_policy, 'preparation_basis': preparation_basis,
+            'activity_preparation_progress': activity_preparation,
+            'target_preparation_progress': target_preparation,
             'assessment_ready': status == 'ready', 'milestone_passed': status == 'passed',
             'required_activity_count': REQUIRED_ACTIVITIES, 'last_attempt_id': last['id'] if last else None,
             'active_attempt_id': last['id'] if last and last['status'] == 'active' else None,
@@ -298,6 +316,8 @@ def course_snapshot(conn, profile_id):
     entitled = {row['target_level'] for row in _execute(conn,
         'SELECT target_level FROM course_continuation_entitlements WHERE profile_id=?', (profile_id,))}
     return _reveal_course({'version': catalogue['version'], 'profile_id': profile_id, 'band': band, 'release_id': release_id,
+            'preparation_policy': preparation_policy, 'assessment_scope': 'journey_checkpoint',
+            'awards_proficiency_level': False,
             'chapter_count': len(chapters), 'completed_milestones': sum(chapter['status'] == 'passed' for chapter in chapters),
             'unlocked_levels': [level for level in ('A1', 'A2', 'B1', 'B2', 'C1', 'C2') if level == 'A1' or level in entitled],
             'current_chapter_id': current_id,
@@ -426,7 +446,8 @@ def checkpoint_start(conn, profile_id, chapter_id, request_id, challenge=False, 
         frozen = {'chapter_id': chapter_id, 'chapter_number': chapter['number'], 'title': chapter['title'],
                   'title_ru': chapter['title_ru'], 'variant': variant, 'rubric': deepcopy(RUBRIC),
                   'release_id': release_id, 'band': release['band'], 'chapter_count': len(catalogue['chapters']),
-                  'requirement_version': release['requirement_version']}
+                  'requirement_version': release['requirement_version'],
+                  'preparation_policy': state['preparation_policy']}
         if chapter.get('checkpoint_blueprint'):
             blueprint = deepcopy(chapter['checkpoint_blueprint'])
             frozen['blueprint'] = blueprint

@@ -358,7 +358,8 @@ describe('Speaking activity',()=>{
     expect(a1.compareDocumentPosition(a2) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(a1).getAllByRole('button')).toHaveLength(5);
     expect(within(a2).getAllByRole('button')).toHaveLength(5);
-    expect(a2.classList.contains('speaking-level-group-muted')).toBe(true);
+    expect(a2.classList.contains('speaking-level-group-muted')).toBe(false);
+    expect(within(a2).getAllByRole('button').every(button=>!button.hasAttribute('disabled'))).toBe(true);
     expect(screen.queryByRole('tablist')).toBeNull();
     expect(screen.queryByRole('tab')).toBeNull();
     expect(screen.queryByRole('combobox')).toBeNull();

@@ -121,9 +121,11 @@ class ActivityProgressionTests(unittest.TestCase):
         self.assertEqual(post_office['status'], 'locked')
         self.assertEqual(post_office['topics'], [])
         self.assertEqual(post_office['title'], '')
-        # Aggregate activity scores remain useful topic evidence; they do not
-        # claim that each new preparation target was taught and attempted.
-        self.assertEqual(chapter['progress'], 0)
+        # Two of six topic tasks prepare the checkpoint without inventing
+        # detailed target evidence or requiring entry through Journey.
+        self.assertAlmostEqual(chapter['progress'], 1 / 3)
+        self.assertEqual(chapter['preparation_basis'], 'activity_practice')
+        self.assertEqual(chapter['target_coverage']['prepared_count'], 0)
         # Later-topic work is hidden, not discarded. Complete the preceding
         # authored checkpoint and verify the saved task becomes visible.
         from services.course_progression import checkpoint_start, checkpoint_listened, checkpoint_answer

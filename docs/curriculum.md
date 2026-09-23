@@ -60,7 +60,7 @@ The vocabulary database keeps its lemma/form relationships and numeric difficult
 - Reuse earlier vocabulary and grammar in later topics. Increase the communicative demand without filling every sentence with rare words.
 - Assess the stated objectives. Completing a topic, earning coins or gaining a skill rating does not itself assign a proficiency level.
 
-The [A1 journey](word-post/course-milestones.md) groups the ten topics into Home, Post office, Market and Leaving town. Normal readiness requires two successful distinct tasks per topic, two activity families and practice of the section's required targets. A learner may attempt the current letter early.
+The [A1 journey](word-post/course-milestones.md) groups the ten topics into Home, Post office, Market and Leaving town. For the current release, ordinary activity practice and focused-target practice are alternative preparation routes. The activity route uses two successful distinct tasks per topic across two activity families. The focused route uses the section's required targets. A learner may attempt the current letter early.
 
 The first three letters require 7/8; the cumulative final letter requires 13/16 with reading, listening, language and reply minima. Essential decisions and independent listening also matter. Hints and transcripts remain available for supported practice. These are application course rules, not TORFL certification. The original carried letter remains sealed. The guided A2 region is future content; higher-level free practice remains available.
 
@@ -73,6 +73,14 @@ The Curriculum page is the complete 50-topic overview, organised by teaching ban
 The target service validates those references against the canonical curriculum. A1 activity prompts receive the relevant intended targets. A selected response cannot establish independent writing or speaking, and an overall activity score cannot establish every target named in its prompt.
 
 Response-level observations now retain the exact owned question, decision and support. Letter assessments, targeted preparation and selected introductory/guided-speaking tasks can contribute where their saved contracts assess a particular target. Historical aggregate scores remain topic preparation; they have not been converted into objective mastery.
+
+### Published A1–B2 requirements
+
+The [research review](curriculum-research.md) compares published TORFL standards, sample tests and examiner guidance. The [requirements catalogue](curriculum-requirements.md) defines 239 source-backed criteria across language use, reading, listening, writing and speaking. It extends the topic sequence without changing word difficulty or the published milestone targets.
+
+The source files in `flask_vocab_app/data/torfl/` record each criterion, evidence mode, topic scope and source locator. New activity prompts receive a short selection appropriate to the task level. Translation and Word Jumble receive contextual language criteria; they do not inherit essay requirements. Audio interpretation is excluded from text-only tasks.
+
+Curriculum offers a closed requirements reference for each researched level. Earlier levels remain prerequisites in the reference, not practice-access locks. This content map does not claim full exam coverage, import the complete lexical minima or award proficiency. Independent writing and speaking require their own evidence.
 
 ## Topic reference
 

@@ -31,9 +31,11 @@ The file uses schema version 1 and maps release IDs to the preparation IDs in th
 
 Reference notes are presentation data. The API joins them to unlocked preparation when returning course state, including saved receipt responses. Future milestones remain hidden. Editing these notes does not change published course files, assessment questions, grades or stored attempts.
 
-Normal readiness requires two successful distinct tasks per topic, at least 70%, across two activity families in the section. Reading, Writing, Speaking, Translation and Word Jumble remain the main practice routes. Daily coin limits do not stop their saved practice from contributing.
+For the current release, normal readiness uses the greater of ordinary activity preparation and focused-target preparation. The activity route uses two successful distinct tasks per topic, at least 70%, across two activity families in the section. Reading, Writing, Speaking, Translation and Word Jumble remain the main practice routes. Daily coin limits do not stop their saved practice from contributing.
 
-The course also checks a defined set of 32 comprehension and form-selection targets. Each must have been introduced and attempted. Short preparation items teach an example before asking a question. They fill specific gaps; they do not replace the activity baseline or award extra coins.
+The alternative focused route covers 32 comprehension and form-selection targets across the course. A target is prepared when it has been independently demonstrated, or introduced and attempted. Correct independent evidence does not require another teaching click. Short preparation items fill gaps without extra coins. Their completion recommends a checkpoint; it does not establish full proficiency.
+
+The preparation policy is `activity-or-target-practice-v1`. Earlier course releases retain their original policy. The [A1–B2 research review](../curriculum-research.md) documents the distinction between preparation, milestone passes and full-level assessment. No existing grade or pass is rewritten.
 
 Evidence records the individual decision and any support used. Selected-response practice is not labelled spoken or written production. Existing aggregate activity scores remain topic evidence. They do not prove every objective in that topic. New guided-speaking and introductory answers contribute only where their saved question contract supports the target.
 

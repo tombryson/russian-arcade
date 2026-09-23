@@ -4,7 +4,7 @@ import type {Language} from './review-types';
 import type {ProgressionState} from './Progression';
 import './styles/course-journey.css';
 
-export type TargetCoverage={required_count:number;prepared_count:number;ready:boolean;targets:{id:string;title:string;title_ru:string;topic_id:string;introduced:boolean;practised:boolean;demonstrated:boolean;needs_practice:boolean;required:boolean}[]};
+export type TargetCoverage={required_count:number;prepared_count:number;ready:boolean;targets:{id:string;title:string;title_ru:string;topic_id:string;introduced:boolean;practised:boolean;demonstrated:boolean;prepared?:boolean;needs_practice:boolean;required:boolean}[]};
 type PracticeItem={id:string;target_id:string;title:string;title_ru:string;stage:'learn'|'question'|'feedback';selected_choice?:string|null;teaching:{explanation:string;explanation_ru:string;example_ru:string;example_en:string};question:{prompt:string;prompt_ru:string;passage?:string;audio_url?:string;choices:{id:string;text:string}[]}|null;hint:{en:string;ru:string}|null;feedback:{correct:boolean;answer:string;explanation:string;explanation_ru:string}|null;listened:boolean;transcript:string|null};
 export type CoursePractice={id:string;profile_id:string;section_id:string;status:'active'|'completed';completed_count:number;total_count:number;current_item:PracticeItem|null;coverage:TargetCoverage};
 export function CoursePreparation({practiceId,sectionId,language='en',progression}:{practiceId?:string;sectionId?:string;language?:Language;progression:ProgressionState}) {

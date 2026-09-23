@@ -153,6 +153,8 @@ class CourseProgressionTests(unittest.TestCase):
             self.evidence(topic, content=topic + '-repeat', score=0.9)
             self.evidence(topic, content=topic + '-new')
         chapter = self.state()['chapters'][0]
+        self.assertEqual(chapter['preparation_policy'], 'a1-course-practice-v1')
+        self.assertIsNone(chapter['target_preparation_progress'])
         self.assertTrue(all(topic['completed'] for topic in chapter['topics']))
         self.assertEqual([topic['successful_tasks'] for topic in chapter['topics']], [2, 2, 2])
         self.assertEqual(chapter['status'], 'practice')

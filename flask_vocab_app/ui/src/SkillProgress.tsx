@@ -23,7 +23,7 @@ export function SkillProgress({progression,language='en',introductory=false}:{pr
   const progress=preview ? .5 : boundedProgress(chapter?.progress);
   const unavailable=!data && !introductory && !!progression.error;
   const chapterLabel=chapter ? t(`Chapter ${chapter.number} of ${course!.chapters.length} · ${chapter.title}`,`Глава ${chapter.number} из ${course!.chapters.length} · ${chapter.title_ru}`) : '';
-  const label=preview ? t('50% layout preview; saved progress unchanged','Предпросмотр 50%; сохранённый прогресс не изменён') : chapter ? `${chapterLabel} · ${Math.round(progress*100)}% ${t('complete','пройдено')}` : unavailable ? t('Chapter progress unavailable','Прогресс главы недоступен') : !data && !introductory ? t('Loading chapter progress…','Загружаем прогресс главы…') : '';
+  const label=preview ? t('50% layout preview; saved progress unchanged','Предпросмотр 50%; сохранённый прогресс не изменён') : chapter ? `${chapterLabel} · ${chapter.status==='passed' ? t('Milestone passed','Этап пройден') : t(`${Math.round(progress*100)}% prepared for checkpoint`,`${Math.round(progress*100)}% подготовки к проверке`)}` : unavailable ? t('Chapter progress unavailable','Прогресс главы недоступен') : !data && !introductory ? t('Loading chapter progress…','Загружаем прогресс главы…') : '';
   const linkLabel=[label,t('Open your journey','Открыть путешествие')].filter(Boolean).join('. ');
   useLayoutEffect(()=>{
     const key=data && course && chapter ? `${data.profile_id}:${course.release_id ?? course.version}:${chapter.id}` : '';
@@ -37,7 +37,7 @@ export function SkillProgress({progression,language='en',introductory=false}:{pr
     <a class="skill-rail-link" href="/#journey" aria-label={linkLabel}>
       <span class="skill-rail-track" aria-hidden="true"><span class="skill-rail-fill" /></span>
       {(data || preview || introductory) && <span class="skill-rail-runner" aria-hidden="true"><img src="/static/images/barsik-progress-run-v1.webp" alt="" width="56" height="40" /></span>}
-      {(chapter || preview) && <span class="sr-only" role="progressbar" aria-label={t('Progress through this chapter','Прогресс этой главы')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress*100)} aria-valuetext={preview ? t('50% layout preview; saved progress unchanged','Предпросмотр 50%; сохранённый прогресс не изменён') : `${chapterLabel} · ${Math.round(progress*100)}%`} />}
+      {(chapter || preview) && <span class="sr-only" role="progressbar" aria-label={t('Checkpoint preparation','Подготовка к проверке')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress*100)} aria-valuetext={preview ? t('50% layout preview; saved progress unchanged','Предпросмотр 50%; сохранённый прогресс не изменён') : label} />}
     </a>
   </div>;
 }
