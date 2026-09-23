@@ -9,14 +9,17 @@ from functools import lru_cache
 import json
 from pathlib import Path
 import sqlite3
+from urllib.parse import quote
 
 from contracts.learning import key
 from repositories.learning_repository import LearningError, encoded, identifier, payload_hash, timestamp
 from services.curriculum_targets import curriculum_targets, get_section, get_target, targets_for_section
+from services.course_releases import release_metadata
 
 PRACTICE_FILE = Path(__file__).resolve().parents[1] / 'data' / 'course_target_practice.json'
 PRACTICE_VERSION = 'a1-target-practice-v1'
 CATALOGUE_VERSION = 'a1-targets-v1'
+PREPARATION_RELEASE = 'a1-journey-v2'
 
 
 def _execute(conn, sql, args=()):
@@ -82,19 +85,66 @@ def _target_prepared(target):
     return bool(target['demonstrated'] or (target['introduced'] and target['practised']))
 
 
-def target_coverage(conn, profile_id, section_id):
+def preparation_metadata(release_id):
+    """Resolve published preparation without silently replacing its versions."""
+    release = release_metadata(release_id)
+    preparation = release.get('preparation')
+    if not isinstance(preparation, dict):
+        raise LearningError('practice_unavailable', 'This course has no focused preparation.', 404)
+    if (preparation.get('target_catalogue_version') != CATALOGUE_VERSION
+            or preparation.get('content_version') != PRACTICE_VERSION):
+        raise LearningError('practice_content_unavailable', 'This saved preparation version is unavailable.', 409)
+    return {'release_id': release_id, **preparation}
+
+
+def _target_snapshot(section_id, catalogue_version):
+    # The retained A1 registry is resolved by its identity, never by a new
+    # default catalogue. Future catalogues need their own explicit loader.
+    if catalogue_version != CATALOGUE_VERSION:
+        raise LearningError('practice_content_unavailable', 'This saved target catalogue is unavailable.', 409)
     section = get_section(section_id)
     if not section:
         raise LearningError('section_not_found', 'That practice section was not found.', 404)
+    return {'catalogue_version': catalogue_version, 'section_id': section_id,
+            'targets': targets_for_section(section_id, required_only=True)}
+
+
+def _practice_context(row):
+    identity = preparation_metadata(row['release_id'])
+    if (row['target_catalogue_version'] != identity['target_catalogue_version']
+            or row['content_version'] != identity['content_version']):
+        raise LearningError('practice_content_unavailable', 'This saved preparation version is unavailable.', 409)
+    expected = _target_snapshot(row['section_id'], row['target_catalogue_version'])
+    snapshot = json.loads(row['target_snapshot_json']) if row['target_snapshot_json'] else expected
+    known = {target['id'] for target in expected['targets']}
+    targets = snapshot.get('targets') if isinstance(snapshot, dict) else None
+    if (not isinstance(targets, list) or not targets
+            or snapshot.get('section_id') != row['section_id']
+            or snapshot.get('catalogue_version') != row['target_catalogue_version']
+            or any(not isinstance(t, dict) or t.get('id') not in known
+                   or type(t.get('version')) is not int or t['version'] < 1
+                   or any(not _nonempty(t.get(field)) for field in ('topic_id', 'title_en', 'title_ru', 'response_mode'))
+                   for t in targets)
+            or len(targets) != len(known) or {t['id'] for t in targets} != known):
+        raise LearningError('practice_content_unavailable', 'This saved target contract is unavailable.', 409)
+    items = json.loads(row['content_json'])
+    if not isinstance(items, list) or not items or any(not isinstance(item, dict) or item.get('target_id') not in known for item in items):
+        raise LearningError('practice_content_unavailable', 'This saved preparation has an unknown target.', 409)
+    return identity, snapshot
+
+
+def target_coverage(conn, profile_id, section_id, *, release_id=PREPARATION_RELEASE, target_snapshot=None):
+    identity = preparation_metadata(release_id)
+    snapshot = target_snapshot or _target_snapshot(section_id, identity['target_catalogue_version'])
     records = []
     if _ready(conn):
         records = _execute(conn, '''SELECT o.* FROM course_target_observations o
             LEFT JOIN progression_events e ON e.id=o.event_id
             WHERE o.profile_id=? AND o.catalogue_version=?
               AND (o.event_id IS NULL OR (e.profile_id=o.profile_id AND e.reversed_at IS NULL))
-            ORDER BY o.created_at,o.rowid''', (profile_id, CATALOGUE_VERSION)).fetchall()
+            ORDER BY o.created_at,o.rowid''', (profile_id, snapshot['catalogue_version'])).fetchall()
     targets = []
-    for target in targets_for_section(section_id, required_only=True):
+    for target in snapshot['targets']:
         observations = [r for r in records if r['target_id'] == target['id'] and r['target_version'] == target['version']]
         answered = [r for r in observations if r['practised']]
         summary = {name: target[name] for name in ('id', 'topic_id')} | {
@@ -105,17 +155,17 @@ def target_coverage(conn, profile_id, section_id):
         summary['prepared'] = _target_prepared(summary)
         targets.append(summary)
     prepared = sum(t['prepared'] for t in targets)
-    return {'section_id': section_id, 'targets': targets, 'required_count': len(targets),
+    return {**identity, 'section_id': section_id, 'targets': targets, 'required_count': len(targets),
             'prepared_count': prepared, 'ready': prepared == len(targets),
-            'practice_href': '/#journey/practice/start/' + section_id}
+            'practice_href': '/#journey/release/' + quote(release_id, safe='') + '/practice/start/' + quote(section_id, safe='')}
 
 
 def _observe(conn, profile_id, target_id, *, activity, source_key, item_id, content_hash,
              rubric_version, introduced=False, practised=False, score=None,
              first_response=None, response=None, support=None, event_id=None,
-             checkpoint_id=None, practice_id=None, now=None):
+             checkpoint_id=None, practice_id=None, now=None, target=None, catalogue_version=CATALOGUE_VERSION):
     """Private write boundary. Callers must resolve a server-owned item first."""
-    target = get_target(target_id)
+    target = get_target(target_id) if target is None else target
     if not target or not _ready(conn):
         return False
     support = support or {}
@@ -126,7 +176,7 @@ def _observe(conn, profile_id, target_id, *, activity, source_key, item_id, cont
         content_hash,rubric_version,introduced,practised,demonstrated,needs_practice,score,
         first_response_json,response_json,support_json,event_id,checkpoint_id,practice_id,created_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
-        identifier(), profile_id, target_id, CATALOGUE_VERSION, target['version'], target['response_mode'], activity,
+        identifier(), profile_id, target_id, catalogue_version, target['version'], target['response_mode'], activity,
         source_key, item_id, content_hash, rubric_version, int(introduced), int(practised), int(demonstrated),
         int(practised and score is not None and score < 1), score,
         encoded(first_response) if first_response is not None else None,
@@ -145,11 +195,12 @@ def _owned(conn, profile_id, attempt_id):
 
 def practice_get(conn, profile_id, attempt_id):
     row = _owned(conn, profile_id, attempt_id)
+    identity, snapshot = _practice_context(row)
     items, state = json.loads(row['content_json']), json.loads(row['state_json'])
     current = None
     if row['status'] == 'active':
         item = items[row['current_index']]
-        target = get_target(item['target_id'])
+        target = next(target for target in snapshot['targets'] if target['id'] == item['target_id'])
         saved = state.get(item['id'], {})
         question = item['question']
         # Do not return the task before its teaching action or return solutions
@@ -167,22 +218,45 @@ def practice_get(conn, profile_id, attempt_id):
             current['feedback'] = {'correct': saved['answer'] == question['answer'],
                                    'answer': next(c['text'] for c in question['choices'] if c['id'] == question['answer']),
                                    'explanation': question['explanation'], 'explanation_ru': question['explanation_ru']}
-    return {'id': row['id'], 'profile_id': profile_id, 'section_id': row['section_id'],
+    return {**identity, 'id': row['id'], 'profile_id': profile_id, 'section_id': row['section_id'],
             'status': row['status'], 'completed_count': row['current_index'], 'total_count': len(items),
-            'current_item': current, 'coverage': target_coverage(conn, profile_id, row['section_id'])}
+            'current_item': current, 'coverage': target_coverage(conn, profile_id, row['section_id'],
+                release_id=row['release_id'], target_snapshot=snapshot)}
 
 
-def practice_start(conn, profile_id, section_id, request_id):
+def practice_start(conn, profile_id, section_id, request_id, *, release_id=None, enrol=False):
     _profile(conn, profile_id)
     key(request_id, 'Practice request ID')
-    coverage = target_coverage(conn, profile_id, section_id)
-    digest = payload_hash({'section_id': section_id})
+    choices = {'section_id': section_id}
+    if release_id is not None:
+        release_metadata(release_id)
+        choices['release_id'] = release_id
+    digest = payload_hash(choices)
     previous = _execute(conn, 'SELECT payload_hash,attempt_id FROM course_target_practice_requests WHERE profile_id=? AND request_id=?', (profile_id, request_id)).fetchone()
     if previous:
-        if previous['payload_hash'] != digest:
+        saved = _owned(conn, profile_id, previous['attempt_id'])
+        # Before schema 048 the API accepted release_id but saved only section
+        # in its fingerprint. Keep those requests replayable, without allowing
+        # the caller to rebind an old request to a different release.
+        legacy_match = (previous['payload_hash'] == payload_hash({'section_id': section_id})
+                        and (release_id is None or release_id == saved['release_id']))
+        if previous['payload_hash'] != digest and not legacy_match:
             raise LearningError('request_conflict', 'This request belongs to different practice.', 409)
         return practice_get(conn, profile_id, previous['attempt_id'])
-    active = _execute(conn, "SELECT id FROM course_target_practice_attempts WHERE profile_id=? AND section_id=? AND status='active'", (profile_id, section_id)).fetchone()
+    if enrol:
+        from services.course_progression import course_snapshot
+        state = course_snapshot(conn, profile_id, release_id=release_id)
+        if not state['is_current_release']:
+            raise LearningError('course_release_mismatch', 'Reopen your current journey before starting this practice.', 409)
+        release_id = state['release_id']
+    release_id = release_id or PREPARATION_RELEASE
+    identity = preparation_metadata(release_id)
+    snapshot = _target_snapshot(section_id, identity['target_catalogue_version'])
+    coverage = target_coverage(conn, profile_id, section_id, release_id=release_id, target_snapshot=snapshot)
+    if enrol:
+        _execute(conn, 'INSERT OR IGNORE INTO course_enrolments(profile_id,band,release_id,started_at) VALUES (?,?,?,?)',
+                 (profile_id, state['band'], release_id, timestamp()))
+    active = _execute(conn, "SELECT id FROM course_target_practice_attempts WHERE profile_id=? AND release_id=? AND section_id=? AND status='active'", (profile_id, release_id, section_id)).fetchone()
     if active:
         attempt_id = active['id']
     else:
@@ -196,8 +270,10 @@ def practice_start(conn, profile_id, section_id, request_id):
             random.SystemRandom().shuffle(item['question']['choices'])
         attempt_id = identifier()
         _execute(conn, '''INSERT INTO course_target_practice_attempts
-            (id,profile_id,section_id,content_version,content_json,created_at) VALUES (?,?,?,?,?,?)''',
-            (attempt_id, profile_id, section_id, PRACTICE_VERSION, encoded(items), timestamp()))
+            (id,profile_id,section_id,content_version,content_json,created_at,release_id,target_catalogue_version,target_snapshot_json)
+            VALUES (?,?,?,?,?,?,?,?,?)''',
+            (attempt_id, profile_id, section_id, identity['content_version'], encoded(items), timestamp(),
+             release_id, identity['target_catalogue_version'], encoded(snapshot)))
     _execute(conn, 'INSERT INTO course_target_practice_requests VALUES (?,?,?,?)', (profile_id, request_id, digest, attempt_id))
     return practice_get(conn, profile_id, attempt_id)
 
@@ -219,6 +295,7 @@ def practice_action(conn, profile_id, attempt_id, action, body, request_id):
         if receipt['payload_hash'] != digest:
             raise LearningError('request_conflict', 'This request belongs to a different practice action.', 409)
         return json.loads(receipt['result_json'])
+    identity, snapshot = _practice_context(row)
     items, states = json.loads(row['content_json']), json.loads(row['state_json'])
     if row['status'] != 'active' or items[row['current_index']]['id'] != item_id:
         raise LearningError('stale_practice', 'This practice has moved on. Reload it to continue.', 409)
@@ -227,7 +304,9 @@ def practice_action(conn, profile_id, attempt_id, action, body, request_id):
     question = item['question']
     now = timestamp()
     observation = dict(activity='course_preparation', item_id=item_id, content_hash=payload_hash(item),
-                       rubric_version=item['rubric_version'], practice_id=attempt_id, now=now)
+                       rubric_version=item['rubric_version'], practice_id=attempt_id, now=now,
+                       catalogue_version=identity['target_catalogue_version'],
+                       target=next(target for target in snapshot['targets'] if target['id'] == item['target_id']))
     if action == 'learn':
         if saved.get('learned'):
             raise LearningError('stale_practice', 'This example has already been introduced.', 409)

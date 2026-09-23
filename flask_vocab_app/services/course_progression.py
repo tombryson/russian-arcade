@@ -18,7 +18,7 @@ from flask import current_app, has_app_context
 from contracts.learning import key
 from repositories.learning_repository import LearningError, encoded, identifier, payload_hash, timestamp
 from services.curriculum import curriculum
-from services.course_releases import DEFAULT_RELEASE_ID, load_release, release_metadata, default_release_id
+from services.course_releases import DEFAULT_RELEASE_ID, RELEASES, load_release, release_metadata, default_release_id
 from services.course_reference_notes import reference_groups
 from services.speaking_curriculum import scenario_for_topic
 
@@ -245,18 +245,41 @@ def _reveal_receipt(response):
     return dict(response, course=_reveal_course(response['course'])) if response.get('course') else response
 
 
-def course_snapshot(conn, profile_id):
+def _current_release(conn, profile_id, band):
+    enrolment = _execute(conn, 'SELECT release_id FROM course_enrolments WHERE profile_id=? AND band=?',
+                         (profile_id, band)).fetchone()
+    if enrolment:
+        release = release_metadata(enrolment['release_id'])
+        if release['band'] != band:
+            raise LearningError('course_release_mismatch', 'This saved course has an inconsistent level.', 409)
+        return release
+    default = release_metadata(default_release_id())
+    if default['band'] == band:
+        return default
+    candidates = [release for release in RELEASES.values() if release.get('status') == 'published' and release['band'] == band]
+    preferred = [release for release in candidates if release.get('default_for_band')]
+    if len(preferred) == 1 or len(candidates) == 1:
+        return release_metadata((preferred or candidates)[0]['release_id'])
+    raise LearningError('course_release_unavailable', 'There is no available course for this level.', 404)
+
+
+def course_snapshot(conn, profile_id, *, release_id=None, band=None):
     """Project current preparation and permanent passes without writing state."""
     if not _execute(conn, "SELECT 1 FROM sqlite_master WHERE type='table' AND name='course_enrolments'").fetchone():
         return None
     # A read never creates enrolment. New learners receive the complete default
     # edition on their first checkpoint command; migration pins existing ones.
-    enrolment = _execute(conn, 'SELECT release_id FROM course_enrolments WHERE profile_id=? AND band=?',
-                         (profile_id, release_metadata(default_release_id())['band'])).fetchone()
-    release = release_metadata(enrolment['release_id'] if enrolment else default_release_id())
+    if band is not None and band not in ('A1', 'A2', 'B1', 'B2', 'C1', 'C2'):
+        raise LearningError('invalid_input', 'Choose a valid course level.')
+    selected = release_metadata(release_id) if release_id is not None else None
+    if selected and band is not None and selected['band'] != band:
+        raise LearningError('invalid_input', 'The course release and level do not match.')
+    band = band or (selected or release_metadata(default_release_id()))['band']
+    current = _current_release(conn, profile_id, band)
+    release = selected or current
     release_id, band = release['release_id'], release['band']
     catalogue = _catalogue(release_id)
-    targeted_preparation = catalogue.get('schema_version') == 2
+    targeted_preparation = bool(release.get('preparation'))
     preparation_policy = JOURNEY_PREPARATION_POLICY if targeted_preparation else PRACTICE_POLICY
     topics = {topic['id']: topic for topic in curriculum()['topics']}
     passed = {row['chapter_id'] for row in _execute(conn, 'SELECT chapter_id FROM course_chapter_passes WHERE profile_id=? AND release_id=?', (profile_id, release_id))}
@@ -282,7 +305,7 @@ def course_snapshot(conn, profile_id):
         coverage = None
         if targeted_preparation:
             from services.course_targets import target_coverage
-            coverage = target_coverage(conn, profile_id, chapter['id'])
+            coverage = target_coverage(conn, profile_id, chapter['id'], release_id=release_id)
             target_preparation = coverage['prepared_count'] / max(coverage['required_count'], 1)
             # These are alternative preparation routes, not proficiency scores.
             # Aggregate activity success never creates target observations.
@@ -316,6 +339,7 @@ def course_snapshot(conn, profile_id):
     entitled = {row['target_level'] for row in _execute(conn,
         'SELECT target_level FROM course_continuation_entitlements WHERE profile_id=?', (profile_id,))}
     return _reveal_course({'version': catalogue['version'], 'profile_id': profile_id, 'band': band, 'release_id': release_id,
+            'current_release_id': current['release_id'], 'is_current_release': release_id == current['release_id'],
             'preparation_policy': preparation_policy, 'assessment_scope': 'journey_checkpoint',
             'awards_proficiency_level': False,
             'chapter_count': len(chapters), 'completed_milestones': sum(chapter['status'] == 'passed' for chapter in chapters),
@@ -323,7 +347,7 @@ def course_snapshot(conn, profile_id):
             'current_chapter_id': current_id,
             'progress': 1.0 if completed else active_progress,
             'completed': completed, 'chapters': chapters,
-            'release_upgrade': _release_upgrade(conn, profile_id, release_id, entitled),
+            'release_upgrade': _release_upgrade(conn, profile_id, release_id, entitled) if release_id == current['release_id'] else None,
             'previous_courses': _previous_courses(conn, profile_id, release_id)})
 
 
@@ -411,10 +435,10 @@ def checkpoint_start(conn, profile_id, chapter_id, request_id, challenge=False, 
         if previous['payload_hash'] != fingerprint:
             raise LearningError('idempotency_conflict', 'This request ID was already used for different checkpoint choices.', 409)
         return _reveal_receipt(json.loads(previous['response_json']))
-    state = course_snapshot(conn, profile_id)
+    state = course_snapshot(conn, profile_id, release_id=release_id)
     if state is None:
         raise LearningError('course_unavailable', 'The course is temporarily unavailable.', 503)
-    if release_id is not None and release_id != state['release_id']:
+    if not state['is_current_release']:
         raise LearningError('course_release_mismatch', 'This learner is enrolled in a different course release.', 409)
     release_id = state['release_id']
     release = release_metadata(release_id)
@@ -575,7 +599,8 @@ def _previous_courses(conn, profile_id, current_release):
 
 def _release_upgrade(conn, profile_id, current_release, entitled):
     target = default_release_id()
-    if current_release == target or target == DEFAULT_RELEASE_ID:
+    if (current_release == target or target == DEFAULT_RELEASE_ID
+            or release_metadata(current_release)['band'] != release_metadata(target)['band']):
         return None
     pending = _execute(conn, "SELECT id,frozen_json FROM course_checkpoint_attempts WHERE profile_id=? AND release_id=? AND status='active' ORDER BY created_at", (profile_id, current_release)).fetchall()
     count = _execute(conn, 'SELECT COUNT(*) FROM course_chapter_passes WHERE profile_id=? AND release_id=?', (profile_id, current_release)).fetchone()[0]

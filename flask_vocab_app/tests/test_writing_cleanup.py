@@ -224,9 +224,9 @@ class WritingProviderTests(unittest.TestCase):
         for value in [dict(TASK,title_en=''),dict(TASK,required_words=['дом']),dict(TASK,task_en='')]:
             self.output(value)
             with self.assertRaises(WritingUnavailable):
-                self.service.generate_writing_task('city','beginner')
+                self.service.generate_writing_task('city','C1')
         self.output(TASK)
-        self.assertEqual(self.service.generate_writing_task('city','beginner'),TASK)
+        self.assertEqual(self.service.generate_writing_task('city','C1'),TASK)
 
     def test_sdk_serializes_schema_and_complete_answer(self):
         captured=[]
@@ -237,7 +237,7 @@ class WritingProviderTests(unittest.TestCase):
                 {'id':'msg_test','type':'message','role':'assistant','status':'completed','content':[{'type':'output_text','text':json.dumps(value),'annotations':[]}]}]})
         self.service.client=openai.OpenAI(api_key='test-only',http_client=httpx.Client(transport=httpx.MockTransport(handle)))
         self.addCleanup(self.service.client.close)
-        self.service.generate_writing_task('city','beginner')
+        self.service.generate_writing_task('city','C1')
         answer='  «Привет!»\n'+'Это мой город. '*200
         self.service.assess_writing(TASK['task'],TASK['required_words'],30,answer,language='ru')
         self.assertEqual(json.loads(captured[1]['input'][1]['content'])['russian_answer'],answer)

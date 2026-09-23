@@ -1,6 +1,6 @@
 # Curriculum and assessment implementation plan
 
-**Status:** proposed implementation plan, informed by the completed research and code audit.
+**Status:** implementation in progress. The first build adds the requirement crosswalk, frozen task contracts, release-scoped preparation, morphology improvements and one A1 teaching unit. Writing and selected Speaking tasks now save diagnostic criteria. See [implementation status](curriculum-implementation.md) for completed work and remaining acceptance criteria.
 
 **Baseline:** `cabad03`, reviewed 23 September 2026.
 
@@ -8,7 +8,7 @@
 
 The aim is to turn Russian Arcade's existing activities into a coherent course. Learners should understand what they are practising, receive useful feedback and see progress wherever they choose to study. A level assessment should test their Russian, rather than their willingness to follow a prescribed sequence of pages.
 
-This document specifies the work still required. It does not describe that work as shipped. The [research review](curriculum-research.md) records the evidence behind the recommendations. The [239 requirement specifications](curriculum-requirements.md) provide the detailed reference. The [current milestone contract](word-post/course-milestones.md) remains authoritative for existing A1 attempts.
+This document specifies the complete intended build. Its package descriptions are acceptance criteria, not claims that every package has shipped. The [research review](curriculum-research.md) records the evidence behind the recommendations. The [239 requirement specifications](curriculum-requirements.md) provide the detailed reference. The [current milestone contract](word-post/course-milestones.md) remains authoritative for existing A1 attempts.
 
 Read by purpose:
 

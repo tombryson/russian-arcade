@@ -63,9 +63,13 @@ def create_progression_blueprint(db_path):
     @bp.get('/course')
     @access_policy('child')
     def course():
+        if (set(request.args) - {'release_id', 'band'}
+                or any(len(request.args.getlist(name)) != 1 for name in request.args)):
+            raise LearningError('invalid_input', 'Choose one course release and level.')
         with transaction(db_path) as conn:
             profile = course_profile(conn)
-            return jsonify(course_snapshot(conn, profile['id']) | {'csrf_token': csrf_token()})
+            return jsonify(course_snapshot(conn, profile['id'], release_id=request.args.get('release_id'),
+                                           band=request.args.get('band')) | {'csrf_token': csrf_token()})
 
     @bp.post('/course/chapters/<chapter_id>/checkpoint')
     @access_policy('child')
@@ -147,14 +151,12 @@ def create_progression_blueprint(db_path):
     @access_policy('child')
     def start_preparation(section_id):
         data = body({'request_id'}, {'release_id'})
+        if 'release_id' in data and not isinstance(data['release_id'], str):
+            raise LearningError('invalid_input', 'Course release must be a saved release ID.')
         with transaction(db_path, write=True) as conn:
             profile = course_profile(conn)
-            state = course_snapshot(conn, profile['id'])
-            if state['release_id'] != 'a1-journey-v2' or data.get('release_id', state['release_id']) != state['release_id']:
-                raise LearningError('course_release_mismatch', 'Reopen your current journey before starting this practice.', 409)
-            conn.execute('INSERT OR IGNORE INTO course_enrolments(profile_id,band,release_id,started_at) VALUES (?,?,?,?)',
-                         (profile['id'], state['band'], state['release_id'], timestamp()))
-            return jsonify(practice_start(conn, profile['id'], section_id, data['request_id']))
+            return jsonify(practice_start(conn, profile['id'], section_id, data['request_id'],
+                                          release_id=data.get('release_id'), enrol=True))
 
     @bp.get('/course/practice/<attempt_id>')
     @access_policy('child')

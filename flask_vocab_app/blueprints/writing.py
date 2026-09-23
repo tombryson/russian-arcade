@@ -6,6 +6,7 @@ from flask import Blueprint, jsonify, redirect, render_template, request, sessio
 from repositories.writing_repository import WritingRepository, WritingConflict, word_count
 from services.writing_service import WritingUnavailable
 from services.curriculum import level_options, normalize_level, topic_options
+from services.curriculum_requirement_map import requirement_index
 from utils.activity_display import topic_label, readable_date
 from utils.i18n import translate_ui
 from utils.shell import render_page
@@ -40,6 +41,33 @@ def create_writing_blueprint(db_path, service):
         item['saved_draft'] = item.get('saved_draft',item['draft'])
         item['word_count'] = word_count(item['draft'])
         item['state'] = 'draft' if item['draft'] != (item.get('checked_response') or '') else 'checked' if item.get('checked_response') is not None else 'ready'
+        if item.get('curriculum_contract'):
+            from services.curriculum_units import unit_summaries
+            unit = next((unit for unit in unit_summaries()
+                         if unit['id'] == item['curriculum_contract']['content_version']), None)
+            if unit:
+                item['curriculum_origin'] = {
+                    'href': '/curriculum/units/' + unit['id'],
+                    'title': unit['title_ru' if language() == 'ru' else 'title'],
+                }
+            criteria = {criterion['id']: criterion for criterion in item['curriculum_contract']['criteria']}
+            references = requirement_index()
+            outcomes = {
+                'satisfied': ('Shown in this response', 'Есть в этом ответе'),
+                'partial': ('Partly shown', 'Показано частично'),
+                'not_satisfied': ('Needs practice', 'Стоит потренировать'),
+                'insufficient_evidence': ('Not enough evidence', 'Недостаточно материала'),
+            }
+            for attempt in item.get('attempts', []):
+                attempt['criterion_details'] = []
+                for judgement in attempt.get('criterion_report', {}).get('judgements', []):
+                    criterion = criteria[judgement['criterion_id']]
+                    reference = references[criterion['requirement_id']]
+                    attempt['criterion_details'].append({
+                        'label': reference['label_ru' if language() == 'ru' else 'label_en'],
+                        'outcome': outcomes[judgement['outcome']][language() == 'ru'],
+                        'feedback': judgement['feedback'],
+                    })
         return item
 
     def page(exercise=None,**extra):
@@ -120,8 +148,14 @@ def create_writing_blueprint(db_path, service):
                 raise LookupError('Writing not found')
             repository.validate_answer(response,checking=checking)
             repository.check_revision(exercise_id,revision)
-            assessment = service.assess_writing(task=exercise['task'],required_words=exercise['required_words'],
-                min_words=exercise['min_words'],response=response,difficulty=exercise['difficulty'],language=language(),topic=exercise['topic']) if checking else None
+            assessment = None
+            if checking:
+                options = dict(task=exercise['task'], required_words=exercise['required_words'],
+                    min_words=exercise['min_words'], response=response, difficulty=exercise['difficulty'],
+                    language=language(), topic=exercise['topic'])
+                if exercise.get('curriculum_contract') is not None:
+                    options['curriculum_contract'] = exercise['curriculum_contract']
+                assessment = service.assess_writing(**options)
             revision = repository.save(exercise_id,response,revision,assessment,language())
         except (ValueError,LookupError,WritingUnavailable,sqlite3.Error) as error:
             if exercise:

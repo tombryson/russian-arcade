@@ -81,6 +81,30 @@ class PublicDemoTests(unittest.TestCase):
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM journey_game_purchases').fetchone()[0], 0)
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM journey_game_access').fetchone()[0], 0)
 
+    def test_unit_typed_forms_use_owned_saved_practice_without_a_provider(self):
+        state = self.state(self.a)
+        path = '/curriculum/units/location-destination-v1'
+        page = self.a.get(path, base_url=self.base)
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(path + '/forms', page.text)
+        response = self.a.post(path + '/forms', base_url=self.base,
+                               data={'profile_id': state['profile']['id'], 'request_id': 'demo-forms'},
+                               headers={'X-CSRF-Token': state['csrf_token']})
+        self.assertEqual(response.status_code, 303, response.text)
+        session_id = response.location.rsplit('/', 1)[1]
+        url = '/api/v1/learning-sessions/' + session_id
+        saved = self.a.get(url, base_url=self.base).json
+        self.assertEqual(saved['item']['type'], 'controlled_text')
+        checked = self.a.post(url + '/attempts', base_url=self.base,
+                              json={'submission_id': 'typed', 'expected_revision': 0,
+                                    'item_id': saved['item']['id'], 'answer': {'text': 'ШКОЛУ.'}},
+                              headers={'X-CSRF-Token': state['csrf_token']})
+        self.assertEqual(checked.status_code, 200, checked.text)
+        self.assertEqual(checked.json['attempts'][0]['answer'], {'text': 'ШКОЛУ.'})
+        self.assertEqual(checked.json['attempts'][0]['outcome'], 'correct')
+        self.state(self.b)
+        self.assertEqual(self.b.get(url, base_url=self.base).status_code, 404)
+
     @patch('utils.lazy.LazyService._get', side_effect=AssertionError('Course demo must not resolve providers'))
     def test_course_checkpoints_are_playable_owned_and_provider_free(self, provider):
         import json

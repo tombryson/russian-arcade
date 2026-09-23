@@ -1,15 +1,17 @@
 import {useEffect,useRef,useState} from 'preact/hooks';
 import {api,ApiError} from './learning-api';
+import {courseHref} from './course-routes';
 import type {Language} from './review-types';
 import type {ProgressionState} from './Progression';
 import './styles/course-journey.css';
 
 export type TargetCoverage={required_count:number;prepared_count:number;ready:boolean;targets:{id:string;title:string;title_ru:string;topic_id:string;introduced:boolean;practised:boolean;demonstrated:boolean;prepared?:boolean;needs_practice:boolean;required:boolean}[]};
 type PracticeItem={id:string;target_id:string;title:string;title_ru:string;stage:'learn'|'question'|'feedback';selected_choice?:string|null;teaching:{explanation:string;explanation_ru:string;example_ru:string;example_en:string};question:{prompt:string;prompt_ru:string;passage?:string;audio_url?:string;choices:{id:string;text:string}[]}|null;hint:{en:string;ru:string}|null;feedback:{correct:boolean;answer:string;explanation:string;explanation_ru:string}|null;listened:boolean;transcript:string|null};
-export type CoursePractice={id:string;profile_id:string;section_id:string;status:'active'|'completed';completed_count:number;total_count:number;current_item:PracticeItem|null;coverage:TargetCoverage};
-export function CoursePreparation({practiceId,sectionId,language='en',progression}:{practiceId?:string;sectionId?:string;language?:Language;progression:ProgressionState}) {
+export type CoursePractice={release_id?:string;target_catalogue_version?:string;content_version?:string;id:string;profile_id:string;section_id:string;status:'active'|'completed';completed_count:number;total_count:number;current_item:PracticeItem|null;coverage:TargetCoverage};
+export function CoursePreparation({practiceId,sectionId,releaseId,language='en',progression}:{releaseId?:string;practiceId?:string;sectionId?:string;language?:Language;progression:ProgressionState}) {
   const t=(en:string,ru:string)=>language==='ru'?ru:en;
-  const identity=`${progression.data?.profile_id ?? ''}:${practiceId ?? ''}:${sectionId ?? ''}`;
+  const selectedRelease=releaseId ?? (practiceId ? undefined : progression.data?.course?.release_id);
+  const identity=`${progression.data?.profile_id ?? ''}:${selectedRelease ?? ''}:${practiceId ?? ''}:${sectionId ?? ''}`;
   const owner=useRef(identity);owner.current=identity;
   const [practice,setPractice]=useState<CoursePractice>();
   const [error,setError]=useState('');
@@ -32,7 +34,7 @@ export function CoursePreparation({practiceId,sectionId,language='en',progressio
   useEffect(()=>{
     const abort=new AbortController();const epoch=++requestEpoch.current;owner.current=identity;setAudioError('');playbackAttempt.current++;failedAction.current=undefined;setPractice(undefined);setError('');setChoice('');setUncertainAnswer(false);listeningPending.current=false;setBusy(true);inFlight.current=false;command.current=undefined;
     if(startRequest.current?.identity!==identity) startRequest.current={identity,request_id:crypto.randomUUID()};
-    const promise=practiceId ? api<CoursePractice>(`/api/v1/course/practice/${encodeURIComponent(practiceId)}`,undefined,abort.signal) : api<CoursePractice>(`/api/v1/course/chapters/${encodeURIComponent(sectionId ?? '')}/practice`,{release_id:progression.data?.course?.release_id,request_id:startRequest.current.request_id},abort.signal);
+    const promise=practiceId ? api<CoursePractice>(`/api/v1/course/practice/${encodeURIComponent(practiceId)}`,undefined,abort.signal) : api<CoursePractice>(`/api/v1/course/chapters/${encodeURIComponent(sectionId ?? '')}/practice`,{release_id:selectedRelease,request_id:startRequest.current.request_id},abort.signal);
     void promise.then(value=>{
       if(abort.signal.aborted || owner.current!==identity || requestEpoch.current!==epoch)return;
       if(progression.data?.profile_id && value.profile_id!==progression.data.profile_id) throw new ApiError(t('The learner changed. Reload your practice.','Профиль изменился. Загрузите практику заново.'),'profile_changed');
@@ -49,11 +51,14 @@ export function CoursePreparation({practiceId,sectionId,language='en',progressio
       const value=await api<CoursePractice>(`/api/v1/course/practice/${encodeURIComponent(practice.id)}/${action}`,{item_id:practice.current_item.id,request_id:command.current.request_id,...(action==='answer'?{choice_id:choice}:{})});
       if(owner.current!==actor || requestEpoch.current!==epoch)return;
       if(value.profile_id!==practice.profile_id)throw new ApiError(t('The learner changed. Reload your practice.','Профиль изменился. Загрузите практику заново.'),'profile_changed');
-      setPractice(value);command.current=undefined;failedAction.current=undefined;if(action==='answer')setUncertainAnswer(false);
+      if(value.id!==practice.id || value.section_id!==practice.section_id || (['release_id','target_catalogue_version','content_version'] as const).some(field=>value[field]!==undefined && practice[field]!==undefined && value[field]!==practice[field]))throw new ApiError(t('The saved practice changed. Reload it to continue.','Сохранённая практика изменилась. Загрузите её заново.'),'practice_changed');
+      // Receipts issued before release-scoped practice retain their original
+      // payload. Keep only the identity already verified by the current GET.
+      setPractice({...value,release_id:value.release_id ?? practice.release_id,target_catalogue_version:value.target_catalogue_version ?? practice.target_catalogue_version,content_version:value.content_version ?? practice.content_version});command.current=undefined;failedAction.current=undefined;if(action==='answer')setUncertainAnswer(false);
       if(action==='next'||action==='learn')setChoice('');else if(value.current_item?.selected_choice)setChoice(value.current_item.selected_choice);
       if(value.status==='completed')progression.refresh();
       if(action==='next'||action==='learn'||action==='answer') requestAnimationFrame(()=>heading.current?.focus({preventScroll:true}));
-    }catch(reason){if(owner.current===actor && requestEpoch.current===epoch){if(reason instanceof ApiError && reason.code==='stale_practice'){setRevision(value=>value+1);return;}if(reason instanceof ApiError && ['profile_changed','locked','unauthorized'].includes(reason.code))setPractice(undefined);setError(action==='listened' ? t('We couldn’t save that you listened. You can retry saving without playing the recording again.','Не удалось сохранить прослушивание. Можно повторить сохранение, не включая запись заново.') : reason instanceof Error?reason.message:t('Your answer could not be saved.','Не удалось сохранить ответ.'));}}
+    }catch(reason){if(owner.current===actor && requestEpoch.current===epoch){if(reason instanceof ApiError && reason.code==='stale_practice'){setRevision(value=>value+1);return;}if(reason instanceof ApiError && ['profile_changed','practice_changed','locked','unauthorized'].includes(reason.code))setPractice(undefined);setError(action==='listened' ? t('We couldn’t save that you listened. You can retry saving without playing the recording again.','Не удалось сохранить прослушивание. Можно повторить сохранение, не включая запись заново.') : reason instanceof Error?reason.message:t('Your answer could not be saved.','Не удалось сохранить ответ.'));}}
     finally{if(owner.current===actor && requestEpoch.current===epoch){inFlight.current=false;setBusy(false);if(action==='answer'||action==='next')listeningPending.current=false;else if(action!=='listened' && listeningPending.current)void save('listened');}}
   }
   const item=practice?.current_item;
@@ -71,10 +76,10 @@ export function CoursePreparation({practiceId,sectionId,language='en',progressio
     } catch {if(isCurrentMedia() && playbackAttempt.current===playback)setAudioError(mediaKey);}
   }
   return <section class="page course-page course-preparation-player">
-    <nav class="course-navigation"><a class="text-link" href={`#journey/chapter/${practice?.section_id ?? sectionId ?? 'home'}`}>← {t('Milestone practice','Практика этапа')}</a>{practice && <span>{practice.completed_count}/{practice.total_count}</span>}</nav>
+    <nav class="course-navigation"><a class="text-link" href={courseHref(practice?.release_id ?? selectedRelease,practice?.section_id ?? sectionId ?? 'home')}>← {t('Milestone practice','Практика этапа')}</a>{practice && <span>{practice.completed_count}/{practice.total_count}</span>}</nav>
     {error && <div role="alert" class="course-error"><p>{error}</p><button class="live-mute" disabled={busy} onClick={()=>practice && failedAction.current ? void save(failedAction.current) : setRevision(value=>value+1)}>{failedAction.current==='listened' ? t('Retry saving listening','Повторить сохранение прослушивания') : t('Try again','Попробовать ещё раз')}</button></div>}
     {!practice && !error && <p role="status">{t('Opening practice…','Открываем практику…')}</p>}
-    {practice?.status==='completed' ? <><header class="course-heading"><h1 ref={heading} tabIndex={-1}>{t('Practice saved','Практика сохранена')}</h1><p>{t('Your answers help show what to practise next.','Ваши ответы помогут выбрать следующую практику.')}</p></header><a class="cta" href={`#journey/chapter/${practice.section_id}`}>{t('Continue the milestone','Продолжить этап')} →</a></> : item && <>
+    {practice?.status==='completed' ? <><header class="course-heading"><h1 ref={heading} tabIndex={-1}>{t('Practice saved','Практика сохранена')}</h1><p>{t('Your answers help show what to practise next.','Ваши ответы помогут выбрать следующую практику.')}</p></header><a class="cta" href={courseHref(practice.release_id ?? selectedRelease,practice.section_id)}>{t('Continue the milestone','Продолжить этап')} →</a></> : item && <>
       <header class="course-heading"><p class="kicker">{item.stage==='learn' ? t('Learn','Разберём пример') : item.stage==='feedback'?t('Your answer','Ваш ответ'):t('Try it','Попробуйте')}</p><h1 ref={heading} tabIndex={-1}>{t(item.title,item.title_ru)}</h1></header>
       {item.stage==='learn' ? <article class="course-teaching-card"><p>{t(item.teaching.explanation,item.teaching.explanation_ru)}</p><p class="course-teaching-example" lang="ru">{item.teaching.example_ru}</p>{language==='en' && <p class="quiet">{item.teaching.example_en}</p>}<button class="cta" disabled={busy} onClick={()=>void save('learn')}>{t('Try it','Попробовать')} →</button></article> : item.question && <form onSubmit={event=>{event.preventDefault();void save('answer');}} class="course-preparation-question">
         {item.question.passage && <p class="course-teaching-example" lang="ru">{item.question.passage}</p>}

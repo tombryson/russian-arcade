@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { Sheet, ActivityLink } from './components';
 import { WelcomeHero } from './WelcomeHero';
 import { CoursePreparation } from './CoursePreparation';
+import {courseHref,parseReleasedCourse} from './course-routes';
 import { FirstDelivery } from './FirstDelivery';
 import { FirstSteps } from './FirstSteps';
 import { JourneyGame, GameCatalogue } from './JourneyGames';
@@ -29,7 +30,7 @@ import sleepingBarsik from './assets/barsik-sleeping-v1.webp';
 import './styles/lesson-player.css';
 
 type Page = 'home' | 'activities' | 'words' | 'practice' | 'first-delivery' | 'first-steps' | 'flashcards' | 'review' | 'generate' | 'conversation' | 'speech-lab' | 'speaking' | 'journey' | 'game' | 'games' | 'shop';
-type Route = { page: Page; gameId?:string; sessionId?: string; worldId?:string; chapterId?:string; checkpointId?:string;coursePracticeId?:string;courseSectionId?:string; wordId?: number; lessonId?: string; topic?:string; scenarioId?:string; speakingLevel?:PracticeLevel; speakingMode?:'fluent'|'step'; canonicalHash?: string };
+type Route = { page: Page; gameId?:string; sessionId?: string; worldId?:string; chapterId?:string; courseReleaseId?:string; checkpointId?:string;coursePracticeId?:string;courseSectionId?:string; wordId?: number; lessonId?: string; topic?:string; scenarioId?:string; speakingLevel?:PracticeLevel; speakingMode?:'fluent'|'step'; canonicalHash?: string };
 function route(): Route {
   const hash = window.location.hash.slice(1);
   const gameSession=/^games\/session\/([A-Za-z0-9_-]+)$/.exec(hash);
@@ -39,6 +40,8 @@ function route(): Route {
   const firstSteps=/^first-steps(?:\/([a-z-]+))?$/.exec(hash);
   if (firstSteps) return {page:'first-steps',lessonId:firstSteps[1]};
   if (hash === 'journey/post-office') return {page:'first-steps',canonicalHash:'#first-steps'};
+  const releasedCourse=parseReleasedCourse(hash);
+  if(releasedCourse)return {page:'journey',...releasedCourse};
   const coursePractice=/^journey\/practice\/(?:start\/([a-z-]+)|([A-Za-z0-9_-]+))$/.exec(hash);
   if(coursePractice)return {page:'journey',courseSectionId:coursePractice[1],coursePracticeId:coursePractice[2]};
   const course=/^journey\/(chapter|checkpoint)\/([A-Za-z0-9_-]+)$/.exec(hash);
@@ -107,7 +110,7 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
   const header = useRef<HTMLElement>(null);
   const activityWorkspace = Boolean(navigation && navigationLayout === 'sidebar');
   const lessonWorkspace = location.page === 'first-delivery' || location.page === 'first-steps' && !!location.lessonId;
-  const learningWorkspace = lessonWorkspace || location.page === 'speaking' || location.page === 'journey' && Boolean(location.chapterId || location.checkpointId || location.coursePracticeId || location.courseSectionId);
+  const learningWorkspace = lessonWorkspace || location.page === 'practice' || location.page === 'speaking' || location.page === 'journey' && Boolean(location.chapterId || location.checkpointId || location.coursePracticeId || location.courseSectionId);
   const activeNavigationPage = ['flashcards','review','generate'].includes(location.page) ? 'native_flashcards'
     : ['conversation','speech-lab','speaking'].includes(location.page) ? 'speaking'
     : location.page === 'words' ? 'vocab'
@@ -164,7 +167,7 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
   }, [location, state.mode]);
   useEffect(() => {
     if (signedOut) { setState({mode:'legacy'}); return; }
-    if (!householdEnabled && !['flashcards','review','generate','conversation','speech-lab','speaking'].includes(location.page)) { setState({mode:'legacy'});return; }
+    if (!householdEnabled && !['flashcards','review','generate','conversation','speech-lab','speaking','practice'].includes(location.page)) { setState({mode:'legacy'});return; }
     const controller = new AbortController();
     startAbort.current?.abort(); setStarting(false); setStartError(''); setState({ mode: 'loading' });
     void (async () => {
@@ -172,7 +175,7 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
         const household = await api<Household>('/api/v1/household', undefined, controller.signal);
         if (household.adult) setState({ mode: 'adult', household });
         else if (!household.profile) setState({ mode: 'locked', household });
-        else if (['flashcards','review','generate','conversation','speech-lab','speaking'].includes(location.page)) {
+        else if (['flashcards','review','generate','conversation','speech-lab','speaking','practice'].includes(location.page)) {
           if (!controller.signal.aborted) setState({ mode: householdEnabled ? 'child' : 'personal', household, home: {profile:household.profile,content:[],sessions:[]} });
         } else {
           const [home, progress] = await Promise.all([
@@ -233,7 +236,7 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
   const resumable = state.home?.sessions.find(item => item.status === 'active' && item.content_status === 'published');
   const nextChapter=progression.data?.course?.chapters.find(chapter=>chapter.id===progression.data?.course?.current_chapter_id);
   const courseJourney=(progression.data?.course?.release_id ?? (signedOut ? defaultCourseRelease : undefined))==='a1-journey-v2';
-  const tutorialNext = courseJourney ? {href:'#journey/chapter/home',label:'Start at home',description:'Meet the people helping Barsik prepare for his journey.'} : {
+  const tutorialNext = courseJourney ? {href:courseHref(progression.data?.course?.release_id ?? defaultCourseRelease,'home'),label:'Start at home',description:'Meet the people helping Barsik prepare for his journey.'} : {
     href: '#first-steps/bag', label: 'What’s in the bag?',
     description: 'Next, help Barsik check his bag before he sets off.',
   };
@@ -281,8 +284,8 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
         : location.page === 'games' ? <section class="page activity-entry games-page"><div class="activity-entry-content"><ActivityHeader title={language === 'ru' ? 'Игры' : 'Games'} description={language === 'ru' ? 'Выберите игру. Новые игры можно открыть в магазине.' : 'Choose a game to play. Unlock more in the shop.'} headingRef={heading} headingTabIndex={-1} actions={<a class="text-link" href="#shop">{language === 'ru' ? 'Магазин' : 'Shop'} <span aria-hidden="true">→</span></a>} /><GameCatalogue key={profile?.id ?? state.mode} context="games" /></div></section>
         : location.page === 'first-delivery' ? <><FirstDelivery key={state.home?.profile.id ?? state.mode} next={tutorialNext} courseJourney={courseJourney} onIntroduce={onboarding.introduce} profileHref={householdEnabled ? "/post/household" : "/post/profiles"} />{onboarding.error && <div class="page onboarding-save-note" role="status"><p>{language==='ru' ? 'Не удалось сохранить знакомство с приложением.' : 'Your introduction could not be saved.'} {onboarding.error}</p><button class="text-link" onClick={()=>void onboarding.retry()}>{language==='ru' ? 'Попробовать ещё раз' : 'Try saving again'}</button></div>}</>
         : location.page === 'journey' && location.worldId && !onboarding.state.coins_introduced ? <section class="page"><h1>Your first delivery</h1><p>Meet Barsik and see how your practice helps his journey.</p><a class="cta" href="#first-delivery">Let’s begin</a></section>
-        : location.page === 'journey' && (location.coursePracticeId || location.courseSectionId) ? <CoursePreparation key={`${profile?.id ?? state.mode}:${location.coursePracticeId ?? location.courseSectionId}`} practiceId={location.coursePracticeId} sectionId={location.courseSectionId} language={language} progression={progression}/>
-        : location.page === 'journey' ? location.worldId ? <Journey key={`${profile?.id ?? state.mode}:${location.worldId}`} worldId={location.worldId} language={language} progression={progression} /> : <CourseJourney key={`${profile?.id ?? state.mode}:${location.chapterId ?? location.checkpointId ?? 'overview'}`} chapterId={location.chapterId} attemptId={location.checkpointId} language={language} progression={progression} />
+        : location.page === 'journey' && (location.coursePracticeId || location.courseSectionId) ? <CoursePreparation key={`${profile?.id ?? state.mode}:${location.courseReleaseId ?? ''}:${location.coursePracticeId ?? location.courseSectionId}`} releaseId={location.courseReleaseId} practiceId={location.coursePracticeId} sectionId={location.courseSectionId} language={language} progression={progression}/>
+        : location.page === 'journey' ? location.worldId ? <Journey key={`${profile?.id ?? state.mode}:${location.worldId}`} worldId={location.worldId} language={language} progression={progression} /> : <CourseJourney key={`${profile?.id ?? state.mode}:${location.courseReleaseId ?? ''}:${location.chapterId ?? location.checkpointId ?? 'overview'}`} releaseId={location.courseReleaseId} chapterId={location.chapterId} attemptId={location.checkpointId} language={language} progression={progression} />
         : location.page === 'speaking' ? location.speakingMode==='step' && location.sessionId
           ? <StepThroughConversation key={`${state.home?.profile.id}:${location.sessionId}`} sessionId={location.sessionId} language={language} />
           : <LiveConversation key={`${state.home?.profile.id}:${location.sessionId ?? location.scenarioId ?? 'new'}:${location.speakingLevel ?? 'A1'}`} sessionId={location.sessionId} initialScenarioId={location.scenarioId} initialLevel={location.speakingLevel} language={language} />
@@ -292,10 +295,10 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
         : ['flashcards','review'].includes(location.page) && nativeEnabled ? ['child','personal'].includes(state.mode) && state.home
           ? location.page === 'review' && location.sessionId ? <NativeReview key={`${state.home.profile.id}:${location.sessionId}`} profileId={state.home.profile.id} sessionId={location.sessionId} language={language} personal={!householdEnabled} /> : <Flashcards key={`${state.home.profile.id}:${location.wordId ?? "all"}:${location.lessonId ?? "all"}:${location.topic ?? ''}`} wordId={location.wordId} lessonId={location.lessonId} topic={location.topic} profileId={state.home.profile.id} language={language} personal={!householdEnabled} />
           : <FlashcardsSetup adult={state.mode === 'adult'} language={language} />
-        : location.page === 'practice' ? state.mode === 'child' && state.home && location.sessionId ? <Practice key={`${state.home.profile.id}:${location.sessionId}`} sessionId={location.sessionId} profileId={state.home.profile.id} onFinish={() => { window.location.hash = 'activities'; setRefresh(value => value + 1); }} />
-          : <section class="page"><h1 ref={heading} tabIndex={-1}>Choose a learner to continue.</h1><p>Your practice belongs to the learner who started it.</p><a class="text-link" href="/post/household">Choose a learner</a></section>
+        : location.page === 'practice' ? (state.mode === 'child' || state.mode === 'personal') && state.home && location.sessionId ? <Practice key={`${state.home.profile.id}:${location.sessionId}`} sessionId={location.sessionId} profileId={state.home.profile.id} onFinish={() => { window.location.hash = 'activities'; setRefresh(value => value + 1); }} />
+          : <section class="page"><h1 ref={heading} tabIndex={-1}>Choose a profile to continue.</h1><p>Open the profile that started this practice.</p><a class="text-link" href="/post/profiles">Choose a profile</a></section>
         : location.page === 'home' ? <>
-          <WelcomeHero key={profile?.id ?? state.mode} courseJourney={courseJourney} headingRef={heading} profileKey={profile?.id} nextDestination={nextChapter ? {title:language==='ru' ? nextChapter.title_ru : nextChapter.title,href:nextChapter.active_attempt_id ? `#journey/checkpoint/${nextChapter.active_attempt_id}` : `#journey/chapter/${nextChapter.id}`} : undefined} />
+          <WelcomeHero key={profile?.id ?? state.mode} courseJourney={courseJourney} headingRef={heading} profileKey={profile?.id} nextDestination={nextChapter ? {title:language==='ru' ? nextChapter.title_ru : nextChapter.title,href:nextChapter.active_attempt_id ? `#journey/checkpoint/${nextChapter.active_attempt_id}` : courseHref(progression.data?.course?.release_id,nextChapter.id)} : undefined} />
           <section class="home-section" aria-labelledby="choose-practice">
             <div>
             <div class="section-heading"><div><h2 id="choose-practice" ref={practiceHeading} tabIndex={-1}>Choose what to practise</h2>{legacy && <p>Read a story, try a game or spend some time with your words.</p>}</div></div>

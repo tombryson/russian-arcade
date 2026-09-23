@@ -119,6 +119,41 @@ class CourseIntegrationTests(unittest.TestCase):
         with transaction(self.db) as conn:
             self.assertEqual(conn.execute('SELECT release_id FROM course_enrolments WHERE profile_id=?', (self.pid,)).fetchone()[0], 'a1-journey-v2')
 
+    def test_explicit_course_identity_is_read_only_and_unknown_levels_stay_unavailable(self):
+        with transaction(self.db) as conn:
+            before = [tuple(row) for row in conn.execute('SELECT * FROM course_enrolments')]
+        historical = self.client.get('/api/v1/course?release_id=a1-v1&band=A1')
+        self.assertEqual(historical.status_code, 200)
+        self.assertEqual(historical.json['release_id'], 'a1-v1')
+        self.assertEqual(historical.json['current_release_id'], 'a1-journey-v2')
+        self.assertFalse(historical.json['is_current_release'])
+        self.assertEqual(self.client.get('/api/v1/course?band=A1').json['release_id'], 'a1-journey-v2')
+        for query, status, code in [('band=A2', 404, 'course_release_unavailable'),
+                                    ('release_id=not-published', 404, 'course_release_unavailable'),
+                                    ('release_id=a1-v1&band=A2', 400, 'invalid_input'),
+                                    ('band=', 400, 'invalid_input'),
+                                    ('release_id=a1-v1&release_id=a1-journey-v2', 400, 'invalid_input')]:
+            with self.subTest(query=query):
+                response = self.client.get('/api/v1/course?' + query)
+                self.assertEqual(response.status_code, status)
+                self.assertEqual(response.json['error']['code'], code)
+        self.post('chapters/a1-post-office/checkpoint', {'request_id': 'historical-start', 'release_id': 'a1-v1', 'challenge': True}, 409)
+        with transaction(self.db) as conn:
+            self.assertEqual([tuple(row) for row in conn.execute('SELECT * FROM course_enrolments')], before)
+
+    def test_preparation_receipt_stays_bound_after_enrolment_changes(self):
+        body = {'request_id': 'bound-preparation', 'release_id': 'a1-journey-v2'}
+        saved = self.post('chapters/home/practice', body)
+        self.assertEqual(saved['target_catalogue_version'], 'a1-targets-v1')
+        self.assertEqual(saved['content_version'], 'a1-target-practice-v1')
+        self.assertEqual(saved['coverage']['practice_href'], '/#journey/release/a1-journey-v2/practice/start/home')
+        with transaction(self.db, write=True) as conn:
+            conn.execute("UPDATE course_enrolments SET release_id='a1-v1' WHERE profile_id=?", (self.pid,))
+        self.assertEqual(self.post('chapters/home/practice', body), saved)
+        self.assertEqual(self.client.get('/api/v1/course/practice/' + saved['id']).json, saved)
+        self.post('chapters/home/practice', dict(body, request_id='new-start'), 409)
+        self.post('chapters/home/practice', dict(body, release_id='a1-v1'), 409)
+
     def test_legacy_letter_has_no_native_card_generation_contract(self):
         with transaction(self.db, write=True) as conn:
             conn.execute("INSERT OR REPLACE INTO course_enrolments VALUES (?,'A1','a1-v1',1,'schema-044')", (self.pid,))

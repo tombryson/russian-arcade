@@ -32,9 +32,9 @@ Other tables link to numeric IDs. The lemma’s spelling is not the primary key.
 
 The uniqueness rule permits separate noun and verb entries for **печь**. It does not separate meanings that share both spelling and part of speech. The older importer also skips a lemma if that spelling already exists. It therefore does not make full use of this schema rule.
 
-Tags describe the form’s grammar. Nouns have tags such as case, number, gender and animacy. Verb tags include tense, aspect, mood, person and number. Participles also need voice and agreement details. The importer currently omits some of these features, as described below.
+Tags describe the form’s grammar. New imports retain the analyser's exact form POS (`ADJF`, `ADJS`, `PRTF`, `PRTS`, `GRND`, and so on), case, number, gender, animacy and applicable verbal features. The lemma's broader POS label remains separate. Older form rows retain their original tags and IDs.
 
-SQLite compares the stored JSON text when checking uniqueness. Different key order or spacing can make equivalent tags appear different. The original importer sorts keys before saving them. Other writers need consistent formatting too.
+SQLite compares the stored JSON text when checking uniqueness. Different key order or spacing can make equivalent tags appear different. The importer uses `form_selection.canonical_tags` with sorted keys and the existing spacing convention. Explicit lexical backfill compares decoded tags so equivalent key ordering does not create another row. Other writers still need consistent formatting too.
 
 ## Form generation pipeline
 
@@ -59,22 +59,22 @@ The ranking formula is `analyser score + frequency × 1,000,000`. It favours com
 | Full/short participle (`PRTF`, `PRTS`) | Reject frequency below `2e-6` | Uses a stricter threshold to reduce uncommon participles. |
 | Finite verb/infinitive (`VERB`, `INFN`) | Reject zero-frequency candidates | Removes forms absent from the frequency lookup. This does not prove they are invalid. |
 | Adjective/short adjective/comparative (`ADJF`, `ADJS`, `COMP`) | Reject zero-frequency candidates | Applies the same frequency check. |
-| Superlative | Reject below `1e-7` if the tag exposes `degree == 'Supr'` | Depends on the analyser’s tag API. The source check alone does not establish that it works. |
+| Superlative | Reject below `1e-7` when the analyser includes `Supr` | Uses the actual analyser grammeme, rather than an unavailable degree accessor. |
 | Neuter noun form ending in `ь` | Reject unless it matches the lemma | A legacy filter for a specific spelling/tag combination. |
 
 Frequency estimates come from language data, not the learner’s vocabulary. The thresholds are roughly 0.6 occurrences per million for nouns and 2 per million for participles. Useful specialist or literary forms may fall below them.
 
-The stopping thresholds are 12 for nouns and 24 for adjectives. A shared counter tracks accepted candidates, including duplicates. These limits therefore do not guarantee 12 or 24 distinct stored forms. The service follows dictionary order, rather than ranking all forms by frequency.
+The limits are 12 distinct noun readings and 24 distinct full-adjective readings, in dictionary order. Reaching the full-adjective limit no longer stops traversal before short adjectives or comparatives. Short forms still follow their frequency rules and have no invented case tag.
 
 The stored forms are a study selection, not a complete dictionary entry. Some lemmas may have no forms left after filtering.
 
-### Deduplication and information loss
+### Deduplication and historical information loss
 
 Duplicate detection compares spelling and saved tags. Noun forms with different case or number tags remain separate.
 
-For adjectives and participles, the code removes `case` and `animacy` before saving. It also removes plural gender, which is redundant for those forms. Removing case can merge readings needed for targeted practice. The participle branch already omits case, and the verb branch omits past-tense gender.
+New imports preserve case and animacy before deduplication, including separate genitive and animate accusative readings of the same adjective or participle spelling. Past-tense verb gender and participle aspect/voice remain available. Full and short forms have distinct POS tags; a short adjective does not require a case.
 
-The adjective branch requires a case tag, so it can exclude short adjectives. Part-of-speech labels also vary between older scripts and newer services.
+Older imports lost some of these distinctions. No automatic backfill rewrites those rows or guesses which reading an old card intended. An explicit lexical backfill may add newly identified analyses alongside them while retaining old IDs, scores and card/review links. Part-of-speech labels still vary in historical data and some contextual writers.
 
 ### Lemma and form difficulty
 
@@ -84,7 +84,7 @@ The importer estimates lemma difficulty on a 1–5 scale using rarity and spelli
 - Add 2 when tags identify a participle.
 - Cap the result at 8.
 
-An intended +2 adjustment for adverbial participles (`GRND`, also called gerunds) looks for a tag the relevant branch does not save. That adjustment is therefore unreliable.
+The same +2 adjustment now applies to new adverbial-participle (`GRND`, also called gerund) forms using their saved POS. Existing nonzero difficulty values remain unchanged.
 
 These scores help filter vocabulary. They are separate from curriculum task levels, learner skill estimates and the FSRS scheduler’s difficulty values.
 
@@ -122,7 +122,9 @@ Native card counts come from published, active cards. The historical `words.coun
 
 The [native batch selector](../flask_vocab_app/services/card_generation.py) filters words by topic, part of speech and active card count. It can filter forms by case and by form difficulty, using lemma difficulty when a form's score is missing. A lemma without stored forms is eligible for a difficulty filter only when its own score matches; a case filter requires a matching stored form.
 
-[Form selection](../flask_vocab_app/services/form_selection.py) uses previous native generation selections to favour less-used words. Within a word, it ranks eligible forms by commonness, previous form use, previous use of the case/tense/person/number combination, whether the spelling differs from the lemma, frequency and ID. This is deterministic rotation, unlike the Anki generator's random choice. Non-failed generation selections contribute to this history; they do not establish learner mastery. Explicit lesson selections retain their original form.
+[Form selection](../flask_vocab_app/services/form_selection.py) uses previous native generation selections to favour less-used words. Within a word, it ranks eligible forms by commonness, previous form use, previous use of the grammatical reading, whether the spelling differs from the lemma, frequency and ID. Reading groups include POS, case, agreement and verbal features, so distinct gender or aspect readings no longer share a bucket merely because their tense matches. This is deterministic rotation, unlike the Anki generator's random choice. Non-failed generation selections contribute to this history; they do not establish learner mastery. Explicit lesson selections retain their original form.
+
+Tasks can call `choose_form(..., constraints={'case': 'accs', 'number': 'sing', 'animacy': 'anim'})`. Each named analyser tag accepts one value or a nonempty collection of alternatives. All constraints must match before the existing frequency and rotation ranking applies; missing historical tags do not count as a match. No compatible form returns `None`, which a targeted task must handle as unavailable rather than substitute a lemma. A rare stored form can be selected when it is the compatible reading. These constraints express morphology, not a semantic function such as possession: the saved sentence and task contract establish that function. They add no new learner-facing filter or automatic backfill.
 
 ## Lesson and game integration
 
@@ -162,9 +164,9 @@ Part of speech, grammatical form and contextual meaning are separate concerns. N
 Recommended follow-up work:
 
 1. Share one form-selection policy across Anki, native generation and games, while preserving lesson-specific occurrences.
-2. Extend the existing rotation to select forms for a named grammatical function and distinguish ambiguous readings of the same spelling.
-3. Preserve case, animacy and relevant gender tags before removing duplicates.
-4. Standardise part-of-speech names and JSON formatting. Query tag values directly.
+2. Connect task grammatical constraints to reviewed functions and sentences; morphology alone cannot establish the intended meaning.
+3. Audit incomplete historical tags without relabelling old cards or replacing linked forms.
+4. Extend canonical part-of-speech names and JSON formatting to remaining writers. Query tag values directly.
 5. Make frequency thresholds and form limits explicit import settings, with a preview of what will be excluded.
 6. Handle ambiguous lemma and part-of-speech readings consistently across capture paths.
 7. Test difficult examples—homographs, short forms, participles, past-tense gender, low-frequency vocabulary and ё/е—before backfilling existing records.

@@ -3,7 +3,7 @@ import {fireEvent,render,screen,waitFor} from '@testing-library/preact';
 import {CoursePreparation,type CoursePractice} from './CoursePreparation';
 import type {ProgressionState} from './Progression';
 const progression={data:{profile_id:'p',course:{release_id:'a1-journey-v2'}},refresh:vi.fn(),loading:false,error:''} as unknown as ProgressionState;
-const practice=():CoursePractice=>({id:'practice-1',profile_id:'p',section_id:'home',status:'active',completed_count:0,total_count:1,current_item:{id:'item-1',target_id:'target-1',title:'A family member',title_ru:'Член семьи',stage:'learn',teaching:{explanation:'Use моя before сестра.',explanation_ru:'Перед словом «сестра» употребляем «моя».',example_ru:'Это моя сестра.',example_en:'This is my sister.'},question:{prompt:'Which phrase fits?',prompt_ru:'Какой вариант подходит?',choices:[{id:'right',text:'Моя сестра'},{id:'wrong',text:'Мой сестра'}]},hint:null,feedback:null,listened:false,transcript:null},coverage:{required_count:1,prepared_count:0,ready:false,targets:[]}});
+const practice=():CoursePractice=>({id:'practice-1',release_id:'a1-journey-v2',target_catalogue_version:'a1-targets-v1',content_version:'a1-target-practice-v1',profile_id:'p',section_id:'home',status:'active',completed_count:0,total_count:1,current_item:{id:'item-1',target_id:'target-1',title:'A family member',title_ru:'Член семьи',stage:'learn',teaching:{explanation:'Use моя before сестра.',explanation_ru:'Перед словом «сестра» употребляем «моя».',example_ru:'Это моя сестра.',example_en:'This is my sister.'},question:{prompt:'Which phrase fits?',prompt_ru:'Какой вариант подходит?',choices:[{id:'right',text:'Моя сестра'},{id:'wrong',text:'Мой сестра'}]},hint:null,feedback:null,listened:false,transcript:null},coverage:{required_count:1,prepared_count:0,ready:false,targets:[]}});
 function serve(handler:(url:string,body:any)=>unknown){const fetch=vi.fn(async(url:string,options?:RequestInit)=>({ok:true,json:async()=>handler(url,options?.body?JSON.parse(String(options.body)):undefined)}));vi.stubGlobal('fetch',fetch);return fetch;}
 beforeEach(()=>{window.location.hash='';});afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks();});
 describe('Milestone target practice',()=>{
@@ -16,7 +16,7 @@ describe('Milestone target practice',()=>{
     await screen.findByText('Use моя before сестра.');expect(screen.queryByRole('radio')).toBeNull();
     fireEvent.click(screen.getByRole('button',{name:'Try it →'}));fireEvent.click(await screen.findByRole('radio',{name:'Моя сестра'}));fireEvent.click(screen.getByRole('button',{name:'Check answer'}));
     expect(await screen.findByText('That’s right.')).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'Finish practice →'}));
-    await screen.findByRole('heading',{name:'Practice saved'});expect(screen.getByRole('link',{name:'Continue the milestone →'}).getAttribute('href')).toBe('#journey/chapter/home');
+    await screen.findByRole('heading',{name:'Practice saved'});expect(screen.getByRole('link',{name:'Continue the milestone →'}).getAttribute('href')).toBe('#journey/release/a1-journey-v2/chapter/home');
     const commands=fetch.mock.calls.filter(([,options])=>options?.method==='POST');expect(commands.map(([url])=>url.split('/').at(-1))).toEqual(['learn','answer','next']);
     expect(JSON.parse(String(commands[1][1]?.body))).toMatchObject({item_id:'item-1',choice_id:'right'});
   });
@@ -116,5 +116,62 @@ describe('Preparation audio recovery',()=>{
     fireEvent(oldRecording,new Event('ended'));fireEvent(oldRecording,new Event('error'));rejectPlayback(new Error('Old player failed'));
     await waitFor(()=>expect(screen.queryByRole('alert')).toBeNull());
     expect(fetch.mock.calls.filter(([,options])=>options?.method==='POST')).toHaveLength(0);
+  });
+});
+
+describe('Release-scoped preparation navigation',()=>{
+  it('retains known release identity through an exact legacy action receipt',async()=>{
+    const current=practice();
+    const receipt={...current,release_id:undefined,target_catalogue_version:undefined,content_version:undefined,status:'completed',current_item:null,completed_count:1} as CoursePractice;
+    const fetch=serve(url=>url.endsWith('/learn')?receipt:current);
+    const changed={...progression,data:{...progression.data!,course:{...progression.data!.course!,release_id:'a1-v1'}}};
+    render(<CoursePreparation practiceId="practice-1" progression={changed}/>);
+    fireEvent.click(await screen.findByRole('button',{name:'Try it →'}));
+    expect((await screen.findByRole('link',{name:'Continue the milestone →'})).getAttribute('href')).toBe('#journey/release/a1-journey-v2/chapter/home');
+    expect(screen.getByRole('link',{name:'← Milestone practice'}).getAttribute('href')).toBe('#journey/release/a1-journey-v2/chapter/home');
+    expect(fetch.mock.calls.map(([url])=>url)).toEqual(['/api/v1/course/practice/practice-1','/api/v1/course/practice/practice-1/learn']);
+    expect(receipt.release_id).toBeUndefined();
+  });
+  it.each(['id','profile_id','section_id','release_id','target_catalogue_version','content_version'] as const)('rejects an action receipt with a different %s',async(field)=>{
+    const current=practice();
+    const receipt={...current,[field]:'different',status:'completed',current_item:null,completed_count:1};
+    serve(url=>url.endsWith('/learn')?receipt:current);
+    render(<CoursePreparation practiceId="practice-1" progression={progression}/>);
+    fireEvent.click(await screen.findByRole('button',{name:'Try it →'}));
+    await screen.findByRole('alert');
+    expect(screen.queryByRole('heading',{name:'Practice saved'})).toBeNull();
+    expect(screen.queryByRole('link',{name:'Continue the milestone →'})).toBeNull();
+  });
+  it('returns saved practice to its own release despite a changed current journey',async()=>{
+    const fetch=serve(()=>({...practice(),status:'completed',current_item:null,completed_count:1}));
+    const changed={...progression,data:{...progression.data!,course:{...progression.data!.course!,release_id:'a1-v1'}}};
+    render(<CoursePreparation practiceId="practice-1" progression={changed}/>);
+    const link=await screen.findByRole('link',{name:'Continue the milestone →'});
+    expect(link.getAttribute('href')).toBe('#journey/release/a1-journey-v2/chapter/home');
+    expect(fetch.mock.calls.map(([url])=>url)).toEqual(['/api/v1/course/practice/practice-1']);
+    expect(fetch.mock.calls.every(([,options])=>options?.method==='GET')).toBe(true);
+  });
+  it('binds new requests to their explicit release and ignores a stale same-section response',async()=>{
+    let resolveOld!:(value:CoursePractice)=>void;
+    const next={...practice(),id:'practice-2',release_id:'a1-v1',current_item:{...practice().current_item!,title:'Current practice'}};
+    const fetch=serve((_url,body)=>body?.release_id==='a1-journey-v2' ? new Promise<CoursePractice>(resolve=>{resolveOld=resolve;}) : next);
+    const view=render(<CoursePreparation releaseId="a1-journey-v2" sectionId="home" progression={progression}/>);
+    await waitFor(()=>expect(fetch).toHaveBeenCalledOnce());
+    view.rerender(<CoursePreparation releaseId="a1-v1" sectionId="home" progression={progression}/>);
+    await screen.findByRole('heading',{name:'Current practice'});
+    resolveOld(practice());
+    await waitFor(()=>expect(screen.queryByRole('heading',{name:'A family member'})).toBeNull());
+    const bodies=fetch.mock.calls.map(([,options])=>JSON.parse(String(options?.body)));
+    expect(bodies.map(body=>body.release_id)).toEqual(['a1-journey-v2','a1-v1']);
+    expect(bodies[0].request_id).not.toBe(bodies[1].request_id);
+    expect(window.location.hash).toBe('#journey/practice/practice-2');
+  });
+  it('keeps unknown saved content unavailable without restarting against the current release',async()=>{
+    const fetch=vi.fn(async(_url:string,_options?:RequestInit)=>({ok:false,json:async()=>({error:{code:'practice_content_unavailable',message:'This saved preparation version is unavailable.'}})}));
+    vi.stubGlobal('fetch',fetch);
+    render(<CoursePreparation practiceId="saved-unknown" progression={progression}/>);
+    expect((await screen.findByRole('alert')).textContent).toContain('This saved preparation version is unavailable.');
+    expect(screen.queryByRole('button',{name:'Try it →'})).toBeNull();
+    expect(fetch.mock.calls.map(([url])=>url)).toEqual(['/api/v1/course/practice/saved-unknown']);
   });
 });

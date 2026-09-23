@@ -14,6 +14,7 @@ import re
 import wave
 
 from services.speech_provider import SpeechError
+from services.speaking_evidence import validate_speaking_contract, validate_speaking_judgements
 
 logger = logging.getLogger(__name__)
 
@@ -206,7 +207,7 @@ def _quotes(value, transcript, *, limit=3, russian=False):
     return value
 
 
-def validate_assessment(result, goals, language='en'):
+def validate_assessment(result, goals, language='en', *, curriculum_contract=None, audio_duration_ms=None):
     """Reject ungrounded output; withhold scores when the sample cannot support them.
 
     Quote matching verifies internal consistency, not acoustic truth. The returned
@@ -214,8 +215,9 @@ def validate_assessment(result, goals, language='en'):
     """
     if language not in ('en', 'ru'):
         raise ValueError('Unsupported feedback language')
-    _object(result, ('transcript', 'speech_status', 'uncertain_phrases', 'grammar', 'fluency',
-                     'goals', 'summary', 'next_step', 'corrections', 'uncertainty'))
+    fields = ('transcript', 'speech_status', 'uncertain_phrases', 'grammar', 'fluency',
+              'goals', 'summary', 'next_step', 'corrections', 'uncertainty')
+    _object(result, fields + (('criterion_report',) if curriculum_contract is not None else ()))
     transcript = _text(result['transcript'], 24000, empty=True)
     status = result['speech_status']
     if status not in ('russian', 'mixed', 'no_russian', 'insufficient', 'unclear'):
@@ -286,6 +288,10 @@ def validate_assessment(result, goals, language='en'):
                 or original == correction['replacement'] or not certain(original)
                 or status in ('no_russian', 'unclear')):
             raise ValueError('Correction without clear Russian evidence')
+    if curriculum_contract is not None:
+        validate_speaking_judgements(curriculum_contract, result, audio_duration_ms)
+        for judgement in result['criterion_report']['judgements']:
+            _prose_language(judgement['feedback'], language)
     return result
 
 
@@ -293,7 +299,7 @@ class SpeakingAssessment:
     def __init__(self, config):
         self.config = config_snapshot(config)
 
-    def assess(self, audio_path, scenario, dialogue, language='en'):
+    def assess(self, audio_path, scenario, dialogue, language='en', *, curriculum_contract=None):
         if not self.config.get('OPENAI_API_KEY'):
             logger.warning('Speaking feedback unavailable: OPENAI_API_KEY is not configured')
             raise SpeechError('Speaking feedback is currently unavailable. Your recording is saved.')
@@ -312,9 +318,32 @@ class SpeakingAssessment:
                     raise ValueError('Invalid learner audio')
             audio_bytes = path.read_bytes()
             goals = assessment_goals(scenario)
+            contract = validate_speaking_contract(curriculum_contract, scenario) if curriculum_contract is not None else None
             context = {'scenario': {**scenario, 'goals': goals},
                        'other_speaker_context': _assistant_context(dialogue),
                        'interface_language': 'Russian' if language == 'ru' else 'English'}
+            instruction = _INSTRUCTIONS + _language_instruction(language)
+            duration_ms = frames * 1000 // rate
+            if contract is not None:
+                context['curriculum_contract'] = contract
+                context['original_audio_duration_ms'] = duration_ms
+                instruction += '''
+For this task extend the JSON object above with exactly one additional field: criterion_report.
+It contains contract_sha256 (the supplied frozen hash) and judgements (one per saved criterion, no others).
+Each judgement has exactly criterion_id, outcome, score, feedback and evidence.
+outcome is satisfied, partial, not_satisfied or insufficient_evidence; score is respectively the criterion maximum,
+a number strictly between zero and maximum, zero, or null. feedback is one short explanation in the interface language.
+evidence is an array of at most 12 objects with exactly integer start_ms and end_ms, measured from the START OF
+THE SUPPLIED UNTRIMMED AUDIO, including silence. Require 0 <= start_ms < end_ms <= original_audio_duration_ms.
+Scored criteria require actual audible learner evidence at these intervals, never ASR, a repaired transcript,
+other-speaker captions, the scenario's goal status or an expected example. Do not invent precise timestamps.
+If the relevant speech or its timing cannot be located confidently, use insufficient_evidence with score null.
+If speech_status is no_russian or unclear, or any uncertain_phrases are reported, leave all criteria unscored.
+A short clear question such as «Где парк?» can satisfy the narrow location criterion even when speech_status is
+insufficient and grammar/fluency scores are null because the sample is short. Do not require eight words for this criterion.
+Judge only the elicited location question, not all goals or the whole reference requirement. Accept alternative phrasing.
+These are fallible diagnostic observations; support use and independence are unverified. Do not claim mastery,
+proficiency, a pass or rewards. Never return audio hashes, source metadata or an independence claim.'''
         except (OSError, ValueError, TypeError, AttributeError, wave.Error, EOFError):
             raise SpeechError('The saved recording could not be prepared for feedback. It has been kept.') from None
 
@@ -325,7 +354,7 @@ class SpeakingAssessment:
             # JSON text and validate it locally instead of passing json_schema.
             response = client.chat.completions.create(
                 model=model, modalities=['text'], store=False, max_completion_tokens=6000,
-                messages=[{'role': 'system', 'content': _INSTRUCTIONS + _language_instruction(language)},
+                messages=[{'role': 'system', 'content': instruction},
                           {'role': 'user', 'content': [
                               {'type': 'text', 'text': json.dumps(context, ensure_ascii=False)},
                               {'type': 'input_audio', 'input_audio': {
@@ -336,7 +365,8 @@ class SpeakingAssessment:
             content = choice.message.content
             if not isinstance(content, str) or len(content) > 50000:
                 raise ValueError('Invalid response')
-            result = validate_assessment(json.loads(content), goals, language)
+            result = validate_assessment(json.loads(content), goals, language,
+                                         curriculum_contract=contract, audio_duration_ms=duration_ms)
         except TrialDenied:
             raise
         except Exception:

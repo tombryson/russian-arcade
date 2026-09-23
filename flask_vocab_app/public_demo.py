@@ -18,7 +18,7 @@ READ_ENDPOINTS = frozenset({
     'public_demo_account',
     'word_post.home', 'word_post.legacy_home', 'word_post.assets', 'word_post.licenses', 'static',
     'ui_preferences.appearance',
-    'curriculum.index',
+    'curriculum.index', 'curriculum.unit_page', 'learning.read_session',
     'vocab.vocab_list', 'vocab.inventory', 'learning.state', 'learning.asset',
     'live_conversation.scenarios', 'live_conversation.options', 'user_sessions.read',
     'step_conversation.options', 'step_conversation.history',
@@ -37,6 +37,7 @@ WRITE_ENDPOINTS = frozenset({
     'native_review.command', 'native_review.suspension', 'set_ui_language',
     'ui_preferences.set_navigation',
     'journey_games.start', 'journey_games.command', 'journey_games.route_command',
+    'curriculum.unit_start', 'learning.attempt', 'learning.help_item',
 })
 
 
@@ -122,6 +123,8 @@ def install_demo(app):
         if request.endpoint == 'journey_games.start':
             from services.demo_games import SAMPLE_GAMES
             allowed = allowed and request.view_args.get('game_id') in SAMPLE_GAMES
+        if request.endpoint == 'curriculum.unit_start':
+            allowed = allowed and request.view_args.get('activity') in {'practice', 'forms'}
         if request.endpoint == 'journey_games.command':
             allowed = allowed and request.view_args.get('operation') in {'hint', 'answer', 'continue', 'complete', 'retry', 'review', 'practice_answer', 'practice_continue', 'practice_exit', 'practice_hint'}
         if not allowed:

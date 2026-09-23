@@ -8,6 +8,8 @@ import wave
 
 from repositories.learning_repository import LearningError, encoded, timestamp, transaction
 from services.speech_provider import SpeechError
+from services.activity_evidence import load_contract, save_report
+from services.speaking_evidence import recorded_audio_source, verify_audio_source, validate_speaking_judgements
 
 
 class SpeakingReviewService:
@@ -60,6 +62,10 @@ class SpeakingReviewService:
         try:
             with transaction(self.db_path) as conn:
                 session = dict(conn.execute('SELECT * FROM live_conversation_sessions WHERE id=?', (sid,)).fetchone())
+                previous = conn.execute('SELECT state FROM speaking_reviews WHERE session_id=?', (sid,)).fetchone()
+                if previous is not None and previous[0] == 'ready':
+                    return
+                contract = load_contract(conn, session['profile_id'], 'speaking', sid)
                 recordings = [dict(r) for r in conn.execute('SELECT * FROM live_conversation_recordings WHERE session_id=? ORDER BY ordinal', (sid,))]
                 # Assistant context only: the independent audio pass must not be
                 # primed with an ASR system's possibly corrected learner words.
@@ -81,10 +87,22 @@ class SpeakingReviewService:
             # This temporary copy is private and removed on success or failure.
             with tempfile.TemporaryDirectory(prefix='review-', dir=self.root) as directory:
                 audio_path = Path(directory) / 'learner.wav'
-                self._assemble(recordings, audio_path)
-                report = self.assessor.assess(audio_path, json.loads(session['scenario_json']), dialogue, session['language'])
+                source = self._assemble(recordings, audio_path)
+                options = {'curriculum_contract': contract} if contract is not None else {}
+                report = self.assessor.assess(audio_path, json.loads(session['scenario_json']), dialogue, session['language'], **options)
+                if contract is not None:
+                    validate_speaking_judgements(contract, report, source['duration_ms'])
+                    report = {**report, 'audio_source': source}
+                elif 'criterion_report' in report or 'audio_source' in report:
+                    raise ValueError('An old Speaking task cannot acquire criterion evidence after the conversation.')
             with transaction(self.db_path, write=True) as conn:
+                if contract is not None:
+                    # Re-read both persisted metadata and original bytes after
+                    # provider work, before committing any report or rewards.
+                    verify_audio_source(conn, session['profile_id'], sid, source, audio_root=self.root)
                 conn.execute("UPDATE speaking_reviews SET state='ready',report_json=?,error=NULL,lease_until=0,updated_at=? WHERE session_id=?", (encoded(report),timestamp(),sid))
+                if contract is not None:
+                    save_report(conn, session['profile_id'], 'speaking', sid, sid, report['criterion_report'], audio_source=source)
                 from services.progression import award_speaking
                 award_speaking(conn, session, report)
                 from services.course_targets import record_speaking_targets
@@ -99,20 +117,8 @@ class SpeakingReviewService:
                 self.dispatch()
 
     def _assemble(self, recordings, target):
-        position = 0
-        with wave.open(str(target), 'wb') as output:
-            output.setparams((1,2,24000,0,'NONE','not compressed'))
-            for row in recordings:
-                if row['state'] == 'capturing' or Path(row['filename']).name != row['filename']:
-                    raise SpeechError('The recording is incomplete. Recover the saved audio before reviewing it.')
-                with wave.open(str(self.root / row['filename']), 'rb') as source:
-                    count = source.getnframes()
-                    if source.getparams()[:3] != (1,2,24000) or row['start_sample'] != position or count != row['sample_count']:
-                        raise SpeechError('The recording has a gap. It cannot be reliably graded as a whole conversation.')
-                    position += count
-                    if position > 320 * 24000:
-                        raise SpeechError('This recording is too long for one speaking review.')
-                    data = source.readframes(count)
-                    if len(data) != count * 2:
-                        raise SpeechError('Part of the recording is missing. Please try another conversation.')
-                    output.writeframes(data)
+        try:
+            return recorded_audio_source(recordings, self.root, target_path=target)
+        except (ValueError, OSError, wave.Error, EOFError) as error:
+            raise SpeechError(str(error) if isinstance(error, ValueError) else
+                              'The saved recording could not be read safely. It has been kept.') from error

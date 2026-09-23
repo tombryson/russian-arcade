@@ -15,14 +15,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'flask_vocab_app'))
 KNOWN = {'a1-v1': {'a1-post-office', 'a1-home', 'a1-market', 'a1-delivery'},
          'a1-journey-v2': {'home', 'postoffice', 'market', 'leavingtown'}}
 PRESERVE = ('course_checkpoint_attempts', 'course_checkpoint_requests', 'course_checkpoint_submissions',
-            'course_chapter_passes', 'course_evidence', 'course_continuation_entitlements')
+            'course_chapter_passes', 'course_evidence', 'course_continuation_entitlements',
+            'course_enrolments', 'course_target_observations', 'course_target_practice_attempts',
+            'course_target_practice_requests', 'course_target_practice_receipts',
+            'course_release_switches', 'course_checkpoint_followups',
+            'activity_task_contracts', 'activity_criterion_reports')
 
 
 def inventory(conn):
     tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     result = {'schema': conn.execute('SELECT MAX(version) FROM schema_migrations').fetchone()[0],
               'counts': {name: conn.execute('SELECT COUNT(*) FROM ' + name).fetchone()[0] for name in PRESERVE if name in tables},
-              'foreign_key_errors': len(conn.execute('PRAGMA foreign_key_check').fetchall()), 'unknown_sections': 0}
+              'foreign_key_errors': len(conn.execute('PRAGMA foreign_key_check').fetchall()),
+              'integrity_errors': sum(row[0] != 'ok' for row in conn.execute('PRAGMA integrity_check')),
+              'unknown_sections': 0, 'unknown_preparations': 0}
     if 'course_checkpoint_attempts' in tables:
         columns = {row[1] for row in conn.execute('PRAGMA table_info(course_checkpoint_attempts)')}
         release = 'release_id' if 'release_id' in columns else "'a1-v1'"
@@ -30,6 +36,18 @@ def inventory(conn):
         for edition, section in conn.execute('SELECT ' + release + ',chapter_id FROM course_checkpoint_attempts'):
             if section not in KNOWN.get(edition, set()):
                 result['unknown_sections'] += 1
+    if 'course_target_practice_attempts' in tables:
+        from repositories.learning_repository import LearningError
+        from services.course_targets import _practice_context, CATALOGUE_VERSION, PREPARATION_RELEASE
+        cursor = conn.cursor()
+        cursor.row_factory = sqlite3.Row
+        for row in cursor.execute('SELECT * FROM course_target_practice_attempts'):
+            saved = {'release_id': PREPARATION_RELEASE, 'target_catalogue_version': CATALOGUE_VERSION,
+                     'target_snapshot_json': None, **dict(row)}
+            try:
+                _practice_context(saved)
+            except (LearningError, ValueError, TypeError, KeyError):
+                result['unknown_preparations'] += 1
     return result
 
 
@@ -47,7 +65,7 @@ def main():
         raise SystemExit('Database not found.')
     with sqlite3.connect(args.db.resolve().as_uri() + '?mode=ro', uri=True) as source:
         report = inventory(source)
-        if report['foreign_key_errors'] or report['unknown_sections']:
+        if any(report[key] for key in ('foreign_key_errors', 'integrity_errors', 'unknown_sections', 'unknown_preparations')):
             print(json.dumps(report, indent=2))
             raise SystemExit('Resolve course integrity findings before release.')
         if args.rehearse:

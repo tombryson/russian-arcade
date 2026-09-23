@@ -161,6 +161,32 @@ class AccountImportTests(unittest.TestCase):
             build_account_import(self.local, self.hosted, self.output)
         self.assertFalse(self.output.exists())
 
+    def test_local_versioned_preparation_and_receipts_survive_import(self):
+        from services.course_targets import practice_start, practice_action
+        tables = ('course_target_practice_attempts', 'course_target_practice_requests',
+                  'course_target_practice_receipts', 'course_target_observations')
+        with sqlite3.connect(self.local) as conn:
+            conn.row_factory = sqlite3.Row
+            attempt = practice_start(conn, 'personal-learning', 'home', 'preparation', release_id='a1-journey-v2')
+            practice_action(conn, 'personal-learning', attempt['id'], 'learn',
+                            {'item_id': attempt['current_item']['id']}, 'learn')
+            saved = {table: [tuple(row) for row in conn.execute('SELECT * FROM ' + table)] for table in tables}
+        build_account_import(self.local, self.hosted, self.output)
+        with sqlite3.connect(self.output) as conn:
+            for table, rows in saved.items():
+                self.assertEqual(conn.execute('SELECT * FROM ' + table).fetchall(), rows)
+            self.assertEqual(conn.execute('PRAGMA foreign_key_check').fetchall(), [])
+
+    def test_hosted_preparation_still_requires_an_explicit_merge_policy(self):
+        from services.course_targets import practice_start
+        with sqlite3.connect(self.hosted) as conn:
+            practice_start(conn, 'personal-learning', 'home', 'hosted-preparation')
+        before = (digest(self.local), digest(self.hosted))
+        with self.assertRaisesRegex(ImportConflict, 'additional merge policy: .*course_target_practice_attempts'):
+            build_account_import(self.local, self.hosted, self.output)
+        self.assertFalse(self.output.exists())
+        self.assertEqual(before, (digest(self.local), digest(self.hosted)))
+
     def test_hosted_earned_access_requires_a_policy_even_without_attempt_history(self):
         with sqlite3.connect(self.hosted) as conn:
             conn.execute("INSERT INTO course_continuation_entitlements VALUES ('personal-learning','A2','a1-v1','legacy-course-completion',100)")

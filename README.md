@@ -64,7 +64,7 @@ The guided course adds four A1 milestones, three assessment variants per stop an
 
 A separate [A1–B2 reference](docs/curriculum-requirements.md) records 239 observable requirements from published TORFL standards and sample tests. It covers language use, reading, listening, writing and speaking. The [research review](docs/curriculum-research.md) explains the source editions and assessment limits.
 
-The [curriculum implementation plan](docs/curriculum-uplift-plan.md) specifies the remaining teaching coverage, activity evidence, five-domain assessment and migration work. These are planned releases, not completed proficiency assessments.
+The first [curriculum implementation](docs/curriculum-implementation.md) adds an A1 location-and-destination unit, contextual questions, typed forms and a Writing task. New A1–B2 Writing tasks link explicit instructions to the reference requirements. Selected A1 Speaking tasks also save criteria and review the original audio. These results are diagnostic; existing milestone passes stay unchanged. The [implementation plan](docs/curriculum-uplift-plan.md) records the remaining teaching and five-domain assessment work.
 
 The [course catalogue](https://russian-arcade.fly.dev/curriculum) lists the topics and opens practice for each one. It does not add words automatically. Saving vocabulary still uses the existing lemma, form, topic and mnemonic pipeline.
 
@@ -333,6 +333,8 @@ Historical scripts may retain machine-specific assumptions; read them before run
 - [Architecture](docs/architecture.md), [development](docs/development.md) and [operations](docs/operations.md)
 - [Curriculum: topics, vocabulary and grammar](docs/curriculum.md)
 - [Curriculum and assessment implementation plan](docs/curriculum-uplift-plan.md)
+- [Curriculum implementation status](docs/curriculum-implementation.md)
+- [Curriculum coverage inventory](docs/curriculum-coverage.md)
 - [Vocabulary database and form-generation rules](docs/vocabulary-data-model.md)
 - [Drive/SQLite synchronisation contract](docs/synchronization.md)
 - [Native flashcards](docs/word-post/native-flashcards.md) and [vocabulary library](docs/word-post/vocabulary-library.md)

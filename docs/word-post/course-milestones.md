@@ -55,6 +55,8 @@ Anonymous demo visitors can use the authored preparation and letters without AI 
 
 Schema 045 identifies course releases and preserves earned A2 access. Schema 046 adds target observations and resumable preparation. Schema 047 adds assessment drafts, explicit release switches and follow-up references.
 
+Schema 048 makes preparation's release, target catalogue and content identities explicit. New links include the release; old attempt links and command receipts remain valid. Schema 049 adds diagnostic task contracts and criterion reports for the [curriculum implementation](../curriculum-implementation.md). Those reports do not change this course's pass policy.
+
 New learners use the current release. Existing enrolments remain pinned to their earlier course until the learner accepts the switch preview. Earlier milestones, active letters, answers, media and continuation rights remain available. Old passes are not presented as newly assessed targets. The earlier final letter keeps its historical wording.
 
 Assessment drafts use revision checks. A second tab cannot silently overwrite a newer draft. Profiles own their attempts, practice and follow-ups. Start and answer commands retain their original request receipts; replayed receipts hide future milestone details under the current presentation rules.

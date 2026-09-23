@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'preact/hooks';
 import {api,ApiError} from './learning-api';
+import {courseHref,coursePracticeHref,courseEndpoint} from './course-routes';
 import type {Language} from './review-types';
 import type {ProgressionState} from './Progression';
 import './styles/course-journey.css';
@@ -12,7 +13,7 @@ type VocabularyResult={needs_choice?:boolean;choices?:VocabularyChoice[];word_id
 export type CourseTopic={id:string;title:string;title_ru:string;completed:boolean;successful_tasks:number;required_tasks:number;links:{activity:string;label:string;label_ru:string;href:string}[]};
 type ReferenceGroup={id:string;title:string;title_ru:string;items:{label:string;label_ru:string;ru:string;en:string}[]};
 export type CourseChapter={objectives?:{en:string;ru:string}[];preparation?:{topic_id:string;title:string;title_ru:string;explanation:string;explanation_ru:string;examples:{ru:string;en:string}[];groups?:ReferenceGroup[]}[];id:string;number:number;title:string;title_ru:string;intro:string;intro_ru:string;status:'locked'|'practice'|'ready'|'passed';progress:number;topics:CourseTopic[];activity_count:number;required_activity_count:number;last_attempt_id:string|null;active_attempt_id?:string|null;target_coverage?:TargetCoverage;practice_href?:string};
-export type CourseData={version:string|number;release_id?:string;chapter_count?:number;completed_milestones?:number;profile_id:string;band:string;unlocked_levels:string[];current_chapter_id:string|null;progress:number;completed:boolean;chapters:CourseChapter[];release_upgrade?:{release_id:string;title:string;title_ru:string;retained_access:string[];active_attempts:SavedCourseAttempt[];retained_milestones:number;starting_chapter:string;starting_chapter_title?:string;starting_chapter_title_ru?:string};previous_courses?:{release_id:string;title:string;title_ru:string;attempts:SavedCourseAttempt[]}[]};
+export type CourseData={is_current_release?:boolean;current_release_id?:string;version:string|number;release_id?:string;chapter_count?:number;completed_milestones?:number;profile_id:string;band:string;unlocked_levels:string[];current_chapter_id:string|null;progress:number;completed:boolean;chapters:CourseChapter[];release_upgrade?:{release_id:string;title:string;title_ru:string;retained_access:string[];active_attempts:SavedCourseAttempt[];retained_milestones:number;starting_chapter:string;starting_chapter_title?:string;starting_chapter_title_ru?:string};previous_courses?:{release_id:string;title:string;title_ru:string;attempts:SavedCourseAttempt[]}[]};
 export type CourseAttempt={draft_answers?:Record<string,string>;draft_revision?:number;sender?:string;sender_ru?:string;letter_purpose?:string;letter_purpose_ru?:string;consequence?:string;consequence_ru?:string;achieved?:boolean;writing_available?:boolean;flashcards_available?:boolean;vocabulary?:{word:string;context:string}[];release_id?:string;band?:string;chapter_count?:number;glossary?:{ru:string;en:string}[];id:string;chapter_id:string;chapter_number:number;title:string;title_ru:string;letter:string;letter_title:string;letter_title_ru:string;listening:{audio_url:string;transcript?:string};questions:{id:string;prompt:string;prompt_ru:string;choices:{id:string;text:string}[];kind:'reading'|'listening'|'language'|'response';hint?:string;hint_ru?:string}[];status:'active'|'passed'|'retry';support_used:boolean;listened:boolean;result?:{score:number;total:number;passed:boolean;essential_passed?:boolean;component_results?:{kind:string;score:number;total:number;required:number;passed:boolean}[];next_practice?:CourseLink[];vocabulary?:{word:string;context:string}[];writing_available?:boolean;feedback:{question_id:string;correct:boolean;answer:string;selected_answer?:string;explanation:string;explanation_ru:string}[]};course:CourseData};
 type Submission={answers:Record<string,string>;submission_id:string};
 type Draft={answers:Record<string,string>;pending?:Submission;revision?:number};
@@ -40,10 +41,11 @@ function clearOtherProfiles(profile:string) {
   try {for (let index=sessionStorage.length-1;index>=0;index--) {const key=sessionStorage.key(index);if (key?.startsWith(storagePrefix) && !key.startsWith(`${storagePrefix}${encodeURIComponent(profile)}:`)) sessionStorage.removeItem(key);}} catch { /* Storage is optional. */ }
 }
 
-export function CourseJourney({chapterId,attemptId,language='en',progression}:{chapterId?:string;attemptId?:string;language?:Language;progression:ProgressionState}) {
+export function CourseJourney({chapterId,attemptId,releaseId,language='en',progression}:{releaseId?:string;chapterId?:string;attemptId?:string;language?:Language;progression:ProgressionState}) {
   const t=(en:string,ru:string)=>language==='ru' ? ru : en;
   const profile=progression.data?.profile_id;
-  const identity=`${profile ?? ''}:${chapterId ?? ''}:${attemptId ?? ''}`;
+  const selectedRelease=releaseId ?? (attemptId ? undefined : progression.data?.course?.release_id);
+  const identity=`${profile ?? ''}:${selectedRelease ?? ''}:${chapterId ?? ''}:${attemptId ?? ''}`;
   const currentIdentity=useRef(identity);currentIdentity.current=identity;
   const loadedIdentity=useRef('');
   const [course,setCourse]=useState<CourseData>();
@@ -85,7 +87,7 @@ export function CourseJourney({chapterId,attemptId,language='en',progression}:{c
     setAudioFailed(false);setRecordingCompleted(false);
     const abort=new AbortController();draftRevision.current=0;draftLastSaved.current='{}';draftSaving.current=false;setDraftConflict(undefined);setDraftNote('');setLetterOpen(false);setQuestionGroup('reading');setUpgradeOpen(false);setVocabularyResults({});setSelectedWord('');setWordCaptureOpen(false);upgradeRequest.current=undefined;vocabularyRequests.current={};vocabularyChoices.current={};writingRequest.current=undefined;setLoading(true);setCourse(undefined);setAttempt(undefined);setAnswers({});setError('');setBusy('');pending.current=undefined;startRequest.current=undefined;inFlight.current=false;listeningReceiptPending.current=false;focusResultOnSave.current=false;
     if (profile) clearOtherProfiles(profile);
-    const load=attemptId ? api<CourseAttempt>(`/api/v1/course/checkpoints/${encodeURIComponent(attemptId)}`,undefined,abort.signal) : api<CourseData>('/api/v1/course',undefined,abort.signal);
+    const load=attemptId ? api<CourseAttempt>(`/api/v1/course/checkpoints/${encodeURIComponent(attemptId)}`,undefined,abort.signal) : api<CourseData>(courseEndpoint(releaseId),undefined,abort.signal);
     void load.then(value=>{
       if (abort.signal.aborted || currentIdentity.current!==identity) return;
       const loaded='course' in value ? value.course : value;
@@ -184,7 +186,7 @@ export function CourseJourney({chapterId,attemptId,language='en',progression}:{c
     return value;
   }
   async function start(selected:CourseChapter,challenge=false) {
-    if (inFlight.current || !visibleCourse) return;
+    if (inFlight.current || !visibleCourse || visibleCourse.is_current_release===false) return;
     const owner=identity;inFlight.current=true;setBusy('start');setError('');
     if (startRequest.current?.chapter!==selected.id || startRequest.current.challenge!==challenge || startRequest.current.release!==visibleCourse.release_id) startRequest.current={chapter:selected.id,release:visibleCourse.release_id,challenge,request_id:crypto.randomUUID()};
     try {
@@ -299,13 +301,14 @@ export function CourseJourney({chapterId,attemptId,language='en',progression}:{c
   function chapterAction(selected:CourseChapter) {
     if (selected.status==='locked') return <p class="quiet">{t('Pass the previous milestone to continue. You can practise any time.','Пройдите предыдущий этап. Практика доступна в любое время.')}</p>;
     if (selected.status==='passed') return <>{selected.last_attempt_id && <a class="text-link" href={`#journey/checkpoint/${encodeURIComponent(selected.last_attempt_id)}`}>{t('View checkpoint result','Посмотреть результат проверки')} →</a>}</>;
+    if(visibleCourse?.is_current_release===false)return <div class="course-checkpoint-entry">{selected.active_attempt_id && <a class="cta" href={`#journey/checkpoint/${encodeURIComponent(selected.active_attempt_id)}`}>{t('Continue saved checkpoint','Продолжить сохранённую проверку')} →</a>}<a class="text-link" href="#journey">{t('Return to your current journey','Вернуться к текущему путешествию')}</a></div>;
     return <div class="course-checkpoint-entry">
       {selected.status==='ready' ? <button class="cta" disabled={!!busy} onClick={()=>void start(selected)}>{busy==='start' ? t('Opening…','Открываем…') : t('Start checkpoint','Начать проверку')} →</button> : <button class="text-link" disabled={!!busy} onClick={()=>void start(selected,true)}>{busy==='start' ? t('Opening…','Открываем…') : t('Test out of this milestone','Пройти этап без подготовки')} →</button>}
       {selected.last_attempt_id && <a class="text-link" href={`#journey/checkpoint/${encodeURIComponent(selected.last_attempt_id)}`}>{t('Open saved checkpoint','Открыть сохранённую проверку')}</a>}
     </div>;
   }
   return <section class={`page course-page${attemptId ? ' is-checkpoint' : chapterId ? ' is-milestone' : ''}`}>
-    <nav class="course-navigation" aria-label={t('Journey navigation','Навигация по путешествию')}><a class="text-link" href={attemptId ? (earlierAttempt ? '#journey' : `#journey/chapter/${encodeURIComponent(visibleAttempt?.chapter_id ?? '')}`) : chapterId ? '#journey' : '#activities'}>← {attemptId ? (earlierAttempt ? t('Your journey','Ваше путешествие') : t('Milestone practice','Практика этапа')) : chapterId ? t('Your journey','Ваше путешествие') : t('All activities','Все занятия')}</a><a class="text-link" href="/curriculum">{t('Curriculum','Учебная программа')}</a></nav>
+    <nav class="course-navigation" aria-label={t('Journey navigation','Навигация по путешествию')}><a class="text-link" href={attemptId ? (earlierAttempt ? '#journey' : courseHref(visibleAttempt?.release_id ?? releaseId,visibleAttempt?.chapter_id)) : chapterId ? courseHref(visibleCourse?.release_id ?? releaseId) : '#activities'}>← {attemptId ? (earlierAttempt ? t('Your journey','Ваше путешествие') : t('Milestone practice','Практика этапа')) : chapterId ? t('Your journey','Ваше путешествие') : t('All activities','Все занятия')}</a><a class="text-link" href="/curriculum">{t('Curriculum','Учебная программа')}</a></nav>
     {loading && <p role="status">{t('Opening your journey…','Открываем ваше путешествие…')}</p>}
     {error && <div class="course-error"><p class="error-note" role="alert">{error}</p>{!visibleCourse && <button class="live-mute" onClick={()=>setRevision(value=>value+1)}>{t('Try again','Попробовать ещё раз')}</button>}</div>}
     {!loading && visibleCourse && (attemptId ? visibleAttempt && <>
@@ -351,7 +354,7 @@ export function CourseJourney({chapterId,attemptId,language='en',progression}:{c
           {visibleAttempt.consequence && visibleAttempt.result.passed && <p class="course-consequence">{t(visibleAttempt.consequence,visibleAttempt.consequence_ru ?? visibleAttempt.consequence)}</p>}
           {!!visibleAttempt.result.component_results?.length && <ul class="course-result-components">{visibleAttempt.result.component_results.map(component=><li key={component.kind}><span>{componentTitle(component.kind)}</span><strong>{component.score}/{component.total}</strong>{!component.passed && <span>{t(`Needs ${component.required}`,`Нужно ${component.required}`)}</span>}</li>)}</ul>}
           {!!visibleAttempt.result.next_practice?.length && <div class="course-next-practice"><h3>{t('What to practise next','Что повторить')}</h3>{visibleAttempt.result.next_practice.map(link=><a key={link.href} href={link.href}>{t(link.label,link.label_ru)} →</a>)}</div>}
-          <div class="course-result-actions">{visibleAttempt.result.passed ? <a class="cta" href={visibleCourse.completed ? '/curriculum#level-A2' : '#journey'}>{visibleCourse.completed ? t('Explore A2 practice','Перейти к практике A2') : t('Continue the journey','Продолжить путешествие')} →</a> : chapter && <button type="button" class="cta" disabled={!!busy} onClick={()=>void start(chapter,chapter.status==='practice')}>{busy==='start' ? t('Opening…','Открываем…') : t('Try a different checkpoint','Попробовать другую проверку')} →</button>}{!earlierAttempt && <a class="text-link" href={`#journey/chapter/${encodeURIComponent(visibleAttempt.chapter_id)}`}>{t('Practise this milestone','Практика этого этапа')}</a>}</div>
+          <div class="course-result-actions">{visibleAttempt.result.passed ? <a class="cta" href={visibleCourse.completed ? '/curriculum#level-A2' : '#journey'}>{visibleCourse.completed ? t('Explore A2 practice','Перейти к практике A2') : t('Continue the journey','Продолжить путешествие')} →</a> : chapter && <button type="button" class="cta" disabled={!!busy} onClick={()=>void start(chapter,chapter.status==='practice')}>{busy==='start' ? t('Opening…','Открываем…') : t('Try a different checkpoint','Попробовать другую проверку')} →</button>}{!earlierAttempt && <a class="text-link" href={courseHref(visibleAttempt.release_id ?? visibleCourse.release_id,visibleAttempt.chapter_id)}>{t('Practise this milestone','Практика этого этапа')}</a>}</div>
           {(visibleAttempt.writing_available || visibleAttempt.result.writing_available) && <button type="button" class="text-button" disabled={!!busy} onClick={()=>void startWriting()}>{busy==='writing' ? t('Opening writing…','Открываем задание…') : t('Write your own reply','Написать свой ответ')} →</button>}
           {visibleAttempt.flashcards_available && <button type="button" class="text-button" disabled={!!busy} onClick={()=>void createCards()}>{busy==='cards' ? t('Preparing cards…','Готовим карточки…') : t('Create flashcards from this letter','Создать карточки по письму')} →</button>}
           {!!offeredVocabulary.length && captureItem && <details ref={wordCapture} class="course-word-capture" open={wordCaptureOpen} onToggle={event=>setWordCaptureOpen(event.currentTarget.open)}><summary>{t('Keep words from this letter','Сохранить слова из письма')}</summary>
@@ -377,7 +380,7 @@ export function CourseJourney({chapterId,attemptId,language='en',progression}:{c
         <p>{t(chapter.intro,chapter.intro_ru)}</p>
       </header>
       <div class="course-milestone-actions">
-        {visibleCourse.release_id==='a1-journey-v2' && <a class={chapter.status==='ready' ? 'text-link' : 'cta'} href={chapter.practice_href ?? `#journey/practice/start/${encodeURIComponent(chapter.id)}`}>{t('Practise these skills','Практика по теме')} →</a>}
+        {visibleCourse.is_current_release!==false && visibleCourse.release_id==='a1-journey-v2' && <a class={chapter.status==='ready' ? 'text-link' : 'cta'} href={chapter.practice_href ?? coursePracticeHref(visibleCourse.release_id,chapter.id)}>{t('Practise these skills','Практика по теме')} →</a>}
         {chapterAction(chapter)}
       </div>
       <h2 class="course-section-title">{visibleCourse.release_id==='a1-journey-v2' ? t('More practice by topic','Дополнительная практика по темам') : t('Practise the milestone','Практика этапа')}</h2>
@@ -407,13 +410,13 @@ export function CourseJourney({chapterId,attemptId,language='en',progression}:{c
               <ChapterArtwork releaseId={visibleCourse.release_id} chapterId={item.id} />
               <div>
                 <p class="kicker">{position(item.number)} · {stateText(item.status)}</p>
-                <h2>{!visibleCourse.completed && item.id===visibleCourse.current_chapter_id ? t(item.title,item.title_ru) : <a class="course-chapter-link" href={`#journey/chapter/${encodeURIComponent(item.id)}`}>{t(item.title,item.title_ru)}</a>}</h2>
+                <h2>{!visibleCourse.completed && item.id===visibleCourse.current_chapter_id ? t(item.title,item.title_ru) : <a class="course-chapter-link" href={courseHref(visibleCourse.release_id,item.id)}>{t(item.title,item.title_ru)}</a>}</h2>
               </div>
             </div>
             <p>{t(item.intro,item.intro_ru)}</p>
             <div class="course-chapter-footer">
               <div class="course-chapter-progress"><progress max={1} value={clamp(item.progress)} aria-label={t(`Chapter ${item.number} progress`,`Прогресс главы ${item.number}`)} /><span>{Math.round(clamp(item.progress)*100)}%</span></div>
-              {!visibleCourse.completed && item.id===visibleCourse.current_chapter_id && <a class="cta course-chapter-link course-chapter-continue" href={`#journey/chapter/${encodeURIComponent(item.id)}`}>{item.status==='ready' ? t('Open checkpoint','Открыть проверку') : t('Continue milestone','Продолжить этап')} →</a>}
+              {!visibleCourse.completed && item.id===visibleCourse.current_chapter_id && <a class="cta course-chapter-link course-chapter-continue" href={courseHref(visibleCourse.release_id,item.id)}>{item.status==='ready' ? t('Open checkpoint','Открыть проверку') : t('Continue milestone','Продолжить этап')} →</a>}
             </div>
           </div>
         </li>)}</ol>

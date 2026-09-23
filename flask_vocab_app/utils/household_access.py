@@ -83,6 +83,7 @@ def install_household_policy(app):
             abort(404)
         if not enabled and request.blueprint == 'learning' and request.endpoint not in {
             'learning.household', 'learning.state', 'learning.post', 'learning.pocket', 'learning.asset',
+            'learning.start_session', 'learning.read_session', 'learning.attempt', 'learning.help_item',
         }:
             abort(404)
         if enabled and (len(app.config.get('SECRET_KEY') or '') < 32 or app.config['SECRET_KEY'] == 'dev-secret-key-change-me'):

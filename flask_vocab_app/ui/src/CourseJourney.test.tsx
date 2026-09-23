@@ -30,7 +30,7 @@ describe('Guided chapter journey',()=>{
     const activeCard=continueLink.closest('li')!;
     expect(activeCard).toBeTruthy();
     expect(activeCard.querySelectorAll('a')).toHaveLength(1);
-    expect(continueLink.getAttribute('href')).toBe('#journey/chapter/first');
+    expect(continueLink.getAttribute('href')).toBe('#journey/release/a1-v1/chapter/first');
     for (const number of [2,3,4]) {
       const future=screen.getByRole('listitem',{name:`Milestone ${number}, locked`});
       expect(future.textContent).toBe(String(number));
@@ -64,10 +64,10 @@ describe('Guided chapter journey',()=>{
     await screen.findByRole('heading',{name:'Your journey'});
     expect(screen.getAllByRole('heading',{name:'The market'})).toHaveLength(1);
     const continueLink=screen.getByRole('link',{name:'Continue milestone →'});
-    expect(continueLink.getAttribute('href')).toBe('#journey/chapter/chapter-2');
+    expect(continueLink.getAttribute('href')).toBe('#journey/release/a1-v1/chapter/chapter-2');
     expect(continueLink.closest('li')?.querySelectorAll('a')).toHaveLength(1);
     const passedLink=screen.getByRole('link',{name:'A small message'});
-    expect(passedLink.getAttribute('href')).toBe('#journey/chapter/first');
+    expect(passedLink.getAttribute('href')).toBe('#journey/release/a1-v1/chapter/first');
     expect(passedLink.closest('li')?.querySelectorAll('a')).toHaveLength(1);
     expect(screen.getByText('Milestone 1 of 4 · Passed')).toBeTruthy();
     for(const number of [3,4]) expect(screen.getByRole('listitem',{name:`Milestone ${number}, locked`}).textContent).toBe(String(number));
@@ -435,5 +435,42 @@ describe('Saved answer draft conflicts',()=>{
     expect((screen.getByRole('radio',{name:'Анна'}) as HTMLInputElement).checked).toBe(true);
     fireEvent.click(screen.getByRole('button',{name:'Use saved answers'}));expect((screen.getByRole('radio',{name:'Миша'}) as HTMLInputElement).checked).toBe(true);
     await new Promise(resolve=>setTimeout(resolve,500));expect(fetch.mock.calls.filter(([url])=>url.endsWith('/draft'))).toHaveLength(1);
+  });
+});
+
+describe('Release-scoped course navigation',()=>{
+  it('loads an explicit historical release and resumes its saved attempt without a fresh start',async()=>{
+    const historical=course({is_current_release:false,current_release_id:'a1-journey-v2'});
+    historical.chapters[0].active_attempt_id='saved-old';
+    const fetch=mockServer(()=>historical);
+    render(<CourseJourney releaseId="a1-v1" chapterId="first" progression={progression()}/>);
+    const resume=await screen.findByRole('link',{name:'Continue saved checkpoint →'});
+    expect(resume.getAttribute('href')).toBe('#journey/checkpoint/saved-old');
+    expect(screen.queryByRole('button',{name:/Start checkpoint|Test out/})).toBeNull();
+    expect(fetch.mock.calls.map(([url])=>String(url))).toEqual(['/api/v1/course?release_id=a1-v1']);
+    expect(fetch.mock.calls.every(([,options])=>options?.method==='GET')).toBe(true);
+  });
+  it('discards a delayed same-chapter response after changing releases',async()=>{
+    let resolveOld!:(value:CourseData)=>void;
+    const old=course();old.chapters[0].title='A stale message';
+    const current=course({release_id:'a1-journey-v2'});current.chapters[0].title='A new message';
+    const fetch=mockServer(url=>url.endsWith('=a1-v1') ? new Promise<CourseData>(resolve=>{resolveOld=resolve;}) : current);
+    const view=render(<CourseJourney releaseId="a1-v1" chapterId="first" progression={progression()}/>);
+    await waitFor(()=>expect(fetch).toHaveBeenCalledOnce());
+    view.rerender(<CourseJourney releaseId="a1-journey-v2" chapterId="first" progression={progression()}/>);
+    await screen.findByRole('heading',{name:'A new message'});
+    resolveOld(old);
+    await waitFor(()=>expect(screen.queryByRole('heading',{name:'A stale message'})).toBeNull());
+    expect(screen.getByRole('heading',{name:'A new message'})).toBeTruthy();
+    expect(fetch.mock.calls.map(([url])=>String(url))).toEqual(['/api/v1/course?release_id=a1-v1','/api/v1/course?release_id=a1-journey-v2']);
+  });
+  it('shows an unavailable explicit release without falling back to another route',async()=>{
+    const fetch=vi.fn(async(_url:RequestInfo|URL,_options?:RequestInit)=>respond({error:{code:'course_release_unavailable',message:'That course release is not available.'}},false));
+    vi.stubGlobal('fetch',fetch);
+    render(<CourseJourney releaseId="unknown-release" chapterId="home" progression={progression()}/>);
+    expect((await screen.findByRole('alert')).textContent).toContain('That course release is not available.');
+    expect(screen.queryByRole('button',{name:/Test out|Start checkpoint/})).toBeNull();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(String(fetch.mock.calls[0][0])).toBe('/api/v1/course?release_id=unknown-release');
   });
 });

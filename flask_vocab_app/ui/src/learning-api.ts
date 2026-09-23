@@ -5,11 +5,12 @@ export type LearningHome = {
   sessions: { id: string; title: string; status: string; content_status: string }[];
 };
 export type Progress = { profile_id: string; evidence: { word_id: number; lemma: string }[] };
-export type AnswerFeedback = { outcome: string; answer: string; assisted: boolean };
+export type AnswerFeedback = { outcome: string; answer: string; assisted: boolean; explanation?: string; response_text?: string };
 export type PracticeSession = {
   id: string; profile_id: string; title: string; revision: number; status: string;
   completed_items: number; total_items: number;
-  item: { id: string; prompt: string; choices: { id: string; text: string }[]; has_hint: boolean; hint?: string; asset_ids?: string[] } | null;
+  origin?: {href: string; title: string};
+  item: { id: string; type?: 'choice' | 'controlled_text'; prompt: string; choices?: { id: string; text: string }[]; has_hint: boolean; hint?: string; asset_ids?: string[] } | null;
   attempts: { id: string; prompt?: string; feedback: AnswerFeedback }[];
 };
 export class ApiError extends Error {

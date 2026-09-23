@@ -7,12 +7,13 @@ from datetime import datetime, timezone
 import json
 from zoneinfo import ZoneInfo
 
-from contracts.learning import fields, key, revision, reject
+from contracts.learning import fields, key, revision, reject, assess_activity_answer, activity_answer_text
 from repositories.learning_repository import LearningError, encoded, identifier, payload_hash, require_access, timestamp, transaction
 from services.learning_content import child_item, published_version
 
 
 ASSESSMENT_POLICY = 'reviewed-choice-v1'
+CONTROLLED_TEXT_POLICY = 'authored-controlled-form-v1'
 REWARD_POLICY = 'practice-participation-v1'
 
 
@@ -66,6 +67,8 @@ class LearningService:
             session_id = identifier()
             conn.execute('INSERT INTO learning_sessions(id,profile_id,version_id,kind,start_key,start_hash,start_result,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
                          (session_id, profile['id'], version['id'], pack['kind'], data['submission_id'], digest, '{}', now, now))
+            from services.curriculum_units import freeze_practice
+            freeze_practice(conn, profile['id'], session_id, pack)
             result = self._snapshot(conn, session_id, pack)
             conn.execute('UPDATE learning_sessions SET start_result=? WHERE id=?', (encoded(result), session_id))
             return result
@@ -85,6 +88,8 @@ class LearningService:
             return self._snapshot(conn, session_id, pack)
 
     def _snapshot(self, conn, session_id, pack):
+        from services.curriculum_units import practice_context
+        origin = practice_context(pack)
         saved = conn.execute('SELECT * FROM learning_sessions WHERE id=?', (session_id,)).fetchone()
         attempts = [dict(row) for row in conn.execute('SELECT id,item_id,answer,assisted,outcome FROM activity_attempts WHERE session_id=? ORDER BY created_at,rowid', (session_id,))]
         items = {item['id']: item for item in pack['items']}
@@ -94,13 +99,20 @@ class LearningService:
             attempt['prompt'] = item['prompt']
             # Reconstruct the structured choice feedback from the immutable
             # answer policy; reload must retain the correction, not only a mark.
-            answer_text = next(c['text'] for c in item['choices'] if c['id'] == item['answer'])
+            answer_text = activity_answer_text(item)
             attempt['feedback'] = {'outcome': attempt['outcome'], 'answer': answer_text, 'assisted': bool(attempt['assisted'])}
+            if item['type'] == 'controlled_text':
+                attempt['feedback']['response_text'] = attempt['answer']['text']
+            if origin:
+                from services.activity_evidence import load_contract
+                contract = load_contract(conn, saved['profile_id'], 'curriculum_unit', session_id + ':' + attempt['item_id'])
+                attempt['feedback']['explanation'] = contract['content']['explanation']
         return {'id': saved['id'], 'profile_id': saved['profile_id'], 'version_id': saved['version_id'],
                 'title': pack['title'], 'revision': saved['revision'], 'status': saved['status'],
                 'completed_items': saved['current_index'], 'total_items': len(pack['items']),
                 'item': child_item(pack['items'][saved['current_index']], help_used=bool(saved['help_used'])) if saved['status'] == 'active' else None,
-                'attempts': attempts, 'balance': self._balance(conn, saved['profile_id'])}
+                'attempts': attempts, 'balance': self._balance(conn, saved['profile_id']),
+                **({'origin': {'href': origin['href'], 'title': origin['title']}} if origin else {})}
 
     def command(self, access_id, session_id, operation, data):
         required = {'submission_id','expected_revision','item_id'} | ({'answer'} if operation == 'answer' else set())
@@ -111,8 +123,8 @@ class LearningService:
         if operation not in ('answer','help'):
             reject('Unsupported learning operation.')
         if operation == 'answer':
-            fields(data['answer'], {'choice_id'})
-            key(data['answer']['choice_id'], 'Choice ID')
+            if not isinstance(data['answer'], dict):
+                reject('Provide an answer for this activity.')
         digest = payload_hash({'operation': operation, **data})
         with transaction(self.db_path, write=True) as conn:
             now = self.clock()
@@ -136,23 +148,27 @@ class LearningService:
                     reject('This item has no saved hint.')
                 conn.execute('UPDATE learning_sessions SET help_used=1,revision=revision+1,updated_at=? WHERE id=?', (now, session_id))
             else:
-                choice = data['answer']['choice_id']
-                if choice not in {c['id'] for c in item['choices']}:
-                    reject('Choose one of the issued answers.')
-                outcome = 'correct' if choice == item['answer'] else 'incorrect'
+                response_text, correct = assess_activity_answer(item, data['answer'])
+                outcome = 'correct' if correct else 'incorrect'
+                policy = CONTROLLED_TEXT_POLICY if item['type'] == 'controlled_text' else ASSESSMENT_POLICY
                 attempt_id = identifier()
                 conn.execute('INSERT INTO activity_attempts(id,session_id,item_id,submission_id,answer,assisted,outcome,policy_version,created_at) VALUES (?,?,?,?,?,?,?,?,?)',
-                             (attempt_id, session_id, item['id'], data['submission_id'], encoded(data['answer']), saved['help_used'], outcome, ASSESSMENT_POLICY, now))
+                             (attempt_id, session_id, item['id'], data['submission_id'], encoded(data['answer']), saved['help_used'], outcome, policy, now))
                 if item.get('word_id'):
                     conn.execute('INSERT INTO learner_word_evidence VALUES (?,?,?,?,?,?)',
                                  (attempt_id, profile['id'], item['word_id'], 'supported_recognition' if saved['help_used'] else 'recognition', outcome, now))
+                from services.curriculum_units import observe_answer
+                observe_answer(conn, profile['id'], session_id, pack, item, attempt_id,
+                               data['answer'], bool(saved['help_used']))
                 complete = saved['current_index'] + 1 == len(pack['items'])
                 conn.execute('UPDATE learning_sessions SET current_index=current_index+1,revision=revision+1,help_used=0,status=?,updated_at=? WHERE id=?',
                              ('completed' if complete else 'active', now, session_id))
                 if complete:
                     coins = award_participation(conn, profile, attempt_id, version['content_id'], now)
-                answer_text = next(c['text'] for c in item['choices'] if c['id'] == item['answer'])
+                answer_text = activity_answer_text(item)
                 feedback = {'outcome': outcome, 'answer': answer_text, 'assisted': bool(saved['help_used'])}
+                if item['type'] == 'controlled_text':
+                    feedback['response_text'] = response_text
             result = self._snapshot(conn, session_id, pack)
             result.update(coins_earned=coins, feedback=feedback)
             conn.execute('INSERT INTO learning_commands VALUES (?,?,?,?,?)', (session_id, data['submission_id'], digest, encoded(result), now))
