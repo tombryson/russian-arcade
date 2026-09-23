@@ -30,7 +30,7 @@
 .curriculum-milestone > summary { display:flex; align-items:center; gap:12px; list-style:none; padding:14px 4px; cursor:pointer; }
 .curriculum-milestone > summary::-webkit-details-marker { display:none; }
 .curriculum-milestone > summary:focus-visible { outline:2px solid var(--wp-accent-learning,#fac943); outline-offset:3px; }
-.curriculum-milestone > summary h3 { margin:0; flex:1; font:500 18px/1.4 var(--wp-font-reading,sans-serif); }
+.curriculum-milestone > summary h3 { display:flex; align-items:center; gap:12px; min-width:0; margin:0; flex:1; font:500 18px/1.4 var(--wp-font-reading,sans-serif); }
 .curriculum-milestone-number { display:grid; place-items:center; width:30px; height:30px; flex-shrink:0; border-radius:50%; background:var(--wp-surface-sheet,#30374e); font-size:15px; }
 .curriculum-milestone-status { color:var(--wp-text-secondary,#b7b9ce); font-size:13px; }
 .curriculum-milestone > summary > .curriculum-expand { margin-left:0; }
@@ -57,3 +57,5 @@
 .curriculum-milestone-topics { display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:12px; font-size:14px; }
 .curriculum-milestone-topics a { color:inherit; text-underline-offset:4px; }
 .curriculum-topic-catalogue-heading { margin:24px 0 12px; color:inherit; font:500 18px/1.4 var(--wp-font-reading,sans-serif); }
+
+.curriculum-milestone-art { width:48px; height:48px; flex-shrink:0; object-fit:contain; }
