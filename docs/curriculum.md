@@ -78,6 +78,8 @@ Response-level observations now retain the exact owned question, decision and su
 
 The [research review](curriculum-research.md) compares published TORFL standards, sample tests and examiner guidance. The [requirements catalogue](curriculum-requirements.md) defines 239 source-backed criteria across language use, reading, listening, writing and speaking. It extends the topic sequence without changing word difficulty or the published milestone targets.
 
+The [curriculum and assessment implementation plan](curriculum-uplift-plan.md) defines the remaining A1–B2 teaching, assessment and integration work. It includes requirement mappings, activity evidence, independent production, release gates and preservation of existing progress.
+
 The source files in `flask_vocab_app/data/torfl/` record each criterion, evidence mode, topic scope and source locator. New activity prompts receive a short selection appropriate to the task level. Translation and Word Jumble receive contextual language criteria; they do not inherit essay requirements. Audio interpretation is excluded from text-only tasks.
 
 Curriculum offers a closed requirements reference for each researched level. Earlier levels remain prerequisites in the reference, not practice-access locks. This content map does not claim full exam coverage, import the complete lexical minima or award proficiency. Independent writing and speaking require their own evidence.

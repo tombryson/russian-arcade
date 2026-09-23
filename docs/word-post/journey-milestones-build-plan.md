@@ -23,6 +23,8 @@ The following sections reflect the current design and its acceptance criteria, i
 
 ## Research update — 23 September 2026
 
+The [curriculum and assessment implementation plan](../curriculum-uplift-plan.md) now governs the broader A1–B2 uplift. It expands the later assessment and region work described here into staged content, engineering and validation packages. This document remains the record of the implemented A1 journey revision; it does not establish full-level proficiency.
+
 The [TORFL review](../curriculum-research.md) adds a source-backed A1–B2 requirements reference. It also supersedes the preparation rule below: ordinary activity preparation and focused-target preparation are now alternatives for the current release. A demonstrated target does not require a separate introduction receipt. Early checkpoint challenges remain available. Published letters, grading and earned milestones are unchanged.
 
 The four letters complete this application's A1 journey course. They do not assess all five TORFL domains. A future full-level gate needs an explicit blueprint and independently assessed writing and speaking; it must not infer them from selected replies or Elo.

@@ -120,7 +120,9 @@ Word and form links are optional for compatibility with existing content. When s
 
 Native card counts come from published, active cards. The historical `words.count` and `forms.count` fields still track Anki exports. Anki scheduling records in `anki_cards` also remain separate. See [vocabulary inventory](../flask_vocab_app/repositories/vocabulary_inventory.py).
 
-The [native batch selector](../flask_vocab_app/services/card_generation.py) filters words by lemma difficulty, topic, part of speech and active card count. It optionally filters forms by case, then prefers a spelling matching the lemma. Otherwise, it takes the first eligible form by ID. Unlike the Anki batch path, it does not filter by form difficulty or select a form at random.
+The [native batch selector](../flask_vocab_app/services/card_generation.py) filters words by topic, part of speech and active card count. It can filter forms by case and by form difficulty, using lemma difficulty when a form's score is missing. A lemma without stored forms is eligible for a difficulty filter only when its own score matches; a case filter requires a matching stored form.
+
+[Form selection](../flask_vocab_app/services/form_selection.py) uses previous native generation selections to favour less-used words. Within a word, it ranks eligible forms by commonness, previous form use, previous use of the case/tense/person/number combination, whether the spelling differs from the lemma, frequency and ID. This is deterministic rotation, unlike the Anki generator's random choice. Non-failed generation selections contribute to this history; they do not establish learner mastery. Explicit lesson selections retain their original form.
 
 ## Lesson and game integration
 
@@ -160,7 +162,7 @@ Part of speech, grammatical form and contextual meaning are separate concerns. N
 Recommended follow-up work:
 
 1. Share one form-selection policy across Anki, native generation and games, while preserving lesson-specific occurrences.
-2. Rotate through useful stored forms, considering previous coverage instead of defaulting to the lemma.
+2. Extend the existing rotation to select forms for a named grammatical function and distinguish ambiguous readings of the same spelling.
 3. Preserve case, animacy and relevant gender tags before removing duplicates.
 4. Standardise part-of-speech names and JSON formatting. Query tag values directly.
 5. Make frequency thresholds and form limits explicit import settings, with a preview of what will be excluded.

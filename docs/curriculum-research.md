@@ -2,6 +2,8 @@
 
 Research reviewed on 23 September 2026. This document distinguishes published TORFL requirements from Russian Arcade's teaching and progression rules.
 
+The [curriculum and assessment implementation plan](curriculum-uplift-plan.md) turns these findings into staged engineering, content, validation and migration work. It distinguishes the shipped reference from the full course still to build.
+
 ## Conclusions
 
 The existing 50 topics remain useful. They organise teaching, but they do not describe a complete proficiency level. A café can support a simple A1 order or a B2 complaint. The language required, the support provided and the learner's response determine the demand.

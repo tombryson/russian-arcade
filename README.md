@@ -64,6 +64,8 @@ The guided course adds four A1 milestones, three assessment variants per stop an
 
 A separate [A1–B2 reference](docs/curriculum-requirements.md) records 239 observable requirements from published TORFL standards and sample tests. It covers language use, reading, listening, writing and speaking. The [research review](docs/curriculum-research.md) explains the source editions and assessment limits.
 
+The [curriculum implementation plan](docs/curriculum-uplift-plan.md) specifies the remaining teaching coverage, activity evidence, five-domain assessment and migration work. These are planned releases, not completed proficiency assessments.
+
 The [course catalogue](https://russian-arcade.fly.dev/curriculum) lists the topics and opens practice for each one. It does not add words automatically. Saving vocabulary still uses the existing lemma, form, topic and mnemonic pipeline.
 
 ## Vocabulary database
@@ -124,11 +126,11 @@ The importer uses a Russian morphological dictionary to generate possible forms.
 - **Duplicates:** keep one copy of each spelling and retained tag combination.
 - **Difficulty:** estimate lemma difficulty from frequency and length. Increase form difficulty for plurals and participles.
 
-Frequency is a selection aid. A rare form may still be useful or correct. Lesson selections preserve the form found in the source text; they do not use these bulk-import filters.
+Frequency is a selection aid. A rare form may still be useful or correct. Lesson capture uses the shared import pipeline and also preserves the exact validated form selected in the source, even when bulk filters would exclude it.
 
 The Anki generator filters words and forms by the requested topic, part of speech, case and difficulty. It randomly selects an eligible form, then generates a sentence, cloze, translation, picture and audio. A **cloze** is a sentence with a word or phrase removed for the learner to supply.
 
-The native batch generator does not yet provide the same variety. It applies an optional case filter, then prefers a form matching the lemma. The importer also loses some adjective and participle tags. The [database guide](docs/vocabulary-data-model.md) explains these gaps and the exact filtering rules.
+The native batch generator filters by case and form difficulty, then prefers less-used words, forms and grammatical combinations. It uses generation history to vary practice; that history is not evidence of mastery. The importer still loses some adjective and participle tags. The [database guide](docs/vocabulary-data-model.md) explains the selection rules and remaining gaps.
 
 ### Contextual translations
 
@@ -212,7 +214,7 @@ Each account can use **US$1 per day and US$2 in total** of funded AI. All visito
 
 The server reserves costs before provider calls and limits each account to 30 calls per rolling minute and 120 per day. The standard flashcard generator allows at most five cards per hosted batch. Pictures, speech, transcription and assessment all count; one activity may need several calls. Saved practice remains available after the allowance runs out. Lingocoins do not buy AI credits.
 
-Live calls close after one minute, but a server failure can prevent that close; a provider-side spending limit is also required. See [hosted trial operation](docs/operations-fly.md#funded-ai-trial) for the controls and their limits.
+Live calls close after one minute, but a server failure can prevent that close; a provider-side spending limit is also required. See [hosted trial operation](docs/operations-fly.md#budget-and-provider-limits) for the controls and their limits.
 
 The application is under active development, with local individual and household use as its main deployment model. Current limits include:
 
@@ -330,6 +332,7 @@ Historical scripts may retain machine-specific assumptions; read them before run
 
 - [Architecture](docs/architecture.md), [development](docs/development.md) and [operations](docs/operations.md)
 - [Curriculum: topics, vocabulary and grammar](docs/curriculum.md)
+- [Curriculum and assessment implementation plan](docs/curriculum-uplift-plan.md)
 - [Vocabulary database and form-generation rules](docs/vocabulary-data-model.md)
 - [Drive/SQLite synchronisation contract](docs/synchronization.md)
 - [Native flashcards](docs/word-post/native-flashcards.md) and [vocabulary library](docs/word-post/vocabulary-library.md)
