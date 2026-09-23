@@ -15,6 +15,7 @@ import tempfile
 import wave
 
 from migrations import upgrade_database
+from services.assessment_pilot_integrity import PILOT_TABLES, validate_saved_pilot
 
 
 class ImportConflict(ValueError):
@@ -128,6 +129,11 @@ def transform(name, table, row, maps, schemas):
         # artifact. Clear only the temporary claim; retain all task evidence.
         for column in ('checking_submission_id', 'checking_sha256', 'checking_started_at', 'checking_token'):
             result[column] = None
+    if name == 'assessment_pilot_reviews' and row['state'] == 'running':
+        # A lease belongs to the source process. The offline artifact can retry
+        # feedback against the same saved original after installation.
+        result.update(state='failed', claim_token=None, lease_until=0, report_json=None,
+                      error='Review interrupted by account import; retry feedback.')
     if len(table['pk']) == 1:
         key = table['pk'][0]
         result[key] = _mapped(maps, name, result[key])
@@ -138,6 +144,11 @@ def transform(name, table, row, maps, schemas):
     # IDs embedded in typed JSON are references. Do not replace arbitrary
     # numbers, Russian text, dates, answers or model output with matching digits.
     for column, value in row.items():
+        if name in PILOT_TABLES:
+            # Pilot identifiers are UUIDs in typed columns. All JSON here is
+            # frozen content, an original response, or its evidence snapshot.
+            # Even JSON-looking learner text must remain byte for byte intact.
+            continue
         if name in ('sentences', 'translation_drafts', 'word_jumble_drafts') or (name in ('translation_attempts', 'word_jumble_attempts')
                 and column not in ('criterion_report_json', 'criterion_support_json')):
             # Sentence wording, raw answers and tutor prose can themselves look
@@ -306,6 +317,10 @@ def _assert_inactive_jobs(tables):
         if name in AUTH_TABLES:
             continue
         for row in schema['rows']:
+            if name == 'assessment_pilot_reviews':
+                # Inputs are offline snapshots. Only the artifact's transient
+                # pilot claim is reset; the original evidence is retained.
+                continue
             if row.get('lease_until', 0) and row['lease_until'] > now:
                 raise ImportConflict(f'{name} contains a running provider operation. Finish it before taking snapshots.')
             if name == 'live_conversation_sessions' and row['state'] in ('connecting', 'live', 'ending'):
@@ -369,13 +384,15 @@ def _verify_speaking_audio(tables, audio_root):
         raise ImportConflict('Original speaking audio could not be verified; no artifact was produced.') from error
 
 
-def build_account_import(local_path, hosted_path, output_path, *, local_audio_root=None):
+def build_account_import(local_path, hosted_path, output_path, *, local_audio_root=None, local_pilot_audio_root=None):
     """Create an integrity-checked output file; never modify either input.
 
     Inputs must be offline snapshots. Speaking criterion reports additionally
     require local_audio_root so original recording bytes can be verified. Media
     copying remains separate. Generated Comprehension audio retains its frozen
     hash and URL; this artifact does not copy or attest to those media bytes.
+    Saved pilot Speaking recordings require local_pilot_audio_root; both the
+    original upload and its frozen review WAV are verified but never copied.
     The returned report contains counts and ID
     mappings, not lesson content or credentials. Metadata alternatives are
     archived inside the private output database.
@@ -400,6 +417,10 @@ def build_account_import(local_path, hosted_path, output_path, *, local_audio_ro
             if unsupported:
                 raise ImportConflict('Hosted history needs an additional merge policy: ' + ', '.join(sorted(unsupported)))
             verified_audio = _verify_speaking_audio(local, local_audio_root)
+            try:
+                verified_pilot_audio = validate_saved_pilot(left, audio_root=local_pilot_audio_root, require_audio=True)
+            except (OSError, ValueError, LookupError, TypeError, KeyError, wave.Error, EOFError) as error:
+                raise ImportConflict('Pilot evidence or original audio could not be verified; provide --local-pilot-audio-root for saved recordings.') from error
             if set(local) != set(hosted):
                 raise ImportConflict('Both snapshots must use the current application schema.')
             for name in local:
@@ -470,12 +491,23 @@ def build_account_import(local_path, hosted_path, output_path, *, local_audio_ro
                 validate_saved_evidence(conn)
             except (ValueError, LookupError, TypeError, KeyError) as error:
                 raise ImportConflict('Imported activity evidence does not match its frozen task and response.') from error
+            try:
+                if validate_saved_pilot(conn, audio_root=local_pilot_audio_root, require_audio=True) != verified_pilot_audio:
+                    raise ValueError('Pilot source audio changed during artifact construction.')
+            except (OSError, ValueError, LookupError, TypeError, KeyError, wave.Error, EOFError) as error:
+                raise ImportConflict('Imported pilot evidence does not match its frozen tasks and original responses.') from error
             conn.commit()
             conn.execute('PRAGMA journal_mode=DELETE')
         if hashes != {'local': digest(local_path), 'hosted': digest(hosted_path)}:
             raise ImportConflict('An input snapshot changed during the import; retry from offline snapshots.')
         if verified_audio != _verify_speaking_audio(local, local_audio_root):
             raise ImportConflict('Original speaking audio changed during the import; retry from offline snapshots.')
+        with closing(readonly(upgraded)) as source:
+            try:
+                if validate_saved_pilot(source, audio_root=local_pilot_audio_root, require_audio=True) != verified_pilot_audio:
+                    raise ValueError('Pilot source audio changed during import.')
+            except (OSError, ValueError, LookupError, TypeError, KeyError, wave.Error, EOFError) as error:
+                raise ImportConflict('Pilot original audio changed during import; retry from offline snapshots.') from error
         # Exclusive creation prevents an existing destination being replaced if
         # a second importer runs while the first one is assembling its output.
         with output_path.open('xb') as output, artifact.open('rb') as source:
@@ -489,4 +521,5 @@ def build_account_import(local_path, hosted_path, output_path, *, local_audio_ro
             'metadata_conflicts_archived': dict(decisions),
             'excluded_credentials': sorted(AUTH_TABLES),
             'verified_speaking_recordings': len(verified_audio),
+            'verified_pilot_recordings': len(verified_pilot_audio) // 2,
             'media_copied': False}

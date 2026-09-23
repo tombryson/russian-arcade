@@ -247,6 +247,11 @@ def create_app(config_overrides=None, service_overrides=None):
     app.register_blueprint(create_word_post_blueprint())
     app.register_blueprint(create_word_jumble_blueprint(word_jumble_service))
     app.register_blueprint(create_writing_blueprint(db_path, writing_service))
+    from services.assessment_pilot import AssessmentPilotService
+    from blueprints.assessment_pilot import create_assessment_pilot_blueprint
+    pilot = AssessmentPilotService(db_path, writing_service, app.extensions['services']['SpeakingAssessment'], app.config)
+    app.extensions['learning']['assessment_pilot'] = pilot
+    app.register_blueprint(create_assessment_pilot_blueprint(pilot))
     lesson_ai = service('LessonAI', lambda: LessonAI(app.config))
     lessons = LessonCompanion(db_path, lesson_service, lesson_ai, app.config)
     app.extensions['learning']['lessons'] = lessons

@@ -9,6 +9,7 @@
     <nav class="curriculum-bands" aria-label="{{ 'Уровни' if russian else 'Course levels' }}">
       {% for band in bands %}<a href="#level-{{ band.id }}" hx-boost="false">{{ band.id|replace('-', '–') }}</a>{% endfor %}
     </nav>
+    <p class="curriculum-assessment-link"><a href="/#assessment" hx-boost="false">{{ 'Проверить навыки A1' if russian else 'Check your A1 skills' }} →</a> <span>{{ 'Пробная проверка по пяти навыкам.' if russian else 'A five-skill diagnostic pilot.' }}</span></p>
     {% for band in bands %}
     <section class="curriculum-band" id="level-{{ band.id }}" aria-labelledby="heading-{{ band.id }}">
       <header class="curriculum-band-heading">

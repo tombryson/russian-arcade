@@ -1,31 +1,42 @@
 # Curriculum implementation status
 
-This guide records the [curriculum uplift plan](curriculum-uplift-plan.md) implementation on `codex/curriculum-priorities`, built from `5932faf`. It adds teaching and diagnostic evidence. It does not replace the published A1 journey or introduce a new level gate.
+This guide records the [curriculum uplift plan](curriculum-uplift-plan.md) implementation on `codex/curriculum-assessment-pilot`, updated 24 September 2026. It adds teaching and diagnostic evidence. It does not replace the published A1 journey or introduce a new level gate.
 
-**Verification status:** the production UI build, focused backend/frontend checks, migration/import rehearsals, coverage checks, reviewer-packet checks and secret scan pass. Browser checks confirm the new unit layout, transcript disclosure, saved answers, inherited support and word lookup after additional questions. The full local backend run exercised 1,657 tests; one outdated heading assertion was corrected and its 15-test module passed on rerun. Full CI results are tracked in [PR #3](https://github.com/tombryson/russian-arcade/pull/3). Native audio playback still needs a clean browser check after an in-app browser crash. No qualified human language review, learner trial or paid model evaluation is recorded.
+**Verification status:** focused checks pass for the new units, recording preparation, pilot lifecycle and import integrity. A fresh browser check passed native audio playback, replay, slower playback, answer submission and transcript support. Generated Comprehension also passed playback and saved-answer checks using a local test fixture. These checks verify operation, not pronunciation quality or marking accuracy. Full integration results are recorded in the change's pull request. No qualified human language review or learner trial is claimed.
+
+The frontend suite passed 725 tests, followed by a successful typecheck and production build. A migration rehearsal on a private copy of the hosted database reached schema 54 with all existing rows unchanged across 99 tables, no foreign-key errors and a clean integrity check. Hosted SQLite backups and a volume snapshot were requested before deployment.
+
+Two bounded live Writing checks used the existing configured model without changing it. A correct reply scored 10/10; a reply with four deliberate case/conjugation errors scored 7/10 and received the four corrections. Both retained credit for communicating the requested invitation. The two calls cost US$0.008856 in the isolated test ledger. This verifies those examples and report validation, not general marking reliability. Feedback specificity still needs improvement: a corrected example was useful, but its next-step sentence was generic.
+
+The application is standalone. It marks selected responses and uses AI for written and spoken feedback. External language review is optional maintenance work on our content and rubrics; learners do not need a tutor, reviewer approval or an appointment.
 
 ## Available teaching units
 
-Curriculum links to four A1 units. Each has classified examples, contextual questions, typed-form practice and its own Writing task.
+Curriculum links to seven A1 units. Each has classified examples, contextual questions, typed-form practice and its own Writing task.
 
 | Unit route | Focus | Choices / typed forms / listening items |
 | --- | --- | --- |
 | `/curriculum/units/location-destination-v1` | Where someone is, where they are going, and movement within a place | 4 / 3 / 3 |
-| `/curriculum/units/possession-absence-v1` | Who has an item, who owns it and what is missing | 6 / 4 / 0 |
+| `/curriculum/units/possession-absence-v1` | Who has an item, who owns it and what is missing | 6 / 4 / 3 |
 | `/curriculum/units/objects-recipients-v1` | A direct object, an animate object and a recipient | 6 / 4 / 0 |
 | `/curriculum/units/time-routine-v1` | Days, times, conjugation and tense in daily routines | 6 / 5 / 0 |
+| `/curriculum/units/noun-adjective-agreement-v1` | Gender, number and adjective agreement | 6 / 4 / 0 |
+| `/curriculum/units/personal-reference-v1` | Personal pronouns and the people they refer to | 6 / 4 / 0 |
+| `/curriculum/units/basic-motion-v1` | Walking or travelling by vehicle; one journey or a routine | 6 / 4 / 0 |
 
-The three new units add 18 contextual questions and 13 typed prompts. Each includes two short reading tasks. Their examples teach specific contrasts; they are not comprehensive case tables or a complete A1 course. No new listening control is offered where audio has not been prepared. The original location unit's published packs and contracts remain unchanged.
+This pass adds 18 contextual questions and 12 typed prompts across the last three units. Each includes short reading tasks. Their examples teach specific contrasts; they are not comprehensive case tables or a complete A1 course. The four previously published unit files and issued contracts remain unchanged.
+
+Six new listening packs contain 18 authored messages. Four new recordings were prepared before the existing ElevenLabs character allowance ran out. The possession pack is complete and available. The partially prepared objects pack and remaining packs stay hidden until all their recordings are verified. Two separate assessment recordings are also pending: 16 clips in total remain, requiring about 2,240 characters. The credentials work; the provider allowance needs renewal. No automatic paid retry runs.
 
 Practice uses the existing activity player and saved-session store. It resumes unfinished work, saves hints with each answer and returns to the unit when finished. Completion uses the existing activity reward policy. There is no separate curriculum coin balance or schedule.
 
 Typed-form practice uses a separately versioned pack. It accepts authored variants, including a noun alone or its full prepositional phrase where appropriate. Letter case, spacing, final punctuation and ё/е are normalised for comparison. The exact submitted text is retained. No model guesses whether an unrelated answer should count.
 
-Listening practice uses three bundled Russian messages. Learners hear the recording before choosing an answer. The transcript stays hidden until requested or after the answer is checked. Hints and transcript use are saved separately. A browser playback receipt enables answering, but is not proof of attention or unaided understanding. Replaying the same recording does not remove earlier support.
+Available listening practice uses six bundled Russian messages. Learners hear the recording before choosing an answer. The transcript stays hidden until requested or after the answer is checked. Hints and transcript use are saved separately. A browser playback receipt enables answering, but is not proof of attention or unaided understanding. Replaying the same recording does not remove earlier support.
 
 Recordings are prepared once through the existing speech provider and configured random voice pool. Playback makes no AI call. A failed audio load offers replay or transcript support; a failed receipt save can be retried without replaying. Text hashes, audio hashes and durations bind each recording to its published question. Missing or changed recordings cannot be silently replaced.
 
-Each Writing task opens in the existing Writing workspace and resumes its own saved draft. Its frozen criterion matches that unit: arranging a meeting, requesting a missing item, passing something to a recipient, or describing a routine and a future plan. Tutor feedback can explain grammar separately from communicative success. Suggested words do not restrict the learner to one exact answer. A return link leads back to the unit.
+Each Writing task opens in the existing Writing workspace and resumes its own saved draft. Its criterion matches that unit's communicative task. AI feedback can explain grammar separately from communicative success. Suggested words do not restrict the learner to one exact answer. A return link leads back to the unit.
 
 The location unit links to the existing directions scenario. Possession links to shopping, and routines to meeting people. These links do not pass unit-specific criteria into Speaking. Objects and recipients has no Speaking link because no existing scenario reliably elicits that task. New Fluent A1 directions sessions save one narrow criterion: asking where the required place is. Their review uses the original learner audio. A clear short question can satisfy that task even when there is too little speech for overall grammar or fluency scores. Support independence remains unverified; this is not a proficiency result. Older conversations and unmapped scenarios retain their current review path.
 
@@ -78,6 +89,20 @@ Both adapters retain tutor feedback and exact submitted text. The criterion repo
 
 These reports are diagnostic. They do not award a TORFL level, change a course pass or convert Elo into proficiency. Exact evidence validates attribution; it does not by itself prove that an AI judgement is linguistically correct.
 
+## Five-domain assessment pilot
+
+Curriculum and Profile link to `#assessment`. The pilot samples language use, reading, listening, writing and speaking. Each domain has two authored forms. A form contains six language-use questions, three reading questions, three listening questions, one written message and one recorded personal introduction. This small sample is not a complete A1 examination.
+
+Learners can save and resume each component. Selected answers are marked automatically. Writing and Speaking use the existing AI services and spending controls. Each domain shows its own result and feedback; no aggregate pass threshold, coins, Elo or course unlock is added. The spoken introduction tests personal information and intelligibility. It does not claim to test interaction with another speaker.
+
+The server freezes the questions, criteria, source text and recording identity before answering. Hints, transcript access and playback are recorded separately. Original written responses and microphone uploads are retained. Spoken feedback uses an untrimmed audio copy, preserving pauses. A model transcript is an interpretation of that audio, not a replacement for it.
+
+Feedback failure preserves the response and offers an explicit retry. Duplicate requests reuse the saved submission. An older browser tab cannot submit against a replacement form. A review interrupted by a process crash becomes retryable after its lease expires. Opening or refreshing a page does not call a paid model.
+
+Retakes select only the requested components and keep earlier attempts. The alternate form is used where available; repeated material remains labelled as repeated. The forms are authored alternatives, not psychometrically equated exams.
+
+New sessions remain unavailable until both authored listening recordings have been prepared and verified. Existing sessions remain readable. This media-readiness check is unrelated to external review. Local profiles and signed-in accounts can use the pilot; the shared sample demo does not start production assessments.
+
 ## Storage and migration
 
 Migration `048` adds explicit release, target-catalogue and content identities to focused course practice. Historical attempts continue using their saved identities. Old submission receipts remain replayable.
@@ -96,6 +121,8 @@ Migration `051` adds `comprehension_tasks` and `comprehension_attempts`. New sto
 Migration `052` adds `comprehension_support_receipts` and the receipt IDs captured by each attempt. It preserves transcript, translation, hint and playback disclosures, including their inheritance by later question sets. Listening payloads contain the recording identity; a copied database alone does not copy its media files.
 
 Migration `053` adds criterion report and support fields to Translation and Word Jumble attempts. `translation_reference_views` records when a scoped translation's reference was shown in Phrasebook. Shared evidence validation checks those records against the owned original task and answer. Legacy attempts retain null fields.
+
+Migration `054` adds six tables for the diagnostic pilot: `assessment_pilot_sessions`, `assessment_pilot_components`, `assessment_pilot_support`, `assessment_pilot_submissions`, `assessment_pilot_reviews` and `assessment_pilot_requests`. They retain frozen forms, drafts, support, original responses, review state and duplicate-request receipts. The account importer verifies this history and its private recordings before copying it. Full provider feedback and model/prompt/rubric provenance remain attached to the saved review.
 
 These tables extend the existing task stores. They do not replace `words`, `forms`, activity attempts, course observations, coin events or FSRS schedules. Writing results, criterion reports and existing rewards commit together after the task revision is checked again. A failed review cannot leave a partial new grade.
 
@@ -121,9 +148,9 @@ This is a forward import and selection change. It does not rewrite personal anno
 
 ## Review and evaluation
 
-[Curriculum validation](curriculum-validation.md) documents the reviewer workflow and its limits. `scripts/prepare_curriculum_review.py` checks four pinned unit files and exports 66 authored cases: 48 typed variants/errors and 18 Writing/rubric cases. It separates provisional answer keys from blank human-review fields and refuses to overwrite completed review work.
+[Curriculum validation](curriculum-validation.md) documents the optional maintenance review workflow. `scripts/prepare_curriculum_review.py` exports versioned material with provisional answer keys separate from blank review fields. The expanded packet covers seven units and 120 authored cases; the earlier packet remains reproducible. Pilot material is exported separately so reviewers can inspect both assessment forms.
 
-The packet includes recoverable case and conjugation mistakes, partial communication, valid alternatives, empty evaluator input and model-answer support. It is a reproducible starting point for qualified review. It contains no completed human ratings, real learner recordings or measurements of model-marking accuracy.
+The packet includes recoverable case and conjugation mistakes, partial communication, valid alternatives, empty evaluator input and model-answer support. Review ingestion records content fingerprints and distinguishes human review from internal model review. One completed review can be recorded; comparing two raters and resolving disagreements are separate operations. No completed human ratings, real learner recordings or measurements of model-marking accuracy are claimed. These tools are for improving the product and do not require learners to use a tutor.
 
 ## Remaining work
 
@@ -133,13 +160,13 @@ The packet includes recoverable case and conjugation mistakes, partial communica
 | CU-02: contracts | Shared validation and owned task/report storage across more adapters | Judgement-quality evaluation and remaining activity integrations. |
 | CU-03: release identity | Routing and preservation for retained releases | Rehearse each future release and its new component types. |
 | CU-04: morphology | Forward import and constrained selection | Reviewed backfill of older incomplete tags. |
-| CU-05: teaching sequences | Four A1 units; the location unit includes prepared listening | Language and learner review; appropriate audio and transfer tasks for the new units. |
-| CU-06: Comprehension | Generated reading/listening contracts and disclosure receipts | A clean native-audio browser playback check, real audio review, question validity and human marking comparison. |
+| CU-05: teaching sequences | Seven A1 units; location and possession include prepared listening | Finish pending recordings; extend transfer tasks and evaluate teaching quality. |
+| CU-06: Comprehension | Generated reading/listening contracts, disclosure receipts and successful browser playback | Audio quality, question validity and marking evaluation. |
 | CU-07: controlled production | Typed units plus narrow Translation/Word Jumble reports | Validate natural alternatives and whether each generated focus is actually elicited. |
 | CU-08: Writing | Diagnostic integration | Human comparison of judgement quality and level demands. |
 | CU-09: Speaking | Narrow A1 directions diagnostic | Broader scenario mapping and real acoustic/linguistic validation. |
-| CU-10: A1 coverage | Four units and an explicit gap inventory | Most required teaching, lexical planning and balanced task coverage. |
-| CU-11–14: assessment and release | Shared foundations; offline review packet prepared | Five-domain pilot, qualified review, learner trial, justified pass policy and migration rehearsal. |
+| CU-10: A1 coverage | Seven units and an explicit gap inventory | Remaining teaching, lexical planning and balanced task coverage. |
+| CU-11–14: assessment and release | Resumable five-domain diagnostic pilot, original-response storage and component retakes | Two pilot recordings, production quality evaluation, learner trials and a justified policy before any new proficiency gate. |
 | CU-15–17: A2–B2 courses | References and ordinary practice exist | Full reviewed teaching, assessment, regions and retry routes for each level. |
 
-Next, use the reviewer packet to correct ambiguous language and marking expectations, finish the outstanding playback check, and prepare the missing unit audio. Broader A1 teaching can follow the gap inventory in parallel. A full A1–B2 reference catalogue is present; a complete, validated A1–B2 course is not.
+Next, finish the recordings when provider allowance is available, evaluate the pilot with real consenting learners, and expand the remaining A1 teaching from the gap inventory. Internal review has already corrected an ambiguous food answer, an unsuitable reading criterion and a speaking task that claimed interaction without a conversation. External review can improve confidence in the content; it is not a prerequisite for standalone use. A full A1–B2 reference catalogue is present; a complete, validated A1–B2 course is not.

@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from contracts.learning import assess_activity_answer, validate_pack
 from services.activity_evidence import validate_saved_evidence
-from services.curriculum_units import (UNIT_IDS, get_unit, _pack, _questions, _practice_contract,
+from services.curriculum_units import (UNIT_IDS, LISTENING_IDS, get_unit, _pack, _questions, _practice_contract,
                                        _unit_for_pack, writing_task)
 from tests.support import isolated_app
 
@@ -42,15 +42,20 @@ class CurriculumUnitExpansionTests(unittest.TestCase):
             html = self.client.get('/curriculum/units/' + unit_id).text
             self.assertIn(unit['title'], html)
             self.assertNotIn('Four questions about location and destination', html)
-            self.assertNotIn('/' + unit_id + '/listening', html)
+            if unit_id in LISTENING_IDS:
+                self.assertIn('/' + unit_id + '/listening', html)
+                self.assertTrue(unit['listening_available'])
+            else:
+                self.assertNotIn('/' + unit_id + '/listening', html)
             if unit.get('speaking_href'):
                 self.assertIn(unit['speaking_href'], html)
                 self.assertIn(unit['speaking_href'].split('/')[-1].split('?')[0], scenario_ids)
             else:
                 self.assertNotIn('Open conversation', html)
-            unavailable = self.post('/curriculum/units/' + unit_id + '/listening',
-                form={'profile_id': 'personal-learning', 'request_id': 'unprepared-' + unit_id})
-            self.assertEqual(unavailable.status_code, 404, unavailable.text)
+            if unit_id not in LISTENING_IDS:
+                unavailable = self.post('/curriculum/units/' + unit_id + '/listening',
+                    form={'profile_id': 'personal-learning', 'request_id': 'unprepared-' + unit_id})
+                self.assertEqual(unavailable.status_code, 404, unavailable.text)
         with sqlite3.connect(self.db) as conn:
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM learning_sessions').fetchone()[0], 0)
 

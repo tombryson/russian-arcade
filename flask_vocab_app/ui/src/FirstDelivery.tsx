@@ -73,7 +73,7 @@ export function FirstDelivery({ next, onIntroduce, profileHref='/post/profiles',
 
   return <section class="page first-delivery lesson-player">
     <div class="lesson-player-nav">
-    <div class="lesson-head"><a class="text-link" href={courseJourney ? "#journey" : "#first-steps"}>{courseJourney ? "Your journey" : "All five lessons"}</a><span class="quiet">{courseJourney ? "Before the journey" : "Lesson 1 of 5"}</span></div>
+    <div class="lesson-head"><a class="text-link" href="#first-steps">All five lessons</a><span class="quiet">Lesson 1 of 5</span></div>
     <ol class="tutorial-steps" aria-label="Tutorial progress">
       {['Lingocoins', 'Your progress', 'Your first words', 'Complete'].map((label, index) => <li key={label} aria-current={tutorialStep === index ? 'step' : undefined}><span aria-hidden="true">{index + 1}</span><span class="tutorial-step-label">{label}</span></li>)}
     </ol>

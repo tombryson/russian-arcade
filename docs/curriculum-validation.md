@@ -2,22 +2,41 @@
 
 ## Current status
 
-The application has four authored A1 teaching units. They are practice material, not validated examinations. Their Russian examples and provisional answer keys still need review by a qualified teacher or assessor. No human review or learner trial is recorded in this package.
+The application has seven authored A1 teaching units and an opt-in diagnostic pilot covering five skills. They work without a tutor. Human review is optional editorial quality assurance for the maintainers, not a prerequisite for using the app or receiving feedback.
 
-| Unit | Focus | Contextual choices | Typed forms | Listening |
+The examples and answer keys remain provisional. No independent human review or learner trial is recorded. The pilot does not award a level, unlock activities or claim to be a TORFL examination.
+
+| Unit | Focus | Contextual choices | Typed forms | Listening available |
 | --- | --- | ---: | ---: | ---: |
-| Where and where to | Location, destination and movement within a place | 4 | 3 | 3 prepared clips |
-| Possession and absence | An available item, a missing item and its owner | 6 | 4 | Not prepared |
-| Objects and recipients | Direct objects, animate objects and recipients | 6 | 4 | Not prepared |
-| Time and daily routines | Days, times, conjugation and tense | 6 | 5 | Not prepared |
+| Where and where to | Location, destination and movement within a place | 4 | 3 | 3 clips |
+| Possession and absence | Available items, missing items and ownership | 6 | 4 | 3 clips |
+| Objects and recipients | Direct objects, animate objects and recipients | 6 | 4 | Not yet |
+| Time and daily routines | Days, times, conjugation and tense | 6 | 5 | Not yet |
+| Describing clothes and objects | Adjective agreement with nouns | 6 | 4 | Not yet |
+| Referring to people | Personal and possessive pronouns | 6 | 4 | Not yet |
+| Walking and travelling | Walking, transport and repeated journeys | 6 | 4 | Not yet |
 
-Each unit has classified examples and its own original Writing task. Short reading questions require information from a supplied context. Typed tasks test a specified form; they are not free-writing tests. Their accepted variants include selected fuller phrases and ignore outer whitespace, letter case and final punctuation. This does not mean that all possible paraphrases are accepted.
+Each unit has classified examples, a dedicated reading page and an original Writing task. Typed tasks test a specified form. They accept selected fuller phrases and ignore outer whitespace, case and final punctuation. They do not claim to accept every paraphrase or measure independent writing.
 
-The three new units add 18 contextual choices and 13 typed tasks. They do not cover the whole A1 case or verb system. For example, the object unit does not teach all plural animate forms; the routine unit does not assess every tense or aspect pair.
+These units do not cover the whole A1 grammar system. Supplied infinitives in motion tasks test conjugation; separate choices test the distinction between movement types. Speaking links open existing scenarios. They do not establish that those scenarios assess the unit's exact criteria.
 
-Speaking links open existing activities. They do not carry the unit's task or criteria into a conversation. Possession links to shopping; routines link to meeting people. The objects-and-recipients unit has no Speaking link because no current scenario reliably elicits its specific task.
+There are seven authored three-item listening packs. Location and possession are fully recorded and available. One objects-and-recipients clip is prepared, but its incomplete pack remains unavailable. The other packs and both pilot recordings are pending. No listening button appears for an incomplete pack. The four earlier published unit sources remain unchanged.
 
-New units have no listening buttons until their recordings are prepared and registered. A written transcript alone is not listening material. The earlier location unit retains its original published content, contracts and recordings.
+## Diagnostic pilot
+
+The pilot is accessible from Curriculum and the profile's course section. A learner can save work, change skill, return later and retry an individual skill. Original writing and speaking recordings are saved before feedback is requested. A failed review can be retried explicitly without resubmitting the response.
+
+| Skill | Sample per form | Interpretation |
+| --- | --- | --- |
+| Language use | Six contextual choices | Specified forms in these sentences |
+| Reading | One passage and three questions | Meaning, reference and sequence in that passage |
+| Listening | One recording and three questions | Information heard in that recording |
+| Writing | One personal message | Communicative purpose and requested details |
+| Speaking | One original recorded reply | Personal information and intelligibility in a short monologue |
+
+Each skill has two authored forms. They have not been calibrated or shown to be equally difficult. Retrying a previously seen form preserves prior feedback as assistance. Hints and transcripts are recorded. Listening playback is a delivery receipt, not proof of attention. The speaking task does not assess dialogue or turn-taking.
+
+Feedback is specific to the saved response. Unclear or unavailable evidence remains unscored. There is no aggregate pass mark. New pilot sessions require both verified listening recordings; existing saved work remains accessible while media is being prepared. This is a media-readiness check, not a human-review requirement.
 
 ## Automated checks
 
@@ -26,78 +45,81 @@ Run from the repository root:
 ```sh
 PYTHONPATH=flask_vocab_app python -m unittest \
   tests.test_curriculum_unit_expansion \
+  tests.test_curriculum_unit_a1_expansion \
   tests.test_curriculum_review_packet \
-  tests.test_curriculum_units \
-  tests.test_curriculum_unit_listening
+  tests.test_curriculum_review_ingest \
+  tests.test_assessment_pilot_review_packet \
+  tests.test_assessment_pilot \
+  tests.test_assessment_pilot_integrity
 python scripts/prepare_curriculum_review.py --check
+python scripts/prepare_assessment_pilot_review.py --check
 ```
 
-These checks verify content identities, reference IDs, accepted-form matching, session ownership and saved evidence. They exercise the real application routes without a model call. They check that answers are hidden before a response, retries do not duplicate records, and unavailable audio cannot start a session. Unit practice does not write words into the vocabulary database or award a curriculum pass.
+The checks verify content identities, reference IDs, accepted forms, ownership, original response storage and grounded reports. They exercise the application without paid model calls. They test hidden answers, transcript assistance, missing audio, stale forms, duplicate requests and explicit review retries. Passing tests shows that the software follows its declared rules; it does not validate those rules as a proficiency assessment.
 
-The reviewer fixture has 66 authored cases: 48 controlled-form cases and 18 Writing cases. It includes wrong cases, wrong conjugations, valid alternatives, incomplete messages, empty evaluator input and use of a model answer. An empty Writing draft remains blocked by the live form; its fixture tests the assessment concept of insufficient evidence.
+The current unit fixture contains 120 authored cases: 84 controlled-form cases and 36 Writing cases. It includes valid alternatives, wrong forms, incomplete messages, empty evaluator input and model-answer use. Empty Writing drafts remain blocked in the live form. The fixture tests the evaluator's treatment of insufficient evidence.
 
-A passing test shows that software follows its declared key. It does not prove the key is linguistically sound. The Writing expectations are author hypotheses. The offline script does not call a grader, measure model accuracy or certify a learner's level.
+## Optional review packets
 
-## Review packet
-
-Generate a separate packet for each review round:
+Export a separate packet for each review round:
 
 ```sh
-python scripts/prepare_curriculum_review.py --output-dir /tmp/russian-arcade-a1-review
+python scripts/prepare_curriculum_review.py --output-dir /tmp/arcade-units-review
+python scripts/prepare_assessment_pilot_review.py --output-dir /tmp/arcade-pilot-review
 ```
 
-The directory contains:
+Each directory contains:
 
-- `reviewer.json`: examples, prompts, reference requirements, learner responses and blank review fields. Case IDs do not reveal their expected outcome.
-- `author-key.json`: the provisional keys and rationale. Keep this separate until initial ratings are complete.
-- `manifest.json`: content hashes, fixture identity and the limits of this review.
+- `reviewer.json`: source material, prompts, criteria and blank review fields. Unit sample responses use neutral case IDs.
+- `author-key.json`: provisional keys and explanations. Keep this file separate until initial ratings are complete.
+- `manifest.json`: source hashes, recording inventory and review limitations.
+- `audio/`: available recordings. Missing clips are marked as unprepared in the reviewer file.
 
-The exporter reads source files only. It does not open a learner database, use credentials or contact a provider. Repeated exports are identical. It refuses to overwrite a completed or edited review file.
+The pilot packet includes both forms of all five skills. It contains no real learner recordings or responses. The unit packet includes all seven listening sources, even where recordings are still pending. Neither exporter accesses learner data, credentials or a provider. Exports refuse to overwrite edited reviews or changed recordings.
 
-Unit hashes pin the exact material under review. If a published unit needs correction, retain the old version for saved attempts and create a new unit version. Issue a new fixture version and review the changed cases. Do not update a hash merely to silence a failed check.
+Source hashes pin the material under review. Corrections to published tasks need a new content version so saved attempts retain their original prompts and keys. Issue a new review fixture when content changes; do not replace hashes merely to silence a check.
 
-## Language and task review
+## Review submissions and disputed items
 
-Use a qualified Russian-as-a-foreign-language teacher or assessor. Record their role, date and the content hashes. Do not describe a model pass as a human review.
+A reviewer fills a copy of `reviewer.json`. Record a name or identifier, qualification, ISO date and `kind: "human"`. Internal model work uses `kind: "internal_model"`; it does not count as human review. These are declared identities, not externally verified credentials.
 
-Review the examples first, then each question and its distractors:
+```sh
+python scripts/review_curriculum_packet.py \
+  --packet-dir /tmp/arcade-units-review \
+  --review /path/to/completed-review.json \
+  --output /tmp/arcade-review-report.json
+```
 
-1. Is the Russian natural, and does the English explanation preserve its meaning?
-2. Is the grammatical distinction correctly classified? Is its prerequisite knowledge taught or stated?
-3. Does the prompt supply enough context for one intended choice? Could another option be valid in ordinary Russian?
-4. Does a typed task accept reasonable ways to give the requested form? Are any accepted variants actually wrong in context?
-5. Does the cited requirement match what the learner does? A reading answer cannot establish listening or spontaneous speaking ability.
-6. Is the explanation short, accurate and useful after a wrong answer?
+The importer checks the source pins, original prompts, responses, keys and bundled audio before accepting review fields. One completed human rating is recorded. A second rating is useful for comparing marking; it is not mandatory for every item. Missing ratings, disputed keys, new alternatives and content concerns remain explicit in the report.
 
-Record disagreements with examples. Rework ambiguous items before release as assessment material. A second assessor should resolve disputed keys independently; do not hide disagreement in an average score.
+For disputed items, collect a second independent rating. The report includes an adjudication template for a separate assessor. An adjudication is bound to the exact packet and submitted reviews; it cannot silently replace different work. Accept, revise and exclude decisions remain separate. Revised or excluded material needs a follow-up content change. The tool never changes learner records, grants a level or blocks a learner.
 
-## Rubric review
+## Review criteria
 
-Rate the Writing cases before reading the author key. Judge the requested communication and grammar separately. A message can fulfil its purpose while containing a recoverable case error. The fixture includes `У меня нет вода` for that reason: the missing item remains clear, while `воды` is the required correction.
+A Russian-as-a-foreign-language teacher or assessor can examine:
 
-Use the existing criterion outcomes consistently:
+1. Natural Russian and accurate English explanations.
+2. Correct grammatical classification and necessary prerequisites.
+3. Enough context for the intended choice, including plausible alternative answers.
+4. Reasonable accepted forms and rejected forms.
+5. Alignment between the cited requirement and the response the task actually elicits.
+6. Brief, useful feedback after an error.
+7. Clear, natural recordings and an appropriate listening pace.
 
-| Outcome | Meaning for these tasks |
-| --- | --- |
-| Satisfied | The requested information and communicative purpose are clear. |
-| Partial | Relevant information is supplied, but an important part is missing or contradictory. |
-| Not satisfied | The response provides evidence but does not fulfil the criterion. |
-| Insufficient evidence | There is not enough observable response to judge it. |
+For Writing, judge communication separately from grammar. `У меня нет вода` still communicates the missing item, although `воды` is the required form. Keep the learner's original response when recording a correction. Supported work can be correct without becoming independent evidence.
 
-Supported work may still answer the task correctly. It must not become independent evidence. Record model-answer use separately from the quality of the resulting text. Keep the original response when noting errors; do not replace it with a corrected version before assessment.
+Use `satisfied`, `partial`, `not_satisfied` and `insufficient_evidence` for the stated criterion. Do not infer a whole proficiency level from one choice or short response.
 
-After human labels are agreed, a separate model-evaluation run can compare provider reports against them. Record the model, prompt version, task hash, response, support and full report. Count false passes, false failures, unsupported claims, invalid reports and abstentions separately. Split related variants between development and evaluation sets by task family to avoid testing a paraphrase of the same example used for tuning. No such provider run is included here.
+After a reviewed dataset exists, a separate provider evaluation can compare model reports against it. Record model identity, prompt version, task hash, original response, assistance and full report. Count false passes, false failures, unsupported claims and abstentions separately. Keep related task variants out of both the tuning and evaluation sets. No such calibrated provider evaluation is included here.
 
-## Listening and speaking review
+## Browser playback checks
 
-The location unit's three recordings have file and transcript hashes. File checks do not establish natural pronunciation or suitable listening difficulty. Review every recording in a browser, including slower playback, replay, hint and transcript behaviour. Confirm that the answer is not shown before listening.
+On 24 September 2026, a fresh Codex in-app browser tab played the authored location clip through its native controls to the end: duration 7.476825 seconds, no media error. The receipt unlocked answers. Replay and 0.75× playback worked. Saving and advancing restored the listening requirement for the next question. Explicit transcript use was marked as assistance.
 
-For future recordings of the new units, author the message and question together. Record only after its intended meaning and answer are reviewed. Register the final audio hash and duration before exposing the listening control.
+A generated Comprehension test fixture also played a real bundled MP3, unlocked response fields, saved five responses and restored them after reload. Generation and marking were mocked. This checks playback, transport and saved state, not provider accuracy or the linguistic quality of generated content. Keyboard Space operated the native player.
 
-Speech-error evaluation needs original audio with known wording. Record consented speakers saying both correct and deliberately incorrect forms. Include recoverable mistakes, restarts and ambiguity. Compare the audio, raw transcription and assessor report; check whether transcription silently repairs an error. Synthetic speech can test transport and playback, but cannot establish how a real learner's pronunciation will be handled. This package contains no new speech samples or completed fluency validation.
+No human pronunciation assessment or microphone trial is claimed by these checks. Speech-error evaluation needs consented original recordings containing known correct forms, mistakes, restarts and ambiguity. Compare the audio, literal transcription and feedback to detect silent autocorrection. Synthetic speech is useful for transport tests but cannot establish recognition accuracy for real learners.
 
-## Learner trial and release decision
+## Future assessment validation
 
-Run the revised units with learners near the intended level. Observe whether they understand the task, distinguish the forms, use hints and return to their saved work. Record unclear prompts, accepted answers that were rejected and corrections they cannot act on. Test keyboard use, narrow screens and Cyrillic entry as part of the same session.
-
-Before these tasks can support a level gate, the release record needs reviewed keys, resolved ambiguity, enough independent tasks per requirement, human-checked rubric behaviour and learner evidence. Document remaining gaps explicitly. One correct choice, one memorised form or one successful unit is not an A1 pass.
+Learner trials should examine task clarity, rejected valid answers, useful corrections, saved work and keyboard/mobile use. A consequential level gate would need reviewed keys, resolved ambiguity, enough independent tasks per requirement and tested marking behaviour. These are future validation criteria, not dependencies for today's standalone practice and diagnostic feedback.

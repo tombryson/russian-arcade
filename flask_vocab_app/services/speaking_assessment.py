@@ -299,7 +299,7 @@ class SpeakingAssessment:
     def __init__(self, config):
         self.config = config_snapshot(config)
 
-    def assess(self, audio_path, scenario, dialogue, language='en', *, curriculum_contract=None):
+    def assess(self, audio_path, scenario, dialogue, language='en', *, curriculum_contract=None, include_provenance=False):
         if not self.config.get('OPENAI_API_KEY'):
             logger.warning('Speaking feedback unavailable: OPENAI_API_KEY is not configured')
             raise SpeechError('Speaking feedback is currently unavailable. Your recording is saved.')
@@ -344,6 +344,15 @@ insufficient and grammar/fluency scores are null because the sample is short. Do
 Judge only the elicited location question, not all goals or the whole reference requirement. Accept alternative phrasing.
 These are fallible diagnostic observations; support use and independence are unverified. Do not claim mastery,
 proficiency, a pass or rewards. Never return audio hashes, source metadata or an independence claim.'''
+                if contract['rubric_version'] != 'speaking-location-question-v1':
+                    instruction = instruction.replace(
+                        'A short clear question such as «Где парк?» can satisfy the narrow location criterion even when speech_status is\n'
+                        'insufficient and grammar/fluency scores are null because the sample is short. Do not require eight words for this criterion.\n'
+                        'Judge only the elicited location question, not all goals or the whole reference requirement. Accept alternative phrasing.',
+                        'Judge only the explicitly elicited criteria in the frozen contract, accepting alternative phrasing. '
+                        'A brief intelligible response may satisfy a narrow criterion even when the sample cannot support general grammar or fluency scores. '
+                        'Do not impose a minimum word count. A recorded message is not an interactive conversation: do not invent replies, repair exchanges, '
+                        'or turn-taking evidence. Leave any unelicited or uncertain criterion unscored.')
         except (OSError, ValueError, TypeError, AttributeError, wave.Error, EOFError):
             raise SpeechError('The saved recording could not be prepared for feedback. It has been kept.') from None
 
@@ -371,5 +380,9 @@ proficiency, a pass or rewards. Never return audio hashes, source metadata or an
             raise
         except Exception:
             raise SpeechError('Speaking feedback could not finish. Your audio is saved; you can retry.') from None
-        return {**result, 'basis': 'audio_review', 'rubric_version': RUBRIC_VERSION,
+        provenance = {}
+        if include_provenance:
+            import hashlib
+            provenance['assessment_provenance'] = {'model': model, 'prompt_sha256': hashlib.sha256(instruction.encode()).hexdigest(), 'rubric_version': RUBRIC_VERSION}
+        return {**result, **provenance, 'basis': 'audio_review', 'rubric_version': RUBRIC_VERSION,
                 'model': model, 'rewards_applied': False}

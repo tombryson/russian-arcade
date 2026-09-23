@@ -1,4 +1,4 @@
-"""Prepare the three authored location/destination listening clips once.
+"""Prepare one explicitly selected authored listening pack once.
 
 This maintenance command uses the existing speech provider and configured random
 voices. It never runs during a learner request. Published recordings are checked
@@ -18,6 +18,22 @@ ROOT = Path(__file__).resolve().parents[1]
 UNIT_ID = 'location-destination-listening-v1'
 MAX_NEW = 3
 MAX_CHARACTERS = 750
+UNIT_CONTENT_IDS = (
+    UNIT_ID, 'possession-absence-listening-v1', 'objects-recipients-listening-v1',
+    'time-routine-listening-v1', 'noun-adjective-agreement-listening-v1',
+    'personal-reference-listening-v1', 'basic-motion-listening-v1',
+)
+PILOT_CONTENT_ID = 'a1-pilot-listening-v1'
+CONTENT_IDS = (*UNIT_CONTENT_IDS, PILOT_CONTENT_ID)
+
+
+def content_layout(content_id):
+    """Keep source and destination paths in a small authored allowlist."""
+    if content_id in UNIT_CONTENT_IDS:
+        return ('curriculum_units/' + content_id + '.json', 'curriculum/' + content_id, 3)
+    if content_id == PILOT_CONTENT_ID:
+        return ('assessment_pilot/' + content_id + '.json', 'assessment-pilot', 2)
+    raise ValueError('Unsupported listening content version.')
 
 
 def _sha256(data):
@@ -41,24 +57,26 @@ def _manifest_bytes(value):
 
 def plan_recordings(source, directory, probe):
     """Validate all published assets before returning any new paid work."""
-    if source.get('id') != UNIT_ID or source.get('version') != 'listening-v1':
+    content_id = source.get('id')
+    _, audio_directory, clip_count = content_layout(content_id)
+    if source.get('version') != 'listening-v1':
         raise ValueError('Unsupported listening content version.')
     items = source.get('items')
-    if not isinstance(items, list) or len(items) != MAX_NEW:
-        raise ValueError('This command prepares exactly three authored clips.')
+    if not isinstance(items, list) or len(items) != clip_count:
+        raise ValueError(f'This content requires exactly {clip_count} authored clips.')
     directory = Path(directory)
     manifest_path = directory / 'manifest.json'
     if directory.is_symlink() or manifest_path.is_symlink():
         raise ValueError('Recording paths must not be symbolic links.')
     saved = json.loads(manifest_path.read_text()) if manifest_path.exists() else {
         'version': 'curriculum-unit-audio-v1',
-        'content_id': UNIT_ID,
+        'content_id': content_id,
         'provider': 'elevenlabs',
         'source': 'App-authored learning material with synthetic narration.',
         'clips': {},
     }
     if (saved.get('version') != 'curriculum-unit-audio-v1'
-            or saved.get('content_id') != UNIT_ID
+            or saved.get('content_id') != content_id
             or saved.get('provider') != 'elevenlabs'
             or not isinstance(saved.get('clips'), dict)):
         raise ValueError('Unsupported recording manifest.')
@@ -71,7 +89,7 @@ def plan_recordings(source, directory, probe):
                 or identifier in identifiers or not isinstance(text, str) or not text.strip()):
             raise ValueError('Each authored clip needs a unique safe ID and transcript.')
         identifiers.add(identifier)
-        expected_url = f'/static/audio/course/curriculum/{UNIT_ID}/{identifier}.mp3'
+        expected_url = f'/static/audio/course/{audio_directory}/{identifier}.mp3'
         if item.get('audio_url') != expected_url:
             raise ValueError('Recording URL does not match its authored ID.')
         digest = _sha256(text.encode())
@@ -147,6 +165,7 @@ def prepare_recordings(source, directory, config, provider_factory, probe, *, dr
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--env-file', action='append', type=Path, default=[])
+    parser.add_argument('--content-id', choices=CONTENT_IDS, default=UNIT_ID)
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--max-new', type=int, choices=range(MAX_NEW + 1), default=MAX_NEW)
     args = parser.parse_args(argv)
@@ -158,8 +177,9 @@ def main(argv=None):
     sys.path.insert(0, str(ROOT / 'flask_vocab_app'))
     from config import app_config
     from services.speech_provider import SpeechProvider, audio_info
-    source = json.loads((ROOT / 'flask_vocab_app/data/curriculum_units' / (UNIT_ID + '.json')).read_text())
-    directory = ROOT / 'flask_vocab_app/static/audio/course/curriculum' / UNIT_ID
+    source_path, audio_directory, _ = content_layout(args.content_id)
+    source = json.loads((ROOT / 'flask_vocab_app/data' / source_path).read_text())
+    directory = ROOT / 'flask_vocab_app/static/audio/course' / audio_directory
     try:
         prepare_recordings(source, directory, app_config(), SpeechProvider, audio_info,
                            dry_run=args.dry_run, max_new=args.max_new)

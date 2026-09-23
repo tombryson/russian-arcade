@@ -13,9 +13,13 @@ from services.activity_evidence import load_contract, save_contract, save_report
 from services.curriculum_requirement_map import requirement_index
 
 UNIT_IDS = ('location-destination-v1', 'possession-absence-v1',
-            'objects-recipients-v1', 'time-routine-v1')
+            'objects-recipients-v1', 'time-routine-v1',
+            'noun-adjective-agreement-v1', 'personal-reference-v1', 'basic-motion-v1')
 DATA_DIR = Path(__file__).resolve().parents[1] / 'data' / 'curriculum_units'
-LISTENING_IDS = {'location-destination-v1': 'location-destination-listening-v1'}
+LISTENING_IDS = {
+    'location-destination-v1': 'location-destination-listening-v1',
+    'possession-absence-v1': 'possession-absence-listening-v1',
+}
 
 
 def listening_content(unit_id):
@@ -63,6 +67,10 @@ def get_unit(unit_id):
     # Presentation availability is derived from prepared media, not a promise
     # in a content draft. It is not included in an issued task contract.
     unit['listening_available'] = unit_id in LISTENING_IDS
+    if unit['listening_available']:
+        listening = listening_content(unit_id)
+        unit['listening_title'] = listening['title']
+        unit['listening_title_ru'] = listening['title_ru']
     return unit
 
 

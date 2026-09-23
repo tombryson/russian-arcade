@@ -10,6 +10,7 @@ from pathlib import Path
 import sqlite3
 import sys
 import tempfile
+import wave
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'flask_vocab_app'))
 KNOWN = {'a1-v1': {'a1-post-office', 'a1-home', 'a1-market', 'a1-delivery'},
@@ -21,17 +22,25 @@ PRESERVE = ('course_checkpoint_attempts', 'course_checkpoint_requests', 'course_
             'course_release_switches', 'course_checkpoint_followups',
             'activity_task_contracts', 'activity_criterion_reports', 'learning_item_support',
             'comprehension_tasks', 'comprehension_attempts', 'comprehension_support_receipts',
-            'translation_attempts', 'word_jumble_attempts', 'translation_reference_views')
+            'translation_attempts', 'word_jumble_attempts', 'translation_reference_views',
+            'assessment_pilot_sessions', 'assessment_pilot_components', 'assessment_pilot_support',
+            'assessment_pilot_submissions', 'assessment_pilot_reviews', 'assessment_pilot_requests')
 
 
-def inventory(conn):
+def inventory(conn, *, pilot_audio_root=None):
     tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     result = {'schema': conn.execute('SELECT MAX(version) FROM schema_migrations').fetchone()[0],
               'counts': {name: conn.execute('SELECT COUNT(*) FROM ' + name).fetchone()[0] for name in PRESERVE if name in tables},
               'foreign_key_errors': len(conn.execute('PRAGMA foreign_key_check').fetchall()),
               'integrity_errors': sum(row[0] != 'ok' for row in conn.execute('PRAGMA integrity_check')),
               'unknown_sections': 0, 'unknown_preparations': 0, 'invalid_comprehension_evidence': 0,
-              'invalid_production_evidence': 0}
+              'invalid_production_evidence': 0, 'invalid_assessment_pilot_evidence': 0}
+    if any(name.startswith('assessment_pilot_') for name in tables):
+        from services.assessment_pilot_integrity import validate_saved_pilot
+        try:
+            validate_saved_pilot(conn, audio_root=pilot_audio_root)
+        except (OSError, ValueError, LookupError, TypeError, KeyError, wave.Error, EOFError):
+            result['invalid_assessment_pilot_evidence'] = 1
     if 'comprehension_tasks' in tables:
         from services.activity_evidence import _validate_comprehension_evidence
         try:
@@ -86,13 +95,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--db', type=Path, required=True)
     parser.add_argument('--rehearse', action='store_true')
+    parser.add_argument('--pilot-audio-root', type=Path,
+                        help='Optionally verify original pilot recordings and frozen review WAVs as well as database bindings.')
     args = parser.parse_args()
     if not args.db.is_file():
         raise SystemExit('Database not found.')
     with sqlite3.connect(args.db.resolve().as_uri() + '?mode=ro', uri=True) as source:
-        report = inventory(source)
+        report = inventory(source, pilot_audio_root=args.pilot_audio_root)
         if any(report[key] for key in ('foreign_key_errors', 'integrity_errors', 'unknown_sections', 'unknown_preparations',
-                                      'invalid_comprehension_evidence', 'invalid_production_evidence')):
+                                      'invalid_comprehension_evidence', 'invalid_production_evidence', 'invalid_assessment_pilot_evidence')):
             print(json.dumps(report, indent=2))
             raise SystemExit('Resolve course integrity findings before release.')
         if args.rehearse:

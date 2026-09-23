@@ -10,6 +10,7 @@ import { JourneyGame, GameCatalogue } from './JourneyGames';
 import { GameShop } from './GameShop';
 import { api, type Household, type LearningHome, type Progress, type PracticeSession } from './learning-api';
 import { Practice } from './Practice';
+import { AssessmentPilot } from './AssessmentPilot';
 import { Flashcards, FlashcardsSetup } from './Flashcards';
 import { GenerateCards } from './GenerateCards';
 import { NativeReview } from './NativeReview';
@@ -29,10 +30,12 @@ import { StepThroughConversation } from './StepThroughConversation';
 import sleepingBarsik from './assets/barsik-sleeping-v1.webp';
 import './styles/lesson-player.css';
 
-type Page = 'home' | 'activities' | 'words' | 'practice' | 'first-delivery' | 'first-steps' | 'flashcards' | 'review' | 'generate' | 'conversation' | 'speech-lab' | 'speaking' | 'journey' | 'game' | 'games' | 'shop';
+type Page = 'home' | 'activities' | 'words' | 'practice' | 'assessment' | 'first-delivery' | 'first-steps' | 'flashcards' | 'review' | 'generate' | 'conversation' | 'speech-lab' | 'speaking' | 'journey' | 'game' | 'games' | 'shop';
 type Route = { page: Page; gameId?:string; sessionId?: string; worldId?:string; chapterId?:string; courseReleaseId?:string; checkpointId?:string;coursePracticeId?:string;courseSectionId?:string; wordId?: number; lessonId?: string; topic?:string; scenarioId?:string; speakingLevel?:PracticeLevel; speakingMode?:'fluent'|'step'; canonicalHash?: string };
 function route(): Route {
   const hash = window.location.hash.slice(1);
+  const assessment = /^assessment(?:\/([A-Za-z0-9_-]+))?$/.exec(hash);
+  if (assessment) return { page: 'assessment', sessionId: assessment[1] };
   const gameSession=/^games\/session\/([A-Za-z0-9_-]+)$/.exec(hash);
   if(gameSession)return {page:'game',sessionId:gameSession[1]};
   const game=/^games\/([a-z][a-z0-9-]{1,48})$/.exec(hash);
@@ -110,7 +113,7 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
   const header = useRef<HTMLElement>(null);
   const activityWorkspace = Boolean(navigation && navigationLayout === 'sidebar');
   const lessonWorkspace = location.page === 'first-delivery' || location.page === 'first-steps' && !!location.lessonId;
-  const learningWorkspace = lessonWorkspace || location.page === 'practice' || location.page === 'speaking' || location.page === 'journey' && Boolean(location.chapterId || location.checkpointId || location.coursePracticeId || location.courseSectionId);
+  const learningWorkspace = lessonWorkspace || location.page === 'assessment' || location.page === 'practice' || location.page === 'speaking' || location.page === 'journey' && Boolean(location.chapterId || location.checkpointId || location.coursePracticeId || location.courseSectionId);
   const activeNavigationPage = ['flashcards','review','generate'].includes(location.page) ? 'native_flashcards'
     : ['conversation','speech-lab','speaking'].includes(location.page) ? 'speaking'
     : location.page === 'words' ? 'vocab'
@@ -167,7 +170,7 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
   }, [location, state.mode]);
   useEffect(() => {
     if (signedOut) { setState({mode:'legacy'}); return; }
-    if (!householdEnabled && !['flashcards','review','generate','conversation','speech-lab','speaking','practice'].includes(location.page)) { setState({mode:'legacy'});return; }
+    if (!householdEnabled && !['flashcards','review','generate','conversation','speech-lab','speaking','practice','assessment'].includes(location.page)) { setState({mode:'legacy'});return; }
     const controller = new AbortController();
     startAbort.current?.abort(); setStarting(false); setStartError(''); setState({ mode: 'loading' });
     void (async () => {
@@ -175,7 +178,7 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
         const household = await api<Household>('/api/v1/household', undefined, controller.signal);
         if (household.adult) setState({ mode: 'adult', household });
         else if (!household.profile) setState({ mode: 'locked', household });
-        else if (['flashcards','review','generate','conversation','speech-lab','speaking','practice'].includes(location.page)) {
+        else if (['flashcards','review','generate','conversation','speech-lab','speaking','practice','assessment'].includes(location.page)) {
           if (!controller.signal.aborted) setState({ mode: householdEnabled ? 'child' : 'personal', household, home: {profile:household.profile,content:[],sessions:[]} });
         } else {
           const [home, progress] = await Promise.all([
@@ -295,6 +298,7 @@ export function App({ householdEnabled = false, nativeEnabled = true, language =
         : ['flashcards','review'].includes(location.page) && nativeEnabled ? ['child','personal'].includes(state.mode) && state.home
           ? location.page === 'review' && location.sessionId ? <NativeReview key={`${state.home.profile.id}:${location.sessionId}`} profileId={state.home.profile.id} sessionId={location.sessionId} language={language} personal={!householdEnabled} /> : <Flashcards key={`${state.home.profile.id}:${location.wordId ?? "all"}:${location.lessonId ?? "all"}:${location.topic ?? ''}`} wordId={location.wordId} lessonId={location.lessonId} topic={location.topic} profileId={state.home.profile.id} language={language} personal={!householdEnabled} />
           : <FlashcardsSetup adult={state.mode === 'adult'} language={language} />
+        : location.page === 'assessment' && profile ? <AssessmentPilot key={`${profile.id}:${location.sessionId ?? 'overview'}`} sessionId={location.sessionId} profileId={profile.id} language={language} />
         : location.page === 'practice' ? (state.mode === 'child' || state.mode === 'personal') && state.home && location.sessionId ? <Practice key={`${state.home.profile.id}:${location.sessionId}`} sessionId={location.sessionId} profileId={state.home.profile.id} onFinish={() => { window.location.hash = 'activities'; setRefresh(value => value + 1); }} />
           : <section class="page"><h1 ref={heading} tabIndex={-1}>Choose a profile to continue.</h1><p>Open the profile that started this practice.</p><a class="text-link" href="/post/profiles">Choose a profile</a></section>
         : location.page === 'home' ? <>

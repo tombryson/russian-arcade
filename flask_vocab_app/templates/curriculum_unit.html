@@ -27,7 +27,7 @@
           <button class="btn btn-outline-primary" type="submit">{{ 'Начать или продолжить' if russian else 'Start or continue forms' }} →</button>
         </form>{% else %}<a href="/post/profiles">{{ 'Выбрать профиль' if russian else 'Choose your profile to practise' }} →</a>{% endif %}
       </section>
-      {% if unit.listening_available %}<section><h2>{{ 'Узнайте место на слух' if russian else 'Listen for the place' }}</h2><p>{{ 'Три коротких сообщения. Послушайте и выберите ответ.' if russian else 'Three short messages. Listen and choose the answer.' }}</p>
+      {% if unit.listening_available %}<section><h2>{{ unit.listening_title_ru if russian else unit.listening_title }}</h2><p>{{ 'Три коротких сообщения. Послушайте и выберите ответ.' if russian else 'Three short messages. Listen and choose the answer.' }}</p>
         {% if profile_id %}<form method="post" action="/curriculum/units/{{ unit.id }}/listening" hx-boost="false">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="profile_id" value="{{ profile_id }}"><input type="hidden" name="request_id" value="{{ listening_request_id }}">
           <button class="btn btn-outline-primary" type="submit">{{ 'Начать или продолжить' if russian else 'Start or continue listening' }} →</button>
