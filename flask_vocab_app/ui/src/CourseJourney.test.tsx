@@ -18,10 +18,19 @@ async function selectAnswers() {
 }
 beforeEach(()=>{sessionStorage.clear();window.location.hash='';});afterEach(()=>vi.unstubAllGlobals());
 describe('Guided chapter journey',()=>{
-  it('shows four chapters, honest locks and easy practice entry without opening the original letter',async()=>{
-    mockServer();render(<CourseJourney progression={progression()}/>);
+  it.each([['practice','In practice','Continue milestone →'],['ready','Checkpoint ready','Open checkpoint →']] as const)('shows one %s milestone card and keeps future chapters hidden',async(status,state,action)=>{
+    const current=course();current.chapters[0].status=status;
+    mockServer(()=>current);render(<CourseJourney progression={progression()}/>);
     await screen.findByRole('heading',{name:'Your journey'});
-    expect(screen.getAllByText('Milestone 1 of 4 · In practice')).toHaveLength(2);
+    expect(screen.queryByText('Your A1 journey')).toBeNull();
+    expect(screen.getAllByText(`Milestone 1 of 4 · ${state}`)).toHaveLength(1);
+    expect(screen.getAllByRole('heading',{name:'A small message'})).toHaveLength(1);
+    expect(screen.queryByRole('link',{name:'A small message'})).toBeNull();
+    const continueLink=screen.getByRole('link',{name:action});
+    const activeCard=continueLink.closest('li')!;
+    expect(activeCard).toBeTruthy();
+    expect(activeCard.querySelectorAll('a')).toHaveLength(1);
+    expect(continueLink.getAttribute('href')).toBe('#journey/chapter/first');
     for (const number of [2,3,4]) {
       const future=screen.getByRole('listitem',{name:`Milestone ${number}, locked`});
       expect(future.textContent).toBe(String(number));
@@ -31,7 +40,6 @@ describe('Guided chapter journey',()=>{
     expect(screen.queryByText('A new address')).toBeNull();
     expect(screen.queryByText('Your original letter')).toBeNull();
     expect(screen.queryByText('The next part of your journey.')).toBeNull();
-    expect(screen.getByRole('link',{name:'Continue milestone →'}).getAttribute('href')).toBe('#journey/chapter/first');
     expect(screen.getByRole('link',{name:'Choose practice level'}).getAttribute('href')).toBe('/curriculum');
     expect(screen.getByRole('link',{name:'Browse all practice activities →'})).toBeTruthy();
     expect(screen.queryByText('Привет, Барсик! Меня зовут Анна.')).toBeNull();
@@ -54,8 +62,13 @@ describe('Guided chapter journey',()=>{
     current.chapters[0].status='passed';current.chapters[1].status='practice';
     mockServer(()=>current);render(<CourseJourney progression={progression()}/>);
     await screen.findByRole('heading',{name:'Your journey'});
-    expect(screen.getAllByRole('heading',{name:'The market'})).toHaveLength(2);
-    expect(screen.getByRole('link',{name:'Continue milestone →'}).getAttribute('href')).toBe('#journey/chapter/chapter-2');
+    expect(screen.getAllByRole('heading',{name:'The market'})).toHaveLength(1);
+    const continueLink=screen.getByRole('link',{name:'Continue milestone →'});
+    expect(continueLink.getAttribute('href')).toBe('#journey/chapter/chapter-2');
+    expect(continueLink.closest('li')?.querySelectorAll('a')).toHaveLength(1);
+    const passedLink=screen.getByRole('link',{name:'A small message'});
+    expect(passedLink.getAttribute('href')).toBe('#journey/chapter/first');
+    expect(passedLink.closest('li')?.querySelectorAll('a')).toHaveLength(1);
     expect(screen.getByText('Milestone 1 of 4 · Passed')).toBeTruthy();
     for(const number of [3,4]) expect(screen.getByRole('listitem',{name:`Milestone ${number}, locked`}).textContent).toBe(String(number));
     expect(screen.queryByText('A new address')).toBeNull();
