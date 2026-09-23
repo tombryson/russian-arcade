@@ -1,4 +1,4 @@
-# Journey and curriculum milestones: build plan
+# Journey milestones: build plan
 
 Status: **A1 implementation complete, 23 September 2026**. The `codex/journey-milestones` branch contains the complete new A1 route. See [the implemented course](course-milestones.md) for current behaviour and [the release review](https://github.com/tombryson/russian-arcade/pull/2) for verification and deployment status. Existing v1 content and enrolments are retained. A human learner pilot remains outstanding.
 Baseline reviewed: public repository commit `8c98e12`, schema 044. The [chapter specification](course-chapters.md) describes that shipped version. This document governs the next journey revision where the two differ. The [curriculum](../curriculum.md) remains the authority for topics, language targets and activity levels.
@@ -13,13 +13,13 @@ Key sections: [A1 sequence](#4-revised-a1-sequence) · [Assessment](#6-received-
 | Curriculum targets | 110 target definitions; 32 required targets with short preparation tasks. Saved individual decisions carry support and source evidence. Aggregate activity scores remain topic evidence. |
 | A1 content | Home, Post office, Market and Leaving town; three variants each, 120 scored decisions and separate recorded updates. Final variants sample all ten topics. |
 | Assessment flow | Received-letter opening, grouped final assessment, revision-checked drafts, support tracking, feedback and permanent milestones. |
-| Shared presentation | Curriculum, Journey, Home, header and Profile use the same course projection. Future milestone cards have blurred content shapes and a clear grey number until unlocked. Standalone topics stay available. New learners complete one welcome before entering Home. |
+| Shared presentation | Journey, the header and Profile share course progress. Journey owns the milestone cards, including blurred future cards with a clear grey number. Curriculum remains the complete 50-topic overview. Standalone topics stay available. New learners complete one welcome before entering Home. |
 | Content reuse | Shared vocabulary enrichment, 22 authored native cloze candidates and optional saved Writing replies. Existing media generation and FSRS are reused. |
 | Release checks | Deterministic content validation, model peer review, migration rehearsal and application tests. Recording failures offer playback retry or transcript support; listening saves can be retried without replay. A human learner pilot remains outstanding. |
 
 JM-01–12 are implemented for the A1 release. JM-13 (independent spoken replies) and JM-14 (authored A2 regions) remain subsequent work, as scoped below. Spoken production does not become a hidden progression requirement.
 
-The following sections retain the agreed design and its acceptance criteria. They distinguish current A1 requirements from later-region proposals. Publication must pass the checks in section 14; pilot observations should inform the next content release.
+The following sections reflect the current design and its acceptance criteria, including the 23 September correction that Curriculum must remain the topic overview rather than a duplicate Journey. They distinguish current A1 requirements from later-region proposals. Publication must pass the checks in section 14; pilot observations should inform the next content release.
 
 ## 1. Product direction
 
@@ -46,7 +46,7 @@ Four milestones divide this application's A1 course. They are not equal measurem
 
 ### What this build includes
 
-The complete A1 revision includes four connected sections, preparation linked to curriculum objectives, received-letter assessments, a cumulative A1 ending, a milestone view in Curriculum, a corresponding Journey view, a compact profile summary and migration of existing learners. It also provides the data structure needed for later levels.
+The complete A1 revision includes four connected sections, preparation linked to curriculum objectives, received-letter assessments, a cumulative A1 ending, a milestone view in Journey, a separate curriculum overview, a compact profile summary and migration of existing learners. It also provides the data structure needed for later levels.
 
 Later regions are specified here so A1 leads somewhere coherent. Writing all A2–C2 lessons, generating a world atlas and delivering the original letter are subsequent content releases. They must not be advertised as playable before they exist.
 
@@ -60,7 +60,7 @@ Later regions are specified here so A1 leads somewhere coherent. Writing all A2�
 | Curriculum connection | Chapters and questions refer to topics | Add stable objective and grammar targets, with evidence of what was actually assessed |
 | Preparation | Two distinct successful tasks per topic, at least 70%, across two activity families | Retain this initial baseline while adding target coverage and focused practice recommendations |
 | Progress display | Journey shows chapters; the header bar shows current preparation | Show permanent milestone passes separately from preparation for the next one |
-| Curriculum page | Public topic catalogue with activity links | Group A1 topics under milestones and add the selected learner’s progress when available |
+| Curriculum page | Public topic catalogue with activity links | Retain the complete catalogue by teaching band; keep story milestones and personal progress out of this page |
 | Persistence | Profile-owned evidence, frozen attempts and chapter passes | Version course enrolment, requirements and continuation rights before changing the route |
 | Later levels | Higher-level free practice; authored guided chapters only at A1 | Generalise course loading and level handling without pretending later chapters are complete |
 
@@ -263,23 +263,21 @@ Choosing a supplied sentence must never be labelled independent writing or fluen
 
 ### Curriculum
 
-Curriculum is the structural home of the milestones. Under A1, show four compact milestone rows. Available rows have a title, a short purpose, current status and one primary action. Future rows retain blurred shapes where content will appear, with only their numbers clear. The decoration contains no future story text and has no controls; assistive technology identifies the milestone number and locked state.
+Curriculum is the complete overview of the 50 topics, organised by teaching band. Topic details show vocabulary, grammar, learning objectives and links to the existing practice activities. Keep this catalogue available without an account.
 
-Expand a row to show its learning objectives, useful practice links and any specific gap. Keep the full vocabulary and grammar reference available through disclosure. Do not put a wall of metadata above the next useful action.
-
-The public catalogue remains accessible without a personal account. Add progress only for the selected learner or current demo profile. A missing profile must not be mistaken for someone having failed or completed the course.
+Do not add story titles, milestone cards, milestone illustrations, blurred or locked topics, assessment actions or personal progress to this page. Journey uses curriculum topic IDs to connect its activities to the learning material; that relationship does not determine the catalogue layout.
 
 ### Journey
 
-Journey is the playable view of the same milestones. It shows where Barsik is, the immediate task and the next destination. Completing relevant standalone work must update this view without requiring the learner to repeat it inside a fictional wrapper.
+Journey owns the playable story and its milestone cards. It shows where Barsik is, the immediate task and the next destination. Available cards show the milestone title, artwork, purpose and action. Future cards retain blurred shapes with only their numbers clear; those shapes contain no future story text or controls. Completing relevant standalone work must update this view without requiring the learner to repeat it inside a fictional wrapper.
 
-Use one milestone identity and result across Curriculum, Journey, the header and Profile. Keep Curriculum below All activities in navigation, as agreed. Do not add a separate milestone menu, reward ledger or conflicting progress calculation.
+Use one milestone identity and result across Journey, the header and the personal summary in Profile. Keep Curriculum below All activities in navigation, as agreed. Do not add a separate milestone menu, reward ledger or conflicting progress calculation.
 
 ### Header bar
 
 The line represents progress towards the next destination. Its numerical input remains preparation evidence, not kilometres or Elo. Reaching the end makes the letter assessment ready; passing it records the milestone and moves Barsik to the next section.
 
-The four milestone markers in Curriculum and Journey show permanent course achievement. The travelling bar shows work within the current section. Explain the transition when a new section starts so an empty bar does not look like lost progress.
+The four milestone markers in Journey show permanent course achievement. The travelling bar shows work within the current section. Explain the transition when a new section starts so an empty bar does not look like lost progress.
 
 Keep the compact line, existing running Barsik and agreed placement. Do not add another tall header or restore the removed rating caption. Selecting the line opens the current milestone. Accessible text identifies the destination and preparation status.
 
@@ -352,7 +350,8 @@ flowchart LR
   Attempt --> Evidence[Target evidence]
   Evidence --> Preparation[Current preparation]
   Attempt --> Pass[Permanent milestone pass]
-  Preparation --> Views[Curriculum, Journey and Profile]
+  Topic --> Catalogue[Curriculum overview]
+  Preparation --> Views[Journey, header and Profile]
   Pass --> Views
 ```
 
@@ -389,7 +388,7 @@ Separate the catalogue schema version, authored content release and marking-poli
 
 Extend the existing `/api/v1/course` and checkpoint commands. Preserve old request shapes for saved version-1 attempts. New responses should distinguish `preparation`, `assessment_ready`, `milestone_passed` and the enrolled course release.
 
-The public Curriculum route can read catalogue structure without requiring a profile. Personal progress uses the existing authenticated/profile-scoped projection. Never trust a client-supplied profile, level, target list or success flag as grading authority.
+The public Curriculum route reads catalogue structure without course enrolment or a personal progress projection. Journey and Profile use the existing profile-scoped course projection. Never trust a client-supplied profile, level, target list or success flag as grading authority.
 
 Keep stable request/submission IDs, transactions, ownership checks and saved payload hashes. A retry after a network failure returns the original result. Reusing a request ID for different answers remains a conflict. Starting twice must not create two active checkpoints.
 
@@ -454,7 +453,7 @@ Release behind a course-version flag. Roll back new enrolment routing first whil
 | 2. Versioning and evidence | Add course enrolment, compatible content loading, stable targets and evidence detail | Version-1 attempts replay unchanged; duplicate commands and cross-profile access tests pass |
 | 3. First section pilot | Build the home section through its received letter and result using existing activity launches | A learner can explain the story, complete practice, pass the letter, resume and see one consistent milestone |
 | 4. A1 content | Build post office, market and leaving-town content with three reviewed variants each | The final blueprint is cumulative; every required clip and answer key is verified |
-| 5. Shared presentation | Add milestone grouping to Curriculum, update Journey, header transitions, Profile and home continuation | Both navigation layouts and phone/desktop layouts show the same selected learner’s state |
+| 5. Shared presentation | Update Journey, header transitions and Profile; keep Curriculum as the complete topic overview | Progress surfaces agree on the selected learner; Curriculum remains independent of story progress in both navigation layouts and phone/desktop layouts |
 | 6. Integration and migration | Connect target-aware activity adapters, card/word capture and introductory-content mappings; rehearse learner migration | No duplicate rewards/cards; original progress and continuation rights are preserved |
 | 7. Release and observation | Run full checks, publish the complete A1 revision, verify hosted media and observe real attempts | No blocking flow errors; content issues and unfair distractors have a defined correction process |
 | 8. Wider journey | Author A2 villages and regional routes, then later bands using the same contracts | Each published band has complete content and assessment coverage before its completion is advertised |
@@ -472,7 +471,7 @@ Phases may overlap after their contracts are stable. Keep the one-section pilot 
 | JM-05 | Target-aware evidence adapters for current practice | High / large |
 | JM-06 | One received-letter flow, save/resume, support and result | High / medium |
 | JM-07 | Complete A1 variants, recordings and editorial checks | High / large |
-| JM-08 | Curriculum milestone rows and shared progress projection | High / medium |
+| JM-08 | Journey milestone cards, shared progress projection and a separate curriculum overview | High / medium |
 | JM-09 | Introductory-content reuse and home continuation | High / medium |
 | JM-10 | Course-to-vocabulary/card source integration | Medium / medium |
 | JM-11 | Existing-learner migration and operational rehearsal | High / large |
@@ -517,7 +516,8 @@ The A1 revision is complete when all of the following hold:
 ### Learner flow
 
 - Existing standalone practice contributes without being repeated inside the journey.
-- Home, Curriculum, Journey, the header and Profile agree on the current learner and milestone.
+- Journey, the header and Profile agree on the current learner and milestone.
+- Curriculum shows all 50 topics by teaching band, without story cards, personal progress or locked topics.
 - A completed milestone stays earned; the next section’s empty preparation bar is explained by the transition.
 - Hints are optional, saved support cannot disappear on refresh, and retries preserve earlier results.
 - On small screens the task remains readable and reachable without long stacks of decorative content.

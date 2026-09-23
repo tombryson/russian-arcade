@@ -25,37 +25,7 @@
 .curriculum-practice { grid-column:1/-1; }
 .curriculum-practice-links { display:flex; flex-wrap:wrap; align-items:center; gap:8px 18px; margin-top:8px; }
 .curriculum-practice-links a { color:inherit; text-underline-offset:4px; }
-.curriculum-milestone-count { margin:12px 0; color:var(--wp-text-secondary,#b7b9ce); font-size:14px; }
-.curriculum-milestone { border-bottom:1px solid var(--wp-border-subtle,#494d67); }
-.curriculum-milestone > summary { display:flex; align-items:center; gap:12px; list-style:none; padding:14px 4px; cursor:pointer; }
-.curriculum-milestone > summary::-webkit-details-marker { display:none; }
-.curriculum-milestone > summary:focus-visible { outline:2px solid var(--wp-accent-learning,#fac943); outline-offset:3px; }
-.curriculum-milestone > summary h3 { display:flex; align-items:center; gap:12px; min-width:0; margin:0; flex:1; font:500 18px/1.4 var(--wp-font-reading,sans-serif); }
-.curriculum-milestone-number { display:grid; place-items:center; width:30px; height:30px; flex-shrink:0; border-radius:50%; background:var(--wp-surface-sheet,#30374e); font-size:15px; }
-.curriculum-milestone-status { color:var(--wp-text-secondary,#b7b9ce); font-size:13px; }
-.curriculum-milestone > summary > .curriculum-expand { margin-left:0; }
-.curriculum-milestone[open] > summary > .curriculum-expand { transform:rotate(45deg); }
-.curriculum-milestone-content { padding:0 4px 18px 46px; }
-.curriculum-milestone-intro { display:flex; align-items:baseline; justify-content:space-between; gap:12px 24px; flex-wrap:wrap; margin:0 0 12px; font-size:14px; line-height:1.5; }
-.curriculum-milestone-intro p { flex:1 1 260px; margin:0; color:var(--wp-text-secondary,#b7b9ce); }
-.curriculum-milestone-intro a { white-space:nowrap; color:inherit; text-underline-offset:4px; }
 @media(max-width:650px) {
-  .curriculum-milestone-content { padding-left:4px; }
-  .curriculum-milestone > summary { flex-wrap:wrap; gap:8px; }
-  .curriculum-milestone > summary h3 { flex:1; }
-  .curriculum-milestone-status { font-size:12px; }
   .curriculum-topic-content { grid-template-columns:1fr; padding-left:4px; gap:8px; }
   .curriculum-practice-links { gap:12px 18px; }
 }
-
-.curriculum-milestone.is-locked { display:flex; align-items:center; gap:12px; min-height:108px; padding:20px 4px; overflow:hidden; color:var(--wp-text-secondary,#b7b9ce); background:color-mix(in srgb,var(--wp-text-secondary,#b7b9ce) 4%,transparent); }
-.curriculum-milestone.is-locked .curriculum-milestone-number { background:color-mix(in srgb,var(--wp-text-secondary,#b7b9ce) 12%,transparent); color:var(--wp-text-secondary,#b7b9ce); opacity:.75; }
-.curriculum-milestone-mystery { display:grid; gap:10px; flex:1; min-width:0; padding:4px 0; filter:blur(5px); opacity:.38; pointer-events:none; user-select:none; }
-.curriculum-milestone-mystery > span { display:block; height:9px; width:78%; max-width:600px; background:linear-gradient(to right,currentColor 0 11%,transparent 11% 14%,currentColor 14% 38%,transparent 38% 41%,currentColor 41% 53%,transparent 53% 57%,currentColor 57% 79%,transparent 79% 82%,currentColor 82% 100%); }
-.curriculum-milestone-mystery > .curriculum-milestone-mystery-title { height:14px; width:40%; max-width:270px; margin-bottom:4px; }
-.curriculum-milestone-mystery > span:last-child { width:58%; max-width:440px; }
-.curriculum-milestone-topics { display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:12px; font-size:14px; }
-.curriculum-milestone-topics a { color:inherit; text-underline-offset:4px; }
-.curriculum-topic-catalogue-heading { margin:24px 0 12px; color:inherit; font:500 18px/1.4 var(--wp-font-reading,sans-serif); }
-
-.curriculum-milestone-art { width:48px; height:48px; flex-shrink:0; object-fit:contain; }

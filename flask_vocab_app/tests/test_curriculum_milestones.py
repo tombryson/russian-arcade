@@ -1,73 +1,62 @@
-"""Curriculum and Profile show the same earned milestones as Journey."""
+"""The curriculum stays an overview; earned milestones belong to learner profiles."""
 import json
-import re
-from html import unescape
 import sqlite3
 import unittest
+from unittest.mock import patch
 from flask.testing import FlaskClient
 
-from services.course_progression import course_catalogue
+from services.curriculum import band_summaries
 from tests.support import isolated_app
+from utils.shell import extract_main_content
 
 
-class CurriculumMilestoneTests(unittest.TestCase):
+class CurriculumOverviewIsolationTests(unittest.TestCase):
     def setUp(self):
         self.app = isolated_app(self, demo=False)
         self.client = self.app.test_client()
         self.state = self.client.get('/api/v1/course').json
         self.headers = {'X-CSRF-Token': self.state['csrf_token']}
 
-    def assert_locked_placeholders(self, html, chapters, russian=False):
-        for chapter in chapters:
-            with self.subTest(chapter=chapter['id']):
-                match = re.search(r'<div class="curriculum-milestone is-locked" id="milestone-'
-                                  + re.escape(chapter['id']) + r'"[^>]*>(.*?)</div>', html, re.S)
-                self.assertIsNotNone(match)
-                markup = match.group(0)
-                visible = unescape(re.sub(r'<[^>]+>', '', match.group(1))).strip()
-                self.assertEqual(visible, str(chapter['number']))
-                label = (f"Этап {chapter['number']}, пока недоступен" if russian
-                         else f"Milestone {chapter['number']}, locked")
-                self.assertIn(f'aria-label="{label}"', markup)
-                self.assertIn('class="curriculum-milestone-mystery" aria-hidden="true"', markup)
-                self.assertIn('class="curriculum-milestone-mystery-title"', markup)
-                self.assertEqual(markup.count('class="curriculum-milestone-mystery-line"'), 2)
-                self.assertNotRegex(markup, r'<(?:a|button|details|summary|h3)\b|tabindex=')
-                self.assertNotIn(f'/#journey/chapter/{chapter["id"]}', html)
-                if chapter.get('intro'):
-                    self.assertNotIn(chapter['intro'], html)
-
-    def test_locked_milestones_have_blurred_placeholders_and_topics_remain_available(self):
-        html = self.client.get('/curriculum').text
-        self.assert_locked_placeholders(html, self.state['chapters'][1:])
-        first = self.state['chapters'][0]
-        self.assertIn(f'<details class="curriculum-milestone" id="milestone-{first["id"]}" open>', html)
-        self.assertIn(first['title'], html)
-        self.assertIn(f'/#journey/chapter/{first["id"]}', html)
+    def assert_complete_overview(self, response, language='en'):
+        self.assertEqual(response.status_code, 200)
+        html = extract_main_content(response.text)
         self.assertEqual(html.count('class="curriculum-topic"'), 50)
-        self.assertIn('A1 topics', html)
-        self.assertIn('/comprehension?topic=food&amp;level=A1', html)
-        self.assertEqual(html.count('id="topic-food"'), 1)
+        for band in band_summaries(language):
+            self.assertIn(f'id="level-{band["id"]}"', html)
+            for topic in band['topics']:
+                self.assertEqual(html.count(f'id="topic-{topic["id"]}"'), 1)
+        self.assertNotIn('curriculum-milestone', html)
+        self.assertNotIn('/#journey/chapter/', html)
+        self.assertNotIn('milestones complete', html)
+        self.assertNotIn('data-profile-id=', html)
+        for chapter in self.state['chapters']:
+            title = chapter['title_ru' if language == 'ru' else 'title']
+            if title:
+                self.assertNotIn(title, html)
+        return html
 
-    def test_locked_milestone_accessible_names_are_localized(self):
-        with self.client.session_transaction() as session:
-            session['ui_lang'] = 'ru'
-        html = self.client.get('/curriculum').text
-        self.assert_locked_placeholders(html, self.state['chapters'][1:], russian=True)
-        self.assertIn('Темы A1', html)
-
-    def test_public_catalogue_has_all_topics_without_assigning_progress(self):
-        visitor = FlaskClient(self.app)
-        html = visitor.get('/curriculum').text
-        self.assertEqual(len(re.findall(r'class="curriculum-milestone(?: is-locked)?"', html)), 4)
-        self.assert_locked_placeholders(html, course_catalogue()['chapters'][1:])
-        self.assertEqual(html.count('class="curriculum-topic"'), 50)
-        self.assertFalse('milestones complete' in html)
-        self.assertFalse('curriculum-milestone-count' in html)
+    def test_overview_does_not_depend_on_journey_catalogue_or_learner_progress(self):
+        # A course release or progress failure must not break the public syllabus.
+        with patch('services.course_progression.course_catalogue',
+                   side_effect=AssertionError('Curriculum loaded the Journey catalogue')), \
+             patch('utils.course_context.course_snapshot',
+                   side_effect=AssertionError('Curriculum loaded learner course progress')):
+            html = self.assert_complete_overview(self.client.get('/curriculum'))
+            self.assertIn('/comprehension?topic=food&amp;level=A1', html)
+            visitor = FlaskClient(self.app)
+            self.assertEqual(self.assert_complete_overview(visitor.get('/curriculum')), html)
         with visitor.session_transaction() as session:
             self.assertNotIn('personal_access_id', session)
 
-    def test_pass_and_profile_switch_are_reflected_without_new_rewards(self):
+    def test_overview_is_localized_without_journey_content(self):
+        with self.client.session_transaction() as session:
+            session['ui_lang'] = 'ru'
+        html = self.assert_complete_overview(self.client.get('/curriculum'), language='ru')
+        self.assertIn('Учебная программа', html)
+        self.assertIn('Знакомство и приветствия', html)
+
+    def test_checkpoint_progress_stays_in_profile_and_does_not_change_curriculum(self):
+        before = self.assert_complete_overview(self.client.get('/curriculum'))
         first = self.state['chapters'][0]
         response = self.client.post(f'/api/v1/course/chapters/{first["id"]}/checkpoint',
                                     json={'request_id': 'curriculum-start', 'challenge': True,
@@ -85,16 +74,9 @@ class CurriculumMilestoneTests(unittest.TestCase):
         self.assertTrue(checked.json['result']['passed'])
         state = self.client.get('/api/v1/course').json
         self.assertEqual(state['completed_milestones'], 1)
-        html = self.client.get('/curriculum').text
-        self.assert_locked_placeholders(html, state['chapters'][2:])
-        for available in state['chapters'][:2]:
-            self.assertIn(f'<details class="curriculum-milestone" id="milestone-{available["id"]}"', html)
-            self.assertIn(f'/#journey/chapter/{available["id"]}', html)
-            self.assertIn(available['title'], html)
-        self.assertEqual(html.count('class="curriculum-topic"'), 50)
-        self.assertIn('A1 · 1 of 4 milestones complete', html)
+        html = self.assert_complete_overview(self.client.get('/curriculum'))
+        self.assertEqual(html, before)
         self.assertIn('1 of 4 milestones complete', self.client.get('/post/profiles').text)
-        self.assertIn(f'data-profile-id="{state["profile_id"]}"', html)
         self.assertNotIn(attempt['letter'], html)
         for table in ('progression_events', 'native_reviews'):
             with sqlite3.connect(self.app.config['DB_PATH']) as conn:
@@ -104,13 +86,11 @@ class CurriculumMilestoneTests(unittest.TestCase):
         created = self.client.post('/api/v1/user-session/profiles', json={'display_name': 'Another learner'},
                                    headers=self.headers)
         self.assertEqual(created.status_code, 201)
-        html = self.client.get('/curriculum').text
-        self.assertIn('A1 · 0 of 4 milestones complete', html)
-        self.assertNotIn(f'data-profile-id="{state["profile_id"]}"', html)
+        self.assertEqual(self.assert_complete_overview(self.client.get('/curriculum')), before)
         self.assertIn('0 of 4 milestones complete', self.client.get('/post/profiles').text)
         stale = self.client.get('/curriculum', headers={'X-Profile-ID': state['profile_id'], 'HX-Target': 'mainContent'})
         self.assertEqual(stale.status_code, 409)
-        self.assertFalse('milestones complete' in stale.text)
+        self.assertNotIn('milestones complete', stale.text)
 
     def test_null_release_is_not_an_implicit_legacy_start(self):
         response = self.client.post(f'/api/v1/course/chapters/{self.state["chapters"][0]["id"]}/checkpoint',

@@ -2,7 +2,7 @@
 
 Generated with the built-in image tool on 23 September 2026, using the existing `ui/src/assets/barsik.webp` illustration as the character and style reference.
 
-Production asset: `flask_vocab_app/static/images/barsik-leaving-home-v1.webp`. The 320 × 320 WebP preserves transparency and is displayed at 48–64 pixels beside the unlocked milestone title. Locked milestones do not show the illustration.
+Production asset: `flask_vocab_app/static/images/barsik-leaving-home-v1.webp`. The 320 × 320 WebP preserves transparency and is displayed at 48–64 pixels beside the unlocked milestone title. Use it on Journey milestone cards and detail pages, not the Curriculum overview. Locked milestones do not show the illustration.
 
 SHA-256: `5ae6defebfc6a374372a02f0674ec27ca8bf4b815689adc195b9ce92d357d3ff`.
 

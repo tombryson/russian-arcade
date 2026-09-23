@@ -1,6 +1,6 @@
 # A1 milestone illustrations
 
-Generated with the built-in image tool on 23 September 2026. These are companion illustrations to [Leaving home](barsik-leaving-home.md), using that original illustration as the character and style reference. Each production file is a 320 × 320 transparent WebP, displayed at 48–64 pixels beside its unlocked milestone title. Future milestones keep their existing blurred content.
+Generated with the built-in image tool on 23 September 2026. These are companion illustrations to [Leaving home](barsik-leaving-home.md), using that original illustration as the character and style reference. Each production file is a 320 × 320 transparent WebP, displayed at 48–64 pixels beside its unlocked milestone title. These illustrations belong to Journey milestone cards and detail pages, not the Curriculum overview. Future milestones in Journey keep their existing blurred content.
 
 ## The post office
 

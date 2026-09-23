@@ -13,7 +13,9 @@ The current course release is `a1-journey-v2`. It starts at home, visits the pos
 
 Each milestone has three authored variants. The first three contain eight questions each; the final contains sixteen. Retries prefer an unseen variant, then rotate through the finite set. All answer choices are Russian. Interface prompts and explanations are available in English and Russian.
 
-Journey and Curriculum show future milestones as grey cards with blurred content shapes. Only each milestone's number remains clear. The shapes contain no future story text or links. Names, descriptions and assessment links appear when the previous milestone is passed. Completed milestones remain accessible. The full topic catalogue and standalone activities stay available for practice.
+Journey shows future milestones as grey cards with blurred content shapes. Only each milestone's number remains clear. The shapes contain no future story text or links. Names, descriptions and assessment links appear when the previous milestone is passed. Completed milestones remain accessible.
+
+Curriculum remains a complete overview of the 50 topics, grouped by teaching band, with vocabulary, grammar, objectives and activity links. It does not show story cards, milestone artwork or personal progress. Profile holds the personal progress summary. The journey references the same topic IDs without changing the catalogue or hiding topics.
 
 The final assessment samples all ten A1 topics: six reading decisions, four listening decisions, four contextual language decisions and two replies. Passing requires 13/16 overall, at least 4/6 reading, 3/4 listening, 2/4 language and 1/2 replies. Both essential decisions must also be correct. Earlier milestones require 7/8 and both essential decisions.
 

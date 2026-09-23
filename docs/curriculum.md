@@ -64,7 +64,7 @@ The [A1 journey](word-post/course-milestones.md) groups the ten topics into Home
 
 The first three letters require 7/8; the cumulative final letter requires 13/16 with reading, listening, language and reply minima. Essential decisions and independent listening also matter. Hints and transcripts remain available for supported practice. These are application course rules, not TORFL certification. The original carried letter remains sealed. The guided A2 region is future content; higher-level free practice remains available.
 
-The implementation now groups the Curriculum page by milestones in the learner's enrolled course. It shows preparation and permanent passes without creating an account for a public visitor. Journey and Profile read the same saved progress. This means existing learners continue to see their original route, rather than progress assigned to renamed sections.
+The Curriculum page is the complete 50-topic overview, organised by teaching band. It shows vocabulary, grammar, learning objectives and links to practice. It does not show journey milestones, story illustrations, locked topic cards or personal progress. Journey owns the playable story and milestone cards; Profile holds the personal progress summary. Their shared topic IDs connect practice to the curriculum without turning the catalogue into another journey page.
 
 ### A1 assessment targets
 

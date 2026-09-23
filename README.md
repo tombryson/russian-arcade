@@ -335,7 +335,7 @@ Historical scripts may retain machine-specific assumptions; read them before run
 - [Speaking scenarios](docs/word-post/speaking-scenarios.md) and [assessment](docs/word-post/speaking-assessment.md)
 - [Describe the scene](docs/word-post/scene-builder.md), [Journey games](docs/word-post/journey-games.md) and [mixed vocabulary / Radio](docs/word-post/mixed-vocabulary-and-radio.md)
 - [Guided A1 chapters](docs/word-post/course-chapters.md), [levels and rewards](docs/word-post/levels-and-progression.md), [skill progress](docs/word-post/skill-progress.md) and [Barsik’s story](docs/word-post/barsik-journey.md)
-- [Journey and curriculum milestones: next-release build plan](docs/word-post/journey-milestones-build-plan.md)
+- [Journey milestones: build plan](docs/word-post/journey-milestones-build-plan.md)
 - [Design system](docs/word-post/design-system.md) and [hosting runbook](docs/operations-fly.md)
 - [Public release procedure](docs/release-process.md) and [game shop](docs/word-post/game-access.md)
 
