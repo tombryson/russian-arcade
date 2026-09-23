@@ -1,6 +1,6 @@
 # Journey and curriculum milestones: build plan
 
-Status: **A1 implementation complete; release verification in progress, 23 September 2026**. The `codex/journey-milestones` branch contains the complete new A1 route. See [the implemented course](course-milestones.md) for current behaviour. Existing v1 content and enrolments are retained.
+Status: **A1 implementation complete, 23 September 2026**. The `codex/journey-milestones` branch contains the complete new A1 route. See [the implemented course](course-milestones.md) for current behaviour and [the release review](https://github.com/tombryson/russian-arcade/pull/2) for verification and deployment status. Existing v1 content and enrolments are retained. A human learner pilot remains outstanding.
 Baseline reviewed: public repository commit `8c98e12`, schema 044. The [chapter specification](course-chapters.md) describes that shipped version. This document governs the next journey revision where the two differ. The [curriculum](../curriculum.md) remains the authority for topics, language targets and activity levels.
 
 Key sections: [A1 sequence](#4-revised-a1-sequence) · [Assessment](#6-received-letter-assessments) · [Interface](#7-learner-facing-structure) · [Technical design](#9-data-and-service-design) · [Migration](#11-migration-of-existing-learners) · [Build phases](#12-implementation-sequence).
@@ -50,7 +50,7 @@ The complete A1 revision includes four connected sections, preparation linked to
 
 Later regions are specified here so A1 leads somewhere coherent. Writing all A2–C2 lessons, generating a world atlas and delivering the original letter are subsequent content releases. They must not be advertised as playable before they exist.
 
-## 2. Current implementation and required changes
+## 2. Baseline and planned changes
 
 | Area | Shipped behaviour | Required revision |
 | --- | --- | --- |
@@ -64,9 +64,9 @@ Later regions are specified here so A1 leads somewhere coherent. Writing all A2�
 | Persistence | Profile-owned evidence, frozen attempts and chapter passes | Version course enrolment, requirements and continuation rights before changing the route |
 | Later levels | Higher-level free practice; authored guided chapters only at A1 | Generalise course loading and level handling without pretending later chapters are complete |
 
-The current final checkpoint is not a complete cumulative A1 assessment. Its question targets omit Family and Home across all three variants. Displaying those topics in a course list does not establish that the final assessment covers them.
+The earlier final checkpoint was not a complete cumulative A1 assessment. Its question targets omitted Family and Home across all three variants. Displaying those topics in a course list does not establish that the final assessment covers them.
 
-The current system also derives topic preparation from aggregate activity scores. It does not establish every objective or grammatical pattern in that topic. For example, a successful food exercise may never ask the learner to make a request.
+The earlier system derived topic preparation from aggregate activity scores. That does not establish every objective or grammatical pattern in a topic. For example, a successful food exercise may never ask the learner to make a request.
 
 ## 3. Narrative structure
 
