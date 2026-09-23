@@ -41,14 +41,14 @@ def create_curriculum_blueprint():
                 except LearningError:
                     pass
         return render_page('curriculum_unit.html', active_page='curriculum', unit=unit,
-                           language=language, profile_id=profile_id, request_id=identifier(), forms_request_id=identifier(),
+                           language=language, profile_id=profile_id, request_id=identifier(), forms_request_id=identifier(), listening_request_id=identifier(),
                            unit_writing_available=not current_app.config.get('PUBLIC_DEMO'))
 
     @blueprint.post('/curriculum/units/<unit_id>/<activity>')
     @access_policy('child')
     def unit_start(unit_id, activity):
         unit_or_404(unit_id)
-        if activity not in ('practice', 'forms', 'writing'):
+        if activity not in ('practice', 'forms', 'listening', 'writing'):
             abort(404)
         if activity == 'writing' and current_app.config['WORD_POST_HOUSEHOLD_ENABLED']:
             # The legacy Writing workspace belongs to the household adult.

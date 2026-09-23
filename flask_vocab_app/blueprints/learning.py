@@ -170,6 +170,16 @@ def create_learning_blueprint(household, content, learning, store):
     def help_item(session_id):
         return jsonify(learning.command(access_id(), session_id, 'help', body({'submission_id','expected_revision','item_id'})))
 
+    @bp.post('/api/v1/learning-sessions/<session_id>/listened')
+    @access_policy('child')
+    def listened_item(session_id):
+        return jsonify(learning.command(access_id(), session_id, 'listened', body({'submission_id','expected_revision','item_id'})))
+
+    @bp.post('/api/v1/learning-sessions/<session_id>/transcript')
+    @access_policy('child')
+    def transcript_item(session_id):
+        return jsonify(learning.command(access_id(), session_id, 'transcript', body({'submission_id','expected_revision','item_id'})))
+
     @bp.get('/api/v1/assets/<asset_id>')
     @access_policy('public')
     def asset(asset_id):

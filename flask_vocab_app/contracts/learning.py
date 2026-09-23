@@ -91,12 +91,25 @@ def validate_pack(pack):
         reject('A pack needs between 1 and 100 items.')
     seen = set()
     for item in pack['items']:
-        fields(item, {'id','type','prompt','answer'}, {'word_id','hint','asset_ids','direction','choices','accepted_answers'})
+        fields(item, {'id','type','prompt','answer'}, {'word_id','hint','asset_ids','direction','choices','accepted_answers','audio','transcript'})
         item_id = key(item['id'], 'Item ID')
         if item_id in seen:
             reject('Item IDs must be unique within a pack.')
         seen.add(item_id)
         text(item['prompt'], 'Prompt')
+        if item['type'] == 'listening_choice':
+            if pack['kind'] != 'activity' or 'word_id' in item or 'asset_ids' in item:
+                reject('Listening questions cannot use card or recall metadata.')
+            text(item.get('transcript'), 'Transcript', 4000)
+            audio = fields(item.get('audio'), {'url', 'sha256', 'duration_ms'})
+            if not isinstance(audio['url'], str) or not re.fullmatch(r'/static/audio/course/curriculum/[a-z0-9-]+/[a-z0-9-]+\.mp3', audio['url']):
+                reject('Listening audio must use a bundled curriculum recording.')
+            if not isinstance(audio['sha256'], str) or not re.fullmatch(r'[a-f0-9]{64}', audio['sha256']):
+                reject('Listening audio needs its immutable file hash.')
+            if type(audio['duration_ms']) is not int or not 1000 <= audio['duration_ms'] <= 180000:
+                reject('Listening audio must last 1–180 seconds.')
+        elif 'audio' in item or 'transcript' in item:
+            reject('Only listening questions can contain audio and a transcript.')
         if 'hint' in item:
             text(item['hint'], 'Hint')
         if 'word_id' in item and (type(item['word_id']) is not int or item['word_id'] < 1):
@@ -130,7 +143,7 @@ def validate_pack(pack):
                 if len(normalized) != len(accepted) or normalize_controlled_text(item['answer']) not in normalized:
                     reject('Authored variants must be distinct and include the displayed answer.')
                 continue
-            if item['type'] != 'choice' or 'direction' in item or 'accepted_answers' in item:
+            if item['type'] not in ('choice', 'listening_choice') or 'direction' in item or 'accepted_answers' in item:
                 reject('Activities support reviewed choice questions and authored form practice.')
             choices = item.get('choices')
             if not isinstance(choices, list) or not 2 <= len(choices) <= 6:

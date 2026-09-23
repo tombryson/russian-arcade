@@ -71,7 +71,7 @@ def _unit(conn, profile_id, task_key):
             or pack['id'] != row[2]):
         raise ValueError('This session is not an authored curriculum unit.')
     matches = [item for item in pack.get('items', []) if item.get('id') == item_id]
-    if len(matches) != 1 or matches[0].get('type') not in ('choice', 'controlled_text'):
+    if len(matches) != 1 or matches[0].get('type') not in ('choice', 'controlled_text', 'listening_choice'):
         raise ValueError('The unit item is not a unique saved practice task.')
     return {'item': matches[0], 'session_id': session_id, 'item_id': item_id,
             'content_id': pack['id'], 'status': row[1]}
@@ -99,12 +99,15 @@ def _check_content(task, activity, contract):
         validate_speaking_contract(contract, task['scenario'])
     elif activity == 'curriculum_unit':
         controlled = task['item']['type'] == 'controlled_text'
-        modes = ('controlled_text',) if controlled else ('contextual_selection', 'reading_selection')
+        listening = task['item']['type'] == 'listening_choice'
+        modes = ('listening_selection',) if listening else ('controlled_text',) if controlled else ('contextual_selection', 'reading_selection')
         if (contract['content'].get('item') != task['item']
                 or len(contract['criteria']) != 1
                 or contract['criteria'][0]['response_mode'] not in modes
                 or contract['criteria'][0]['evidence_scope'] != ('controlled_production' if controlled else 'reference')
-                or (controlled and contract['rubric_version'] != 'authored-controlled-form-v1')):
+                or (controlled and contract['rubric_version'] != 'authored-controlled-form-v1')
+                or (listening and (contract['rubric_version'] != 'authored-listening-choice-v1'
+                    or contract['support'] != {'allowed': ['hint', 'transcript'], 'independence_breakers': ['hint', 'transcript']}))):
             raise ValueError('A unit contract must describe its exact saved item and matching response mode.')
 
 
@@ -183,7 +186,16 @@ def _saved_response(conn, profile_id, activity, task_key, source_key):
         raise ValueError('The saved response does not match its issued response mode.') from error
     if attempt[2] != ('correct' if correct else 'incorrect'):
         raise ValueError('The stored outcome contradicts the issued answer key.')
-    return response_text, {'assisted': bool(attempt[1]), 'correct': correct}
+    support = ['hint'] if attempt[1] else []
+    if task['item']['type'] == 'listening_choice':
+        from services.learning_listening import item_support
+        saved = item_support(conn, task['session_id'], task['item'])
+        support = saved['support']
+        if (attempt[3] != 'authored-listening-choice-v1'
+                or (not saved['listened'] and 'transcript' not in support)
+                or bool(attempt[1]) != bool(support)):
+            raise ValueError('Listening evidence must match its playback and support receipts.')
+    return response_text, {'assisted': bool(attempt[1]), 'correct': correct, 'support': support}
 
 
 def save_report(conn, profile_id, activity, task_key, source_key, report, *, response_text=None, audio_source=None, support=()):
@@ -207,7 +219,7 @@ def save_report(conn, profile_id, activity, task_key, source_key, report, *, res
             or len(support) != len(set(support)) or set(support) - set(contract['support']['allowed'])):
         raise ValueError('Unknown support use.')
     if unit is not None:
-        if set(support) != ({'hint'} if unit['assisted'] else set()):
+        if set(support) != set(unit['support']):
             raise ValueError('Support must match the saved unit attempt.')
         judgement, criterion = report['judgements'][0], contract['criteria'][0]
         if (judgement['outcome'] != ('satisfied' if unit['correct'] else 'not_satisfied')
@@ -241,6 +253,8 @@ def reports_for_task(conn, profile_id, activity, task_key):
 
 def validate_saved_evidence(conn, *, audio_root=None):
     """Audit an offline import without changing contracts, reports or outcomes."""
+    from services.learning_listening import validate_saved_support
+    validate_saved_support(conn)
     for row in conn.execute('SELECT profile_id,activity,task_key FROM activity_task_contracts').fetchall():
         load_contract(conn, row[0], row[1], row[2])
     rows = conn.execute('SELECT r.id,r.profile_id,c.activity,c.task_key,r.source_key,r.report_json,r.support_json '

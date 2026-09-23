@@ -2,6 +2,7 @@
 from copy import deepcopy
 from functools import lru_cache
 import json
+import hashlib
 from pathlib import Path
 
 from contracts.curriculum import freeze_task_contract
@@ -13,6 +14,25 @@ from services.curriculum_requirement_map import requirement_index
 
 UNIT_IDS = ('location-destination-v1',)
 DATA_DIR = Path(__file__).resolve().parents[1] / 'data' / 'curriculum_units'
+LISTENING_IDS = {'location-destination-v1': 'location-destination-listening-v1'}
+
+
+def listening_content(unit_id):
+    identity = LISTENING_IDS[unit_id]
+    content = json.loads((DATA_DIR / (identity + '.json')).read_text(encoding='utf-8'))
+    directory = Path(__file__).resolve().parents[1] / 'static/audio/course/curriculum' / identity
+    manifest = json.loads((directory / 'manifest.json').read_text(encoding='utf-8'))
+    if content['unit_id'] != unit_id or content['id'] != identity or manifest['content_id'] != identity:
+        raise ValueError('Listening content identity changed.')
+    for item in content['items']:
+        clip = manifest['clips'][item['id']]
+        if hashlib.sha256(item['transcript'].encode('utf-8')).hexdigest() != clip['text_sha256']:
+            raise ValueError('Published transcript changed. Create a new audio version.')
+        expected = '/static/audio/course/curriculum/' + identity + '/' + item['id'] + '.mp3'
+        if item['audio_url'] != expected:
+            raise ValueError('Listening recording belongs to another question.')
+        item['audio'] = {'url': expected, 'sha256': clip['audio_sha256'], 'duration_ms': round(clip['duration'] * 1000)}
+    return content
 
 
 @lru_cache(maxsize=8)
@@ -24,7 +44,7 @@ def _load(unit_id):
         raise ValueError('Learning unit identity changed.')
     # Each issued stage has its own immutable pack identity. The original
     # choice pack stays unchanged when a later response mode is introduced.
-    for stage in ('practice', 'forms'):
+    for stage in ('practice', 'forms', 'listening'):
         pack = validate_pack(_pack(unit, stage))
         for question, item in zip(_questions(unit, stage), pack['items']):
             _practice_contract(unit, item, question, 'validation')
@@ -42,12 +62,22 @@ def unit_summaries():
 
 
 def _questions(unit, stage):
+    if stage == 'listening':
+        return listening_content(unit['id'])['items']
     return unit['forms']['questions'] if stage == 'forms' else unit['questions']
 
 
 def _pack(unit, stage='practice'):
-    if stage not in ('practice', 'forms'):
+    if stage not in ('practice', 'forms', 'listening'):
         raise LookupError('Learning stage not found.')
+    if stage == 'listening':
+        listening = listening_content(unit['id'])
+        identity = unit['id'] + ':' + listening['version']
+        return {'schema_version': 1, 'id': 'curriculum-unit:' + identity, 'kind': 'activity',
+                'title': listening['title'], 'source': 'Original application practice: ' + identity,
+                'items': [{'id': q['id'], 'type': 'listening_choice',
+                           **{k: q[k] for k in ('prompt', 'choices', 'answer', 'hint', 'audio', 'transcript')}}
+                          for q in listening['items']]}
     forms = stage == 'forms'
     identity = unit['id'] + (':' + unit['forms']['version'] if forms else '')
     fields = ('prompt', 'accepted_answers', 'answer', 'hint') if forms else ('prompt', 'choices', 'answer', 'hint')
@@ -84,6 +114,10 @@ def _practice_contract(unit, item, question, session_id):
     if controlled:
         spec['content_version'] = unit['id'] + ':' + unit['forms']['version']
         spec['rubric_version'] = 'authored-controlled-form-v1'
+    if item['type'] == 'listening_choice':
+        spec['content_version'] = unit['id'] + ':' + listening_content(unit['id'])['version']
+        spec['rubric_version'] = 'authored-listening-choice-v1'
+        spec['support'] = {'allowed': ['hint', 'transcript'], 'independence_breakers': ['hint', 'transcript']}
     return freeze_task_contract(spec)
 
 
@@ -94,8 +128,8 @@ def _unit_for_pack(pack):
     identity = pack['id'][len(prefix):]
     unit_id, separator, version = identity.partition(':')
     unit = get_unit(unit_id)
-    stage = 'forms' if separator else 'practice'
-    if (separator and version != unit['forms']['version']) or _pack(unit, stage) != pack:
+    stage = 'practice' if not separator else 'forms' if version == unit['forms']['version'] else 'listening'
+    if _pack(unit, stage) != pack:
         raise ValueError('Published unit changed. Retain its original content and create a new version.')
     return unit, stage
 
@@ -110,7 +144,7 @@ def freeze_practice(conn, profile_id, session_id, pack):
                       _practice_contract(unit, item, question, session_id))
 
 
-def observe_answer(conn, profile_id, session_id, pack, item, attempt_id, answer, assisted):
+def observe_answer(conn, profile_id, session_id, pack, item, attempt_id, answer, assisted, *, support=None):
     if not pack['id'].startswith('curriculum-unit:'):
         return
     task_key = session_id + ':' + item['id']
@@ -125,7 +159,7 @@ def observe_answer(conn, profile_id, session_id, pack, item, attempt_id, answer,
         'feedback': contract['content']['explanation'],
         'evidence': [{'quote': text, 'start': 0, 'end': len(text)}]}]}
     save_report(conn, profile_id, 'curriculum_unit', task_key, attempt_id, report,
-                response_text=text, support=['hint'] if assisted else [])
+                response_text=text, support=support if support is not None else ['hint'] if assisted else [])
 
 
 def practice_context(pack):

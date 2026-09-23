@@ -84,6 +84,7 @@ def install_household_policy(app):
         if not enabled and request.blueprint == 'learning' and request.endpoint not in {
             'learning.household', 'learning.state', 'learning.post', 'learning.pocket', 'learning.asset',
             'learning.start_session', 'learning.read_session', 'learning.attempt', 'learning.help_item',
+            'learning.listened_item', 'learning.transcript_item',
         }:
             abort(404)
         if enabled and (len(app.config.get('SECRET_KEY') or '') < 32 or app.config['SECRET_KEY'] == 'dev-secret-key-change-me'):
@@ -100,6 +101,9 @@ def install_household_policy(app):
         if request.endpoint == 'static':
             filename = request.view_args.get('filename', '')
             if filename.startswith(('css/','js/')) or re.fullmatch(r'audio/deliveries/[0-9a-f]{24}\.mp3', filename) or filename in {
+                'audio/course/curriculum/location-destination-listening-v1/shop-now.mp3',
+                'audio/course/curriculum/location-destination-listening-v1/after-pharmacy.mp3',
+                'audio/course/curriculum/location-destination-listening-v1/inside-museum.mp3',
                 'images/barsik-running-v1.webp', 'images/barsik-progress-run-v1.webp', 'images/favicon.svg',
                 'images/favicon.ico', 'images/apple-touch-icon.png',
                 'images/scene-builder/cat-v1.webp', 'images/scene-builder/table-v1.webp',

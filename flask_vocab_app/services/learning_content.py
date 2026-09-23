@@ -161,9 +161,12 @@ def normalize_form(value):
     return unicodedata.normalize('NFC', value).replace('\u0301', '').casefold()
 
 
-def child_item(item, *, help_used=False):
+def child_item(item, *, help_used=False, listened=False, transcript_used=False):
     result = {k: item[k] for k in ('id','type','prompt','choices','asset_ids') if k in item}
     result['has_hint'] = bool(item.get('hint'))
     if help_used and item.get('hint'):
         result['hint'] = item['hint']
+    if item['type'] == 'listening_choice':
+        result.update(audio=item['audio'], listened=listened, has_transcript=True,
+                      transcript=item['transcript'] if transcript_used else None)
     return result

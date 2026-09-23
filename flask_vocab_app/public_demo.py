@@ -37,7 +37,7 @@ WRITE_ENDPOINTS = frozenset({
     'native_review.command', 'native_review.suspension', 'set_ui_language',
     'ui_preferences.set_navigation',
     'journey_games.start', 'journey_games.command', 'journey_games.route_command',
-    'curriculum.unit_start', 'learning.attempt', 'learning.help_item',
+    'curriculum.unit_start', 'learning.attempt', 'learning.help_item', 'learning.listened_item', 'learning.transcript_item',
 })
 
 
@@ -124,7 +124,7 @@ def install_demo(app):
             from services.demo_games import SAMPLE_GAMES
             allowed = allowed and request.view_args.get('game_id') in SAMPLE_GAMES
         if request.endpoint == 'curriculum.unit_start':
-            allowed = allowed and request.view_args.get('activity') in {'practice', 'forms'}
+            allowed = allowed and request.view_args.get('activity') in {'practice', 'forms', 'listening'}
         if request.endpoint == 'journey_games.command':
             allowed = allowed and request.view_args.get('operation') in {'hint', 'answer', 'continue', 'complete', 'retry', 'review', 'practice_answer', 'practice_continue', 'practice_exit', 'practice_hint'}
         if not allowed:

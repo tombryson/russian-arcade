@@ -19,7 +19,7 @@ PRESERVE = ('course_checkpoint_attempts', 'course_checkpoint_requests', 'course_
             'course_enrolments', 'course_target_observations', 'course_target_practice_attempts',
             'course_target_practice_requests', 'course_target_practice_receipts',
             'course_release_switches', 'course_checkpoint_followups',
-            'activity_task_contracts', 'activity_criterion_reports')
+            'activity_task_contracts', 'activity_criterion_reports', 'learning_item_support')
 
 
 def inventory(conn):

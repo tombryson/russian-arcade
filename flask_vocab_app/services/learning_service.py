@@ -10,10 +10,12 @@ from zoneinfo import ZoneInfo
 from contracts.learning import fields, key, revision, reject, assess_activity_answer, activity_answer_text
 from repositories.learning_repository import LearningError, encoded, identifier, payload_hash, require_access, timestamp, transaction
 from services.learning_content import child_item, published_version
+from services.learning_listening import item_support, record_support, verify_audio
 
 
 ASSESSMENT_POLICY = 'reviewed-choice-v1'
 CONTROLLED_TEXT_POLICY = 'authored-controlled-form-v1'
+LISTENING_POLICY = 'authored-listening-choice-v1'
 REWARD_POLICY = 'practice-participation-v1'
 
 
@@ -64,6 +66,9 @@ class LearningService:
                 if existing['start_hash'] != digest:
                     raise LearningError('idempotency_conflict', 'That request ID was already used for different content.', 409)
                 return json.loads(existing['start_result'])
+            for item in pack['items']:
+                if item['type'] == 'listening_choice':
+                    verify_audio(item)
             session_id = identifier()
             conn.execute('INSERT INTO learning_sessions(id,profile_id,version_id,kind,start_key,start_hash,start_result,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
                          (session_id, profile['id'], version['id'], pack['kind'], data['submission_id'], digest, '{}', now, now))
@@ -103,14 +108,22 @@ class LearningService:
             attempt['feedback'] = {'outcome': attempt['outcome'], 'answer': answer_text, 'assisted': bool(attempt['assisted'])}
             if item['type'] == 'controlled_text':
                 attempt['feedback']['response_text'] = attempt['answer']['text']
+            if item['type'] == 'listening_choice':
+                attempt['feedback'].update(item_support(conn, session_id, item), transcript=item['transcript'])
             if origin:
                 from services.activity_evidence import load_contract
                 contract = load_contract(conn, saved['profile_id'], 'curriculum_unit', session_id + ':' + attempt['item_id'])
                 attempt['feedback']['explanation'] = contract['content']['explanation']
+        current = None
+        if saved['status'] == 'active':
+            item = pack['items'][saved['current_index']]
+            support = item_support(conn, session_id, item) if item['type'] == 'listening_choice' else {'listened': False, 'support': []}
+            current = child_item(item, help_used=bool(saved['help_used']), listened=support['listened'],
+                                 transcript_used='transcript' in support['support'])
         return {'id': saved['id'], 'profile_id': saved['profile_id'], 'version_id': saved['version_id'],
                 'title': pack['title'], 'revision': saved['revision'], 'status': saved['status'],
                 'completed_items': saved['current_index'], 'total_items': len(pack['items']),
-                'item': child_item(pack['items'][saved['current_index']], help_used=bool(saved['help_used'])) if saved['status'] == 'active' else None,
+                'item': current,
                 'attempts': attempts, 'balance': self._balance(conn, saved['profile_id']),
                 **({'origin': {'href': origin['href'], 'title': origin['title']}} if origin else {})}
 
@@ -120,7 +133,7 @@ class LearningService:
         key(data['submission_id'], 'Submission ID')
         key(data['item_id'], 'Item ID')
         revision(data['expected_revision'])
-        if operation not in ('answer','help'):
+        if operation not in ('answer','help','listened','transcript'):
             reject('Unsupported learning operation.')
         if operation == 'answer':
             if not isinstance(data['answer'], dict):
@@ -147,26 +160,39 @@ class LearningService:
                 if not item.get('hint'):
                     reject('This item has no saved hint.')
                 conn.execute('UPDATE learning_sessions SET help_used=1,revision=revision+1,updated_at=? WHERE id=?', (now, session_id))
+                if item['type'] == 'listening_choice':
+                    record_support(conn, session_id, item, operation, now)
+            elif operation in ('listened', 'transcript'):
+                record_support(conn, session_id, item, operation, now)
+                conn.execute('UPDATE learning_sessions SET revision=revision+1,updated_at=? WHERE id=?', (now, session_id))
             else:
+                listening = item['type'] == 'listening_choice'
+                support = item_support(conn, session_id, item) if listening else {
+                    'listened': False, 'support': ['hint'] if saved['help_used'] else []}
+                if listening and not support['listened'] and 'transcript' not in support['support']:
+                    raise LearningError('listen_required', 'Listen to the message or open its transcript before answering.', 409)
+                assisted = bool(support['support'])
                 response_text, correct = assess_activity_answer(item, data['answer'])
                 outcome = 'correct' if correct else 'incorrect'
-                policy = CONTROLLED_TEXT_POLICY if item['type'] == 'controlled_text' else ASSESSMENT_POLICY
+                policy = LISTENING_POLICY if listening else CONTROLLED_TEXT_POLICY if item['type'] == 'controlled_text' else ASSESSMENT_POLICY
                 attempt_id = identifier()
                 conn.execute('INSERT INTO activity_attempts(id,session_id,item_id,submission_id,answer,assisted,outcome,policy_version,created_at) VALUES (?,?,?,?,?,?,?,?,?)',
-                             (attempt_id, session_id, item['id'], data['submission_id'], encoded(data['answer']), saved['help_used'], outcome, policy, now))
+                             (attempt_id, session_id, item['id'], data['submission_id'], encoded(data['answer']), int(assisted), outcome, policy, now))
                 if item.get('word_id'):
                     conn.execute('INSERT INTO learner_word_evidence VALUES (?,?,?,?,?,?)',
                                  (attempt_id, profile['id'], item['word_id'], 'supported_recognition' if saved['help_used'] else 'recognition', outcome, now))
                 from services.curriculum_units import observe_answer
                 observe_answer(conn, profile['id'], session_id, pack, item, attempt_id,
-                               data['answer'], bool(saved['help_used']))
+                               data['answer'], assisted, support=support['support'])
                 complete = saved['current_index'] + 1 == len(pack['items'])
                 conn.execute('UPDATE learning_sessions SET current_index=current_index+1,revision=revision+1,help_used=0,status=?,updated_at=? WHERE id=?',
                              ('completed' if complete else 'active', now, session_id))
                 if complete:
                     coins = award_participation(conn, profile, attempt_id, version['content_id'], now)
                 answer_text = activity_answer_text(item)
-                feedback = {'outcome': outcome, 'answer': answer_text, 'assisted': bool(saved['help_used'])}
+                feedback = {'outcome': outcome, 'answer': answer_text, 'assisted': assisted}
+                if listening:
+                    feedback.update(support, transcript=item['transcript'])
                 if item['type'] == 'controlled_text':
                     feedback['response_text'] = response_text
             result = self._snapshot(conn, session_id, pack)
