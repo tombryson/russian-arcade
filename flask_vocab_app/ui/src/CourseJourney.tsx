@@ -413,7 +413,7 @@ export function CourseJourney({chapterId,attemptId,language='en',progression}:{c
             <p>{t(item.intro,item.intro_ru)}</p>
             <div class="course-chapter-footer">
               <div class="course-chapter-progress"><progress max={1} value={clamp(item.progress)} aria-label={t(`Chapter ${item.number} progress`,`Прогресс главы ${item.number}`)} /><span>{Math.round(clamp(item.progress)*100)}%</span></div>
-              {!visibleCourse.completed && item.id===visibleCourse.current_chapter_id && <a class="course-chapter-link course-chapter-continue" href={`#journey/chapter/${encodeURIComponent(item.id)}`}>{item.status==='ready' ? t('Open checkpoint','Открыть проверку') : t('Continue milestone','Продолжить этап')} →</a>}
+              {!visibleCourse.completed && item.id===visibleCourse.current_chapter_id && <a class="cta course-chapter-link course-chapter-continue" href={`#journey/chapter/${encodeURIComponent(item.id)}`}>{item.status==='ready' ? t('Open checkpoint','Открыть проверку') : t('Continue milestone','Продолжить этап')} →</a>}
             </div>
           </div>
         </li>)}</ol>
