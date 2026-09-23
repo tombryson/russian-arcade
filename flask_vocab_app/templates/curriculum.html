@@ -2,6 +2,12 @@
 {% from '_activity_header.html' import activity_header %}
 {% set russian = language == 'ru' %}
 {% set page_title = 'Учебная программа' if russian else 'Curriculum' %}
+{% set milestone_artwork = {
+  'home': 'barsik-leaving-home-v1.webp',
+  'postoffice': 'barsik-post-office-v1.webp',
+  'market': 'barsik-market-v1.webp',
+  'leavingtown': 'barsik-leaving-town-v1.webp'
+} if course_release_id == 'a1-journey-v2' else {} %}
 {% block main_content %}
 <main class="main-content activity-entry curriculum" id="mainContent" data-page="curriculum">
   <div class="activity-entry-content">
@@ -30,7 +36,7 @@
         </div>
         {% else %}
         <details class="curriculum-milestone" id="milestone-{{ milestone.id }}"{% if course_progress and course_progress.current_chapter_id == milestone.id %} open{% endif %}>
-          <summary><span class="curriculum-milestone-number" aria-hidden="true">{{ '✓' if milestone.status|default('') == 'passed' else milestone.number }}</span><h3>{% if milestone.id == 'home' %}<img class="curriculum-milestone-art" src="/static/images/barsik-leaving-home-v1.webp" width="48" height="48" alt="" loading="lazy" />{% endif %}<span>{{ milestone.title_ru if russian else milestone.title }}</span></h3>{% if course_progress %}<span class="curriculum-milestone-status">{% if milestone.status == 'passed' %}{{ 'Пройдено' if russian else 'Passed' }}{% elif milestone.status == 'ready' %}{{ 'Письмо готово' if russian else 'Letter ready' }}{% else %}{{ 'Практика' if russian else 'In practice' }}{% endif %}</span>{% endif %}<span class="curriculum-expand" aria-hidden="true">+</span></summary>
+          <summary><span class="curriculum-milestone-number" aria-hidden="true">{{ '✓' if milestone.status|default('') == 'passed' else milestone.number }}</span><h3>{% if milestone.id in milestone_artwork %}<img class="curriculum-milestone-art" src="/static/images/{{ milestone_artwork[milestone.id] }}" width="48" height="48" alt="" loading="lazy" />{% endif %}<span>{{ milestone.title_ru if russian else milestone.title }}</span></h3>{% if course_progress %}<span class="curriculum-milestone-status">{% if milestone.status == 'passed' %}{{ 'Пройдено' if russian else 'Passed' }}{% elif milestone.status == 'ready' %}{{ 'Письмо готово' if russian else 'Letter ready' }}{% else %}{{ 'Практика' if russian else 'In practice' }}{% endif %}</span>{% endif %}<span class="curriculum-expand" aria-hidden="true">+</span></summary>
           <div class="curriculum-milestone-content">
             <div class="curriculum-milestone-intro"><p>{{ milestone.intro_ru if russian else milestone.intro }}</p><a href="/#journey/chapter/{{ milestone.id }}" hx-boost="false">{{ 'Открыть этап' if russian else 'Open milestone' }} →</a></div>
             <nav class="curriculum-milestone-topics" aria-label="{{ 'Темы этапа' if russian else 'Milestone topics' }}">{% for topic in milestone.curriculum_topics %}<a href="#topic-{{ topic.id }}" hx-boost="false">{{ topic.title_ru if russian else topic.title_en }}</a>{% endfor %}</nav>

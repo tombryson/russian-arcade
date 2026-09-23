@@ -18,7 +18,8 @@ def create_curriculum_blueprint():
         language = 'ru' if session.get('ui_lang') == 'ru' else 'en'
         progress = selected_course_progress()
         bands = band_summaries(language)
-        chapters = progress['chapters'] if progress else course_catalogue()['chapters']
+        course = progress if progress else course_catalogue()
+        chapters = course['chapters']
         topics = {topic['id']: topic for band in bands for topic in band['topics']}
         milestones = []
         for chapter in chapters:
@@ -31,7 +32,7 @@ def create_curriculum_blueprint():
             milestones.append({**chapter, 'status': status, 'curriculum_topics': [topics[topic_id] for topic_id in topic_ids]})
         return render_page('curriculum.html', active_page='curriculum',
                            bands=bands, language=language, milestones=milestones,
-                           course_progress=progress,
+                           course_progress=progress, course_release_id=course['release_id'],
                            speaking_scenario=scenario_for_topic)
 
     return blueprint

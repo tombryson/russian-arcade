@@ -16,9 +16,16 @@ export type CourseAttempt={draft_answers?:Record<string,string>;draft_revision?:
 type Submission={answers:Record<string,string>;submission_id:string};
 type Draft={answers:Record<string,string>;pending?:Submission;revision?:number};
 const storagePrefix='word-post:checkpoint:';
+const chapterArtwork:Record<string,string>={
+  home:'barsik-leaving-home-v1.webp',
+  postoffice:'barsik-post-office-v1.webp',
+  market:'barsik-market-v1.webp',
+  leavingtown:'barsik-leaving-town-v1.webp',
+};
 function ChapterArtwork({releaseId,chapterId}:{releaseId?:string;chapterId:string}) {
-  if(releaseId!=='a1-journey-v2' || chapterId!=='home') return null;
-  return <img class="course-milestone-art" src="/static/images/barsik-leaving-home-v1.webp" alt="" width="64" height="64" />;
+  const image=releaseId==='a1-journey-v2' ? chapterArtwork[chapterId] : undefined;
+  if(!image) return null;
+  return <img class="course-milestone-art" src={`/static/images/${image}`} alt="" width="64" height="64" />;
 }
 const clamp=(value:number)=>Number.isFinite(value) ? Math.max(0,Math.min(1,value)) : 0;
 const draftKey=(profile:string,attempt:string)=>`${storagePrefix}${encodeURIComponent(profile)}:${encodeURIComponent(attempt)}`;
