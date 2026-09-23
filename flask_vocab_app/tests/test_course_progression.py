@@ -141,6 +141,9 @@ class CourseProgressionTests(unittest.TestCase):
         self.assertEqual(value['unlocked_levels'], ['A1'])
         self.assertTrue(value['chapters'][0]['topics'][0]['objectives'])
         self.assertEqual({link['activity'] for link in value['chapters'][0]['topics'][0]['links']}, set(course.ACTIVITIES))
+        for later in value['chapters'][1:]:
+            self.assertEqual((later['title'], later['title_ru'], later['intro'], later['intro_ru']), ('', '', '', ''))
+            self.assertEqual(later['topics'], [])
 
     def test_distinct_successful_tasks_and_two_families_are_required(self):
         topics = self.catalogue['chapters'][0]['topic_ids']
@@ -188,7 +191,8 @@ class CourseProgressionTests(unittest.TestCase):
     def test_later_preparation_does_not_skip_sequential_gate(self):
         self.prepare('chapter-2')
         later = self.state()['chapters'][1]
-        self.assertEqual((later['status'], later['progress']), ('locked', 1))
+        self.assertEqual((later['status'], later['progress']), ('locked', 0))
+        self.assertEqual(later['topics'], [])
         self.assertEqual(self.state()['progress'], 0)
         self.assertEqual(self.start('chapter-2').status_code, 403)
         self.assertEqual(self.start(challenge=False).status_code, 403)
@@ -197,7 +201,30 @@ class CourseProgressionTests(unittest.TestCase):
         self.assertTrue(passed['result']['passed'])
         self.assertEqual(passed['course']['current_chapter_id'], 'chapter-2')
         self.assertEqual(passed['course']['progress'], 1)
+        self.assertEqual(passed['course']['chapters'][1]['title'], 'Chapter 2')
+        self.assertTrue(all(topic['successful_tasks'] == 2 for topic in passed['course']['chapters'][1]['topics']))
         self.assertEqual(self.start('chapter-2', challenge=False).status_code, 200)
+
+    def test_old_start_and_submission_receipts_do_not_reveal_future_stops(self):
+        attempt = self.start(request_id='old-start').json
+        answers = self.answers(attempt['id'])
+        result = self.submit(attempt['id'], answers, submission_id='old-answer').json
+        # Reproduce stored pre-redaction presentation without changing the
+        # frozen attempt, answer or outcome that these receipts must preserve.
+        for table, column, request_id, response in (
+            ('course_checkpoint_requests', 'request_id', 'old-start', attempt),
+            ('course_checkpoint_submissions', 'submission_id', 'old-answer', result),
+        ):
+            old = deepcopy(response)
+            for chapter in old['course']['chapters']:
+                if chapter['status'] == 'locked':
+                    chapter.update(title='Future story spoiler', title_ru='Будущая история', intro='Future event',
+                                   topics=[{'id': 'future-topic'}], progress=0.5)
+            with transaction(self.db, write=True) as conn:
+                conn.execute(f'UPDATE {table} SET response_json=? WHERE profile_id=? AND {column}=?',
+                             (encoded(old), self.pid, request_id))
+        self.assertEqual(self.start(request_id='old-start').json, attempt)
+        self.assertEqual(self.submit(attempt['id'], answers, submission_id='old-answer').json, result)
 
     def test_reversal_drops_preparation_until_pass_and_replacement_can_preserve_it(self):
         topic = self.catalogue['chapters'][0]['topic_ids'][0]

@@ -210,6 +210,32 @@ def _links(topic_id, band='A1'):
     return result
 
 
+def _reveal_course(course):
+    """Keep future stops as numbered placeholders, including saved API receipts.
+
+    The public curriculum and standalone practice stay available. This changes
+    only the journey presentation; evidence and readiness are still calculated
+    from the full authoritative catalogue before the next stop is revealed.
+    """
+    if not course or not isinstance(course.get('chapters'), list):
+        return course
+    chapters = []
+    for chapter in course['chapters']:
+        if chapter['status'] == 'locked':
+            chapter = dict(chapter, title='', title_ru='', intro='', intro_ru='',
+                           topics=[], objectives=[], preparation=[], target_coverage=None,
+                           progress=0, preparation_progress=0, activity_count=0,
+                           last_attempt_id=None, active_attempt_id=None)
+        chapters.append(chapter)
+    return dict(course, chapters=chapters)
+
+
+def _reveal_receipt(response):
+    # Old receipts keep their exact assessment/result state, but cannot restore
+    # a superseded presentation that advertised every future narrative stop.
+    return dict(response, course=_reveal_course(response['course'])) if response.get('course') else response
+
+
 def course_snapshot(conn, profile_id):
     """Project current preparation and permanent passes without writing state."""
     if not _execute(conn, "SELECT 1 FROM sqlite_master WHERE type='table' AND name='course_enrolments'").fetchone():
@@ -266,14 +292,14 @@ def course_snapshot(conn, profile_id):
     active_progress = next((chapter['progress'] for chapter in chapters if chapter['id'] == current_id), 0)
     entitled = {row['target_level'] for row in _execute(conn,
         'SELECT target_level FROM course_continuation_entitlements WHERE profile_id=?', (profile_id,))}
-    return {'version': catalogue['version'], 'profile_id': profile_id, 'band': band, 'release_id': release_id,
+    return _reveal_course({'version': catalogue['version'], 'profile_id': profile_id, 'band': band, 'release_id': release_id,
             'chapter_count': len(chapters), 'completed_milestones': sum(chapter['status'] == 'passed' for chapter in chapters),
             'unlocked_levels': [level for level in ('A1', 'A2', 'B1', 'B2', 'C1', 'C2') if level == 'A1' or level in entitled],
             'current_chapter_id': current_id,
             'progress': 1.0 if completed else active_progress,
             'completed': completed, 'chapters': chapters,
             'release_upgrade': _release_upgrade(conn, profile_id, release_id, entitled),
-            'previous_courses': _previous_courses(conn, profile_id, release_id)}
+            'previous_courses': _previous_courses(conn, profile_id, release_id)})
 
 
 def _attempt(conn, profile_id, attempt_id):
@@ -359,7 +385,7 @@ def checkpoint_start(conn, profile_id, chapter_id, request_id, challenge=False, 
     if previous:
         if previous['payload_hash'] != fingerprint:
             raise LearningError('idempotency_conflict', 'This request ID was already used for different checkpoint choices.', 409)
-        return json.loads(previous['response_json'])
+        return _reveal_receipt(json.loads(previous['response_json']))
     state = course_snapshot(conn, profile_id)
     if state is None:
         raise LearningError('course_unavailable', 'The course is temporarily unavailable.', 503)
@@ -420,7 +446,7 @@ def checkpoint_answer(conn, profile_id, attempt_id, answers, submission_id, now=
     if previous:
         if previous['payload_hash'] != fingerprint:
             raise LearningError('idempotency_conflict', 'This submission ID was already used for different answers.', 409)
-        return json.loads(previous['response_json'])
+        return _reveal_receipt(json.loads(previous['response_json']))
     row = _attempt(conn, profile_id, attempt_id)
     if row['status'] != 'active':
         raise LearningError('checkpoint_completed', 'This checkpoint is already checked. Start the next attempt to practise again.', 409)

@@ -66,6 +66,30 @@ class CourseIntegrationTests(unittest.TestCase):
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM progression_events').fetchone()[0], 0)
             self.assertFalse(conn.execute('PRAGMA foreign_key_check').fetchall())
 
+    def test_future_stops_reveal_only_after_passing_and_free_practice_stays_available(self):
+        authored = course_catalogue('a1-journey-v2')
+        current = self.client.get('/api/v1/course').json
+        self.assertEqual(current['chapter_count'], 4)
+        self.assertEqual(current['chapters'][0]['title'], authored['chapters'][0]['title'])
+        for chapter in current['chapters'][1:]:
+            self.assertEqual(chapter['status'], 'locked')
+            for field in ('title', 'title_ru', 'intro', 'intro_ru'):
+                self.assertEqual(chapter[field], '')
+            for field in ('topics', 'objectives', 'preparation'):
+                self.assertEqual(chapter[field], [])
+            self.assertIsNone(chapter['target_coverage'])
+            self.assertEqual((chapter['progress'], chapter['preparation_progress']), (0, 0))
+        self.post('chapters/market/checkpoint', {'request_id': 'later-letter', 'challenge': True}, 403)
+        standalone = self.post('chapters/market/practice', {'request_id': 'later-free-practice'})
+        self.assertEqual(standalone['status'], 'active')
+        self.assertTrue(standalone['current_item']['teaching'])
+        after = self.finish(self.start())['course']
+        self.assertEqual(after['chapters'][0]['status'], 'passed')
+        self.assertEqual(after['chapters'][1]['title'], authored['chapters'][1]['title'])
+        self.assertTrue(after['chapters'][1]['topics'])
+        self.assertEqual(after['chapters'][2]['title'], '')
+        self.assertEqual(course_catalogue('a1-journey-v2'), authored)
+
     def test_existing_learner_explicit_switch_preserves_active_letter_and_earned_access(self):
         with transaction(self.db, write=True) as conn:
             conn.execute("INSERT OR REPLACE INTO course_enrolments VALUES (?,'A1','a1-v1',1,'schema-044')", (self.pid,))

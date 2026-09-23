@@ -22,9 +22,13 @@ def create_curriculum_blueprint():
         topics = {topic['id']: topic for band in bands for topic in band['topics']}
         milestones = []
         for chapter in chapters:
+            status = chapter.get('status', 'practice' if chapter['number'] == 1 else 'locked')
+            if status == 'locked':
+                milestones.append({'id': chapter['id'], 'number': chapter['number'], 'status': 'locked'})
+                continue
             topic_ids = ([topic['id'] for topic in chapter['topics']]
                          if progress else chapter['topic_ids'])
-            milestones.append({**chapter, 'curriculum_topics': [topics[topic_id] for topic_id in topic_ids]})
+            milestones.append({**chapter, 'status': status, 'curriculum_topics': [topics[topic_id] for topic_id in topic_ids]})
         return render_page('curriculum.html', active_page='curriculum',
                            bands=bands, language=language, milestones=milestones,
                            course_progress=progress,

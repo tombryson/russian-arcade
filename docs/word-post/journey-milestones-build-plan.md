@@ -13,9 +13,9 @@ Key sections: [A1 sequence](#4-revised-a1-sequence) · [Assessment](#6-received-
 | Curriculum targets | 110 target definitions; 32 required targets with short preparation tasks. Saved individual decisions carry support and source evidence. Aggregate activity scores remain topic evidence. |
 | A1 content | Home, Post office, Market and Leaving town; three variants each, 120 scored decisions and separate recorded updates. Final variants sample all ten topics. |
 | Assessment flow | Received-letter opening, grouped final assessment, revision-checked drafts, support tracking, feedback and permanent milestones. |
-| Shared presentation | Curriculum, Journey, Home, header and Profile use the same course projection. New learners complete one welcome before entering Home. |
+| Shared presentation | Curriculum, Journey, Home, header and Profile use the same course projection. Future milestones show only grey numbers until unlocked. Standalone topics stay available. New learners complete one welcome before entering Home. |
 | Content reuse | Shared vocabulary enrichment, 22 authored native cloze candidates and optional saved Writing replies. Existing media generation and FSRS are reused. |
-| Release checks | Deterministic content validation, model peer review, migration rehearsal and application tests. A human learner pilot remains outstanding. |
+| Release checks | Deterministic content validation, model peer review, migration rehearsal and application tests. Recording failures offer playback retry or transcript support; listening saves can be retried without replay. A human learner pilot remains outstanding. |
 
 JM-01–12 are implemented for the A1 release. JM-13 (independent spoken replies) and JM-14 (authored A2 regions) remain subsequent work, as scoped below. Spoken production does not become a hidden progression requirement.
 

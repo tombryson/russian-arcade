@@ -1,9 +1,12 @@
 """Curriculum and Profile show the same earned milestones as Journey."""
 import json
+import re
+from html import unescape
 import sqlite3
 import unittest
 from flask.testing import FlaskClient
 
+from services.course_progression import course_catalogue
 from tests.support import isolated_app
 
 
@@ -14,10 +17,47 @@ class CurriculumMilestoneTests(unittest.TestCase):
         self.state = self.client.get('/api/v1/course').json
         self.headers = {'X-CSRF-Token': self.state['csrf_token']}
 
+    def assert_locked_placeholders(self, html, chapters, russian=False):
+        for chapter in chapters:
+            with self.subTest(chapter=chapter['id']):
+                match = re.search(r'<div class="curriculum-milestone is-locked" id="milestone-'
+                                  + re.escape(chapter['id']) + r'"[^>]*>(.*?)</div>', html, re.S)
+                self.assertIsNotNone(match)
+                markup = match.group(0)
+                visible = unescape(re.sub(r'<[^>]+>', '', match.group(1))).strip()
+                self.assertEqual(visible, str(chapter['number']))
+                label = (f"Этап {chapter['number']}, пока недоступен" if russian
+                         else f"Milestone {chapter['number']}, locked")
+                self.assertIn(f'aria-label="{label}"', markup)
+                self.assertNotRegex(markup, r'<(?:a|button|details|summary|h3)\b|tabindex=')
+                self.assertNotIn(f'/#journey/chapter/{chapter["id"]}', html)
+                if chapter.get('intro'):
+                    self.assertNotIn(chapter['intro'], html)
+
+    def test_locked_milestones_are_numbers_only_and_topics_remain_available(self):
+        html = self.client.get('/curriculum').text
+        self.assert_locked_placeholders(html, self.state['chapters'][1:])
+        first = self.state['chapters'][0]
+        self.assertIn(f'<details class="curriculum-milestone" id="milestone-{first["id"]}" open>', html)
+        self.assertIn(first['title'], html)
+        self.assertIn(f'/#journey/chapter/{first["id"]}', html)
+        self.assertEqual(html.count('class="curriculum-topic"'), 50)
+        self.assertIn('A1 topics', html)
+        self.assertIn('/comprehension?topic=food&amp;level=A1', html)
+        self.assertEqual(html.count('id="topic-food"'), 1)
+
+    def test_locked_milestone_accessible_names_are_localized(self):
+        with self.client.session_transaction() as session:
+            session['ui_lang'] = 'ru'
+        html = self.client.get('/curriculum').text
+        self.assert_locked_placeholders(html, self.state['chapters'][1:], russian=True)
+        self.assertIn('Темы A1', html)
+
     def test_public_catalogue_has_all_topics_without_assigning_progress(self):
         visitor = FlaskClient(self.app)
         html = visitor.get('/curriculum').text
-        self.assertEqual(html.count('class="curriculum-milestone"'), 4)
+        self.assertEqual(len(re.findall(r'class="curriculum-milestone(?: is-locked)?"', html)), 4)
+        self.assert_locked_placeholders(html, course_catalogue()['chapters'][1:])
         self.assertEqual(html.count('class="curriculum-topic"'), 50)
         self.assertFalse('milestones complete' in html)
         self.assertFalse('curriculum-milestone-count' in html)
@@ -43,6 +83,12 @@ class CurriculumMilestoneTests(unittest.TestCase):
         state = self.client.get('/api/v1/course').json
         self.assertEqual(state['completed_milestones'], 1)
         html = self.client.get('/curriculum').text
+        self.assert_locked_placeholders(html, state['chapters'][2:])
+        for available in state['chapters'][:2]:
+            self.assertIn(f'<details class="curriculum-milestone" id="milestone-{available["id"]}"', html)
+            self.assertIn(f'/#journey/chapter/{available["id"]}', html)
+            self.assertIn(available['title'], html)
+        self.assertEqual(html.count('class="curriculum-topic"'), 50)
         self.assertIn('A1 · 1 of 4 milestones complete', html)
         self.assertIn('1 of 4 milestones complete', self.client.get('/post/profiles').text)
         self.assertIn(f'data-profile-id="{state["profile_id"]}"', html)

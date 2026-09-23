@@ -22,7 +22,15 @@ describe('Guided chapter journey',()=>{
     mockServer();render(<CourseJourney progression={progression()}/>);
     await screen.findByRole('heading',{name:'Your journey'});
     expect(screen.getAllByText('Milestone 1 of 4 · In practice')).toHaveLength(2);
-    expect(screen.getAllByText(/Coming next/)).toHaveLength(3);
+    for (const number of [2,3,4]) {
+      const future=screen.getByRole('listitem',{name:`Milestone ${number}, locked`});
+      expect(future.textContent).toBe(String(number));
+      expect(future.querySelector('a,button,summary,input')).toBeNull();
+    }
+    expect(screen.queryByText('The market')).toBeNull();
+    expect(screen.queryByText('A new address')).toBeNull();
+    expect(screen.queryByText('Your original letter')).toBeNull();
+    expect(screen.queryByText('The next part of your journey.')).toBeNull();
     expect(screen.getByRole('link',{name:'Continue milestone →'}).getAttribute('href')).toBe('#journey/chapter/first');
     expect(screen.getByRole('link',{name:'Choose practice level'}).getAttribute('href')).toBe('/curriculum');
     expect(screen.getByRole('link',{name:'Browse all practice activities →'})).toBeTruthy();
@@ -39,6 +47,17 @@ describe('Guided chapter journey',()=>{
     const writes=fetch.mock.calls.filter(([,options])=>options?.method==='POST');expect(writes).toHaveLength(2);
     const first=JSON.parse(String(writes[0][1]?.body));expect(first.challenge).toBe(true);expect(first.release_id).toBe('a1-v1');expect(JSON.parse(String(writes[1][1]?.body))).toEqual(first);
     expect(fetch.mock.calls.filter(([url])=>url==='/api/v1/course/checkpoints/attempt-1')).toHaveLength(1);
+  });
+  it('reveals the next milestone after a pass while keeping later destinations hidden',async()=>{
+    const current=course({current_chapter_id:'chapter-2',completed_milestones:1});
+    current.chapters[0].status='passed';current.chapters[1].status='practice';
+    mockServer(()=>current);render(<CourseJourney progression={progression()}/>);
+    await screen.findByRole('heading',{name:'Your journey'});
+    expect(screen.getAllByRole('heading',{name:'The market'})).toHaveLength(2);
+    expect(screen.getByRole('link',{name:'Continue milestone →'}).getAttribute('href')).toBe('#journey/chapter/chapter-2');
+    expect(screen.getByText('Milestone 1 of 4 · Passed')).toBeTruthy();
+    for(const number of [3,4]) expect(screen.getByRole('listitem',{name:`Milestone ${number}, locked`}).textContent).toBe(String(number));
+    expect(screen.queryByText('A new address')).toBeNull();
   });
   it('reads the current enrolment after replaying a start receipt from an equally stale page',async()=>{
     const receipt=attempt();
@@ -65,6 +84,10 @@ describe('Guided chapter journey',()=>{
     expect(await screen.findByRole('button',{name:'Start checkpoint →'})).toBeTruthy();expect(screen.queryByRole('button',{name:/Test out/})).toBeNull();
     rerender(<CourseJourney chapterId="chapter-2" progression={progression()}/>);
     await screen.findByText('Pass the previous milestone to continue. You can practise any time.');expect(screen.queryByRole('button',{name:'Start checkpoint →'})).toBeNull();
+    expect(screen.queryByRole('heading',{name:'The market'})).toBeNull();
+    expect(screen.queryByText('The next part of your journey.')).toBeNull();
+    expect(screen.queryByText('Use this phrase to introduce yourself.')).toBeNull();
+    expect(screen.queryByRole('link',{name:'Read a greeting →'})).toBeNull();
   });
 
   it('explains when completed topic work still needs a second activity',async()=>{
@@ -203,6 +226,40 @@ describe('Chapter checkpoints',()=>{
     release!(attempt({support_used:true}));
     await screen.findByText('✓ Recording heard. You can replay it.');
     expect(fetch.mock.calls.filter(([url])=>String(url).endsWith('/listened'))).toHaveLength(1);
+  });
+  it('offers audio recovery without granting listening credit on failure or retry',async()=>{
+    const fetch=mockServer(()=>attempt());
+    render(<CourseJourney attemptId="attempt-1" progression={progression()}/>);
+    await selectAnswers();
+    const audio=screen.getByLabelText('Checkpoint recording') as HTMLAudioElement;
+    const load=vi.spyOn(audio,'load').mockImplementation(()=>{});
+    const play=vi.spyOn(audio,'play').mockResolvedValue();
+    fireEvent(audio,new Event('error'));
+    expect(await screen.findByText('The recording couldn’t play. Try again, or read the transcript for a practice attempt.')).toBeTruthy();
+    expect(screen.queryByText('Listen to the full recording before submitting.')).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'Retry audio'}));
+    expect(load).toHaveBeenCalledTimes(1);expect(play).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button',{name:'Check my answers'}).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button',{name:'Read transcript · practice only'}).hasAttribute('disabled')).toBe(false);
+    expect(fetch.mock.calls.some(([url])=>String(url).endsWith('/listened'))).toBe(false);
+  });
+  it('retries saving a completed recording without replaying it',async()=>{
+    let fail=true;let current=attempt();
+    const fetch=mockServer(url=>{if(url.endsWith('/listened')){if(fail)throw new Error('Connection lost');current={...current,listened:true};}return current;});
+    render(<CourseJourney attemptId="attempt-1" progression={progression()}/>);
+    await selectAnswers();
+    const audio=screen.getByLabelText('Checkpoint recording') as HTMLAudioElement;
+    const play=vi.spyOn(audio,'play').mockResolvedValue();
+    fireEvent(audio,new Event('ended'));
+    await screen.findByRole('alert');
+    expect(screen.getByText('You’ve heard the recording. Retry saving to continue.')).toBeTruthy();
+    expect(screen.getByRole('button',{name:'Check my answers'}).hasAttribute('disabled')).toBe(true);
+    fail=false;fireEvent.click(screen.getByRole('button',{name:'Retry saving listening'}));
+    await screen.findByText('✓ Recording heard. You can replay it.');
+    expect(screen.queryByRole('button',{name:'Retry saving listening'})).toBeNull();
+    expect(screen.getByRole('button',{name:'Check my answers'}).hasAttribute('disabled')).toBe(false);
+    expect(play).not.toHaveBeenCalled();
+    expect(fetch.mock.calls.filter(([url])=>String(url).endsWith('/listened'))).toHaveLength(2);
   });
   it('reveals hints and the transcript only through server support and explains the practice-only consequence',async()=>{
     let current=attempt();const fetch=mockServer((url,body)=>{if(url.endsWith('/support')) {current={...current,support_used:true};if(body?.kind==='hint') current={...current,questions:current.questions.map(q=>q.id===body.question_id ? {...q,hint:'Look at the signature.',hint_ru:'Посмотрите подпись.'} : q)};else current={...current,listening:{...current.listening,transcript:'Встреча в четыре часа.'}};}return current;});

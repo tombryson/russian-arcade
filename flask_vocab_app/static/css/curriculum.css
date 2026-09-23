@@ -47,3 +47,9 @@
   .curriculum-topic-content { grid-template-columns:1fr; padding-left:4px; gap:8px; }
   .curriculum-practice-links { gap:12px 18px; }
 }
+
+.curriculum-milestone.is-locked { display:flex; align-items:center; min-height:58px; padding:14px 4px; color:var(--wp-text-secondary,#b7b9ce); background:color-mix(in srgb,var(--wp-text-secondary,#b7b9ce) 4%,transparent); }
+.curriculum-milestone.is-locked .curriculum-milestone-number { background:color-mix(in srgb,var(--wp-text-secondary,#b7b9ce) 12%,transparent); color:var(--wp-text-secondary,#b7b9ce); opacity:.6; }
+.curriculum-milestone-topics { display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:12px; font-size:14px; }
+.curriculum-milestone-topics a { color:inherit; text-underline-offset:4px; }
+.curriculum-topic-catalogue-heading { margin:24px 0 12px; color:inherit; font:500 18px/1.4 var(--wp-font-reading,sans-serif); }

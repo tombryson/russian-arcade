@@ -5,7 +5,7 @@ import type {ProgressionState} from './Progression';
 const progression={data:{profile_id:'p',course:{release_id:'a1-journey-v2'}},refresh:vi.fn(),loading:false,error:''} as unknown as ProgressionState;
 const practice=():CoursePractice=>({id:'practice-1',profile_id:'p',section_id:'home',status:'active',completed_count:0,total_count:1,current_item:{id:'item-1',target_id:'target-1',title:'A family member',title_ru:'Член семьи',stage:'learn',teaching:{explanation:'Use моя before сестра.',explanation_ru:'Перед словом «сестра» употребляем «моя».',example_ru:'Это моя сестра.',example_en:'This is my sister.'},question:{prompt:'Which phrase fits?',prompt_ru:'Какой вариант подходит?',choices:[{id:'right',text:'Моя сестра'},{id:'wrong',text:'Мой сестра'}]},hint:null,feedback:null,listened:false,transcript:null},coverage:{required_count:1,prepared_count:0,ready:false,targets:[]}});
 function serve(handler:(url:string,body:any)=>unknown){const fetch=vi.fn(async(url:string,options?:RequestInit)=>({ok:true,json:async()=>handler(url,options?.body?JSON.parse(String(options.body)):undefined)}));vi.stubGlobal('fetch',fetch);return fetch;}
-beforeEach(()=>{window.location.hash='';});afterEach(()=>vi.unstubAllGlobals());
+beforeEach(()=>{window.location.hash='';});afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks();});
 describe('Milestone target practice',()=>{
   it('teaches before recall, checks a real choice and returns to the same milestone',async()=>{
     let value=practice();const fetch=serve(url=>{
@@ -35,5 +35,86 @@ describe('Milestone target practice',()=>{
     serve(url=>{if(url.endsWith('/listened'))value={...value,current_item:{...value.current_item!,listened:true}};return value;});
     render(<CoursePreparation practiceId="practice-1" progression={progression}/>);fireEvent.click(await screen.findByRole('radio',{name:'Моя сестра'}));expect((screen.getByRole('button',{name:'Check answer'}) as HTMLButtonElement).disabled).toBe(true);
     fireEvent(screen.getByLabelText('Practice recording'),new Event('ended'));await waitFor(()=>expect((screen.getByRole('button',{name:'Check answer'}) as HTMLButtonElement).disabled).toBe(false));
+  });
+});
+
+const listeningPractice=():CoursePractice=>{
+  const value=practice();
+  return {...value,current_item:{...value.current_item!,stage:'question',question:{...value.current_item!.question!,audio_url:'/static/audio/example.mp3'}}};
+};
+describe('Preparation audio recovery',()=>{
+  it('retries failed media without counting playback or failure as listening',async()=>{
+    const load=vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});
+    const play=vi.spyOn(HTMLMediaElement.prototype,'play').mockResolvedValue();
+    const fetch=serve(()=>listeningPractice());
+    render(<CoursePreparation practiceId="practice-1" progression={progression}/>);
+    fireEvent.click(await screen.findByRole('radio',{name:'Моя сестра'}));
+    const recording=screen.getByLabelText('Practice recording');
+    fireEvent(recording,new Event('play'));fireEvent(recording,new Event('error'));
+    expect(screen.getByRole('alert').textContent).toContain('The recording could not play.');
+    expect(screen.getByRole('button',{name:'Show transcript'})).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'Retry audio'}));
+    expect(load).toHaveBeenCalledOnce();expect(play).toHaveBeenCalledOnce();
+    expect((screen.getByRole('button',{name:'Check answer'}) as HTMLButtonElement).disabled).toBe(true);
+    expect(fetch.mock.calls.filter(([,options])=>options?.method==='POST')).toHaveLength(0);
+    expect(screen.queryByRole('button',{name:'Retry audio'})).toBeNull();
+  });
+  it('keeps transcript support available after a playback rejection without inventing a listening receipt',async()=>{
+    vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});
+    vi.spyOn(HTMLMediaElement.prototype,'play').mockRejectedValue(new Error('Playback unavailable'));
+    let value=listeningPractice();
+    const fetch=serve(url=>{if(url.endsWith('/transcript'))value={...value,current_item:{...value.current_item!,transcript:'Это моя сестра.'}};return value;});
+    render(<CoursePreparation practiceId="practice-1" progression={progression}/>);
+    fireEvent.click(await screen.findByRole('radio',{name:'Моя сестра'}));
+    fireEvent(screen.getByLabelText('Practice recording'),new Event('error'));
+    fireEvent.click(screen.getByRole('button',{name:'Retry audio'}));
+    await screen.findByRole('button',{name:'Retry audio'});
+    fireEvent.click(screen.getByRole('button',{name:'Show transcript'}));
+    await screen.findByText('Это моя сестра.');
+    expect((screen.getByRole('button',{name:'Check answer'}) as HTMLButtonElement).disabled).toBe(false);
+    expect(fetch.mock.calls.filter(([,options])=>options?.method==='POST').map(([url])=>url.split('/').at(-1))).toEqual(['transcript']);
+  });
+  it('retries a failed listening receipt without replay and reuses the command id',async()=>{
+    const play=vi.spyOn(HTMLMediaElement.prototype,'play').mockResolvedValue();
+    let value=listeningPractice();let failed=false;
+    const fetch=serve(url=>{if(url.endsWith('/listened')){if(!failed){failed=true;throw new Error('Offline');}value={...value,current_item:{...value.current_item!,listened:true}};}return value;});
+    render(<CoursePreparation practiceId="practice-1" progression={progression}/>);
+    fireEvent.click(await screen.findByRole('radio',{name:'Моя сестра'}));
+    fireEvent(screen.getByLabelText('Practice recording'),new Event('ended'));
+    await screen.findByText('We couldn’t save that you listened. You can retry saving without playing the recording again.');
+    expect((screen.getByRole('button',{name:'Check answer'}) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button',{name:'Retry saving listening'}));
+    await waitFor(()=>expect((screen.getByRole('button',{name:'Check answer'}) as HTMLButtonElement).disabled).toBe(false));
+    const writes=fetch.mock.calls.filter(([,options])=>options?.method==='POST');
+    expect(writes).toHaveLength(2);expect(writes[0][1]?.body).toBe(writes[1][1]?.body);expect(play).not.toHaveBeenCalled();
+  });
+  it('does not apply a late listening receipt to another learner',async()=>{
+    let resolveReceipt!:(value:CoursePractice)=>void;
+    const current=listeningPractice();
+    const next={...listeningPractice(),id:'practice-2',profile_id:'p2',current_item:{...listeningPractice().current_item!,id:'item-2',title:'New listening task'}};
+    serve(url=>url.endsWith('/listened')?new Promise<CoursePractice>(resolve=>{resolveReceipt=resolve;}):url.includes('/practice-2')?next:current);
+    const {rerender}=render(<CoursePreparation practiceId="practice-1" progression={progression}/>);
+    fireEvent(await screen.findByLabelText('Practice recording'),new Event('ended'));
+    rerender(<CoursePreparation practiceId="practice-2" progression={{...progression,data:{...progression.data!,profile_id:'p2'}}}/>);
+    await screen.findByRole('heading',{name:'New listening task'});
+    resolveReceipt({...current,current_item:{...current.current_item!,listened:true}});
+    fireEvent.click(screen.getByRole('radio',{name:'Моя сестра'}));
+    await waitFor(()=>expect((screen.getByRole('button',{name:'Check answer'}) as HTMLButtonElement).disabled).toBe(true));
+    expect(screen.getByRole('heading',{name:'New listening task'})).toBeTruthy();
+  });
+  it('ignores late media events and playback rejection after a learner changes',async()=>{
+    let rejectPlayback!:(reason:Error)=>void;
+    vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});
+    vi.spyOn(HTMLMediaElement.prototype,'play').mockImplementation(()=>new Promise<void>((_resolve,reject)=>{rejectPlayback=reject;}));
+    const current=listeningPractice();const next={...listeningPractice(),id:'practice-2',profile_id:'p2',current_item:{...listeningPractice().current_item!,id:'item-2',title:'New listening task'}};
+    const fetch=serve(url=>url.includes('/practice-2')?next:current);
+    const {rerender}=render(<CoursePreparation practiceId="practice-1" progression={progression}/>);
+    const oldRecording=await screen.findByLabelText('Practice recording');
+    fireEvent(oldRecording,new Event('error'));fireEvent.click(screen.getByRole('button',{name:'Retry audio'}));
+    rerender(<CoursePreparation practiceId="practice-2" progression={{...progression,data:{...progression.data!,profile_id:'p2'}}}/>);
+    await screen.findByRole('heading',{name:'New listening task'});
+    fireEvent(oldRecording,new Event('ended'));fireEvent(oldRecording,new Event('error'));rejectPlayback(new Error('Old player failed'));
+    await waitFor(()=>expect(screen.queryByRole('alert')).toBeNull());
+    expect(fetch.mock.calls.filter(([,options])=>options?.method==='POST')).toHaveLength(0);
   });
 });

@@ -13,9 +13,13 @@ The current course release is `a1-journey-v2`. It starts at home, visits the pos
 
 Each milestone has three authored variants. The first three contain eight questions each; the final contains sixteen. Retries prefer an unseen variant, then rotate through the finite set. All answer choices are Russian. Interface prompts and explanations are available in English and Russian.
 
+Journey and Curriculum show future milestones as grey numbers. Their names, descriptions and assessment links appear when the previous milestone is passed. Completed milestones remain accessible. The full topic catalogue and standalone activities stay available for practice.
+
 The final assessment samples all ten A1 topics: six reading decisions, four listening decisions, four contextual language decisions and two replies. Passing requires 13/16 overall, at least 4/6 reading, 3/4 listening, 2/4 language and 1/2 replies. Both essential decisions must also be correct. Earlier milestones require 7/8 and both essential decisions.
 
 The listening update supplies new information. A passing attempt requires listening to the recording; replay is allowed. Hints and transcripts are optional and mark an attempt as supported. The transcript also allows practice when audio cannot play. Supported attempts keep their answers and feedback but do not earn a milestone. A fresh independent attempt can earn it.
+
+If a recording fails, the learner can retry it or open the transcript. If saving a completed listen fails, they can retry that save without replaying the recording. Playback errors and retries do not grant listening credit. The server must acknowledge the completed listen before an independent assessment can be submitted.
 
 ## Preparation and evidence
 
@@ -43,7 +47,7 @@ Schema 045 identifies course releases and preserves earned A2 access. Schema 046
 
 New learners use the current release. Existing enrolments remain pinned to their earlier course until the learner accepts the switch preview. Earlier milestones, active letters, answers, media and continuation rights remain available. Old passes are not presented as newly assessed targets. The earlier final letter keeps its historical wording.
 
-Assessment drafts use revision checks. A second tab cannot silently overwrite a newer draft. Profiles own their attempts, practice and follow-ups. Start and answer commands retain their original request receipts.
+Assessment drafts use revision checks. A second tab cannot silently overwrite a newer draft. Profiles own their attempts, practice and follow-ups. Start and answer commands retain their original request receipts; replayed receipts hide future milestone details under the current presentation rules.
 
 Coins reward participation. Skill estimates describe performance. FSRS schedules vocabulary reviews. Milestones record course progression. None substitutes for another.
 
