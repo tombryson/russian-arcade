@@ -44,6 +44,7 @@
     >
         {{ ui_t('comprehension.more_questions') }}
     </button>
+    {% if not story.task_id %}
     <button
         id="save-story"
         class="btn btn-success mt-3"
@@ -53,6 +54,7 @@
     >
         {{ ui_t('comprehension.save_story') }}
     </button>
+    {% endif %}
     <div id="save-feedback" role="status" class="mt-2"></div>
 </article>
 {% elif not error %}

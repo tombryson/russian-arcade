@@ -6,6 +6,7 @@ here changes a target observation, reward, milestone or continuation right.
 """
 import hashlib
 import json
+import re
 
 from contracts.curriculum import validate_task_contract, validate_judgements
 from repositories.learning_repository import encoded, identifier, timestamp
@@ -30,6 +31,80 @@ def _writing_row(conn, profile_id, task_key):
 def _writing(conn, profile_id, task_key):
     row = _writing_row(conn, profile_id, task_key)
     return {'task': row[0], 'required_words': json.loads(row[1])}
+
+
+def _comprehension_task(conn, profile_id, task_id):
+    if not isinstance(task_id, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,99}', task_id):
+        raise ValueError('Invalid comprehension task identity.')
+    row = conn.execute('SELECT t.payload_json,t.created_at,t.revision,s.text,s.topic,s.difficulty,t.story_id '
+                       'FROM comprehension_tasks t JOIN saved_stories s ON s.id=t.story_id '
+                       "WHERE t.id=? AND t.profile_id=? AND COALESCE(s.owner_profile_id,'personal-learning')=?",
+                       (task_id, profile_id, profile_id)).fetchone()
+    if row is None:
+        raise LookupError('Comprehension task not found for this profile.')
+    payload = json.loads(row[0])
+    if (not isinstance(payload, dict) or not isinstance(payload.get('text'), str) or not payload['text'].strip()
+            or (payload.get('text'), payload.get('topic'), payload.get('difficulty')) != tuple(row[3:6])
+            or type(payload.get('prior_feedback')) is not bool
+            or any(not isinstance(payload.get(key), str) for key in ('audio_url', 'image_url'))
+            or type(row[1]) is not int or row[1] < 0 or type(row[2]) is not int or row[2] < 0):
+        raise ValueError('Comprehension task does not match its owned story.')
+    questions, contracts = payload.get('questions'), payload.get('contracts')
+    if (not isinstance(questions, list) or not 5 <= len(questions) <= 20
+            or any(not isinstance(value, str) or not value.strip() or len(value) > 2000 or '\x00' in value for value in questions)
+            or len(set(questions)) != len(questions)
+            or not isinstance(contracts, dict)):
+        raise ValueError('Comprehension requires its saved questions and criterion mapping.')
+    for index in contracts:
+        if (not isinstance(index, str) or not index.isascii() or not index.isdecimal()
+                or str(int(index)) != index or not 0 <= int(index) < len(questions)):
+            raise ValueError('Comprehension criteria reference an unknown question.')
+    from services.comprehension_evidence import validate_contracts
+    validate_contracts(payload)
+    return {'task_id': task_id, 'payload': payload, 'created_at': row[1], 'revision': row[2], 'story_id': row[6]}
+
+
+def _comprehension(conn, profile_id, task_key):
+    if not isinstance(task_key, str) or ':' not in task_key:
+        raise ValueError('Invalid comprehension question identity.')
+    task_id, index = task_key.rsplit(':', 1)
+    task = _comprehension_task(conn, profile_id, task_id)
+    if (not index.isascii() or not index.isdecimal() or str(int(index)) != index
+            or not 0 <= int(index) < len(task['payload']['questions'])):
+        raise ValueError('Comprehension question is not in the saved task.')
+    return {**task, 'question_index': int(index)}
+
+
+def _comprehension_attempt(conn, profile_id, task, source_key):
+    if not isinstance(source_key, str) or not source_key:
+        raise ValueError('Invalid comprehension attempt identity.')
+    row = conn.execute('SELECT answers_json,assessment_json,support_json,created_at,request_sha256,submission_id,rowid '
+                       'FROM comprehension_attempts '
+                       'WHERE id=? AND task_id=? AND profile_id=?',
+                       (source_key, task['task_id'], profile_id)).fetchone()
+    if row is None:
+        raise ValueError('The comprehension response is not saved for this task and profile.')
+    answers, assessment, support = (json.loads(value) for value in row[:3])
+    from repositories.comprehension_repository import request_digest, validate_answers, validate_assessment
+    validate_answers(task['payload'], answers)
+    validate_assessment(task['payload'], answers, assessment)
+    ordinal = conn.execute('SELECT COUNT(*) FROM comprehension_attempts WHERE task_id=? AND rowid<?',
+                           (task['task_id'], row[6])).fetchone()[0]
+    expected_support = ['model_answer'] if task['payload']['prior_feedback'] or ordinal else []
+    if (support != expected_support or type(row[3]) is not int or row[3] < task['created_at']
+            or row[4] != request_digest(task['task_id'], ordinal, answers)
+            or not isinstance(row[5], str) or not re.fullmatch(r'[a-f0-9]{32}', row[5])):
+        raise ValueError('Comprehension assessment does not match the saved response and criteria.')
+    return answers, assessment, support
+
+
+def _comprehension_response(conn, profile_id, task_key, source_key):
+    task = _comprehension(conn, profile_id, task_key)
+    answers, assessment, support = _comprehension_attempt(conn, profile_id, task, source_key)
+    index = str(task['question_index'])
+    if index not in assessment['criterion_reports']:
+        raise ValueError('This comprehension question has no frozen criterion report.')
+    return answers[task['question_index']], assessment['criterion_reports'][index], support
 
 
 def _speaking(conn, profile_id, task_key):
@@ -84,6 +159,8 @@ def _owned_task(conn, profile_id, activity, task_key):
         return _unit(conn, profile_id, task_key)
     if activity == 'speaking':
         return _speaking(conn, profile_id, task_key)
+    if activity == 'comprehension':
+        return _comprehension(conn, profile_id, task_key)
     raise ValueError('This activity has no criterion evidence adapter yet.')
 
 
@@ -97,6 +174,18 @@ def _check_content(task, activity, contract):
             raise ValueError('Criteria must describe the exact saved writing task and vocabulary guidance.')
     elif activity == 'speaking':
         validate_speaking_contract(contract, task['scenario'])
+    elif activity == 'comprehension':
+        from services.curriculum import normalize_level
+        payload, index = task['payload'], task['question_index']
+        content = contract['content']
+        if (payload['contracts'].get(str(index)) != contract
+                or content.get('text') != payload['text'] or content.get('questions') != payload['questions']
+                or type(content.get('question_index')) is not int or content['question_index'] != index
+                or ('question' in content and content['question'] != payload['questions'][index])
+                or contract['level'] != normalize_level(payload['difficulty'], legacy='reading')
+                or any(criterion['response_mode'] != 'reading_response'
+                       or criterion['evidence_scope'] != 'reading_comprehension' for criterion in contract['criteria'])):
+            raise ValueError('Comprehension criteria must describe the exact saved question and open response mode.')
     elif activity == 'curriculum_unit':
         controlled = task['item']['type'] == 'controlled_text'
         listening = task['item']['type'] == 'listening_choice'
@@ -123,6 +212,8 @@ def save_contract(conn, profile_id, activity, task_key, contract):
         return row[0]
     if activity == 'writing':
         answered = conn.execute('SELECT 1 FROM writing_attempts WHERE exercise_id=? LIMIT 1', (int(task_key),)).fetchone()
+    elif activity == 'comprehension':
+        answered = conn.execute('SELECT 1 FROM comprehension_attempts WHERE task_id=? LIMIT 1', (task['task_id'],)).fetchone()
     elif activity == 'speaking':
         if task['state'] != 'new':
             raise ValueError('Speaking criteria must be frozen when the session is created.')
@@ -162,6 +253,9 @@ def load_contract(conn, profile_id, activity, task_key):
 
 def _saved_response(conn, profile_id, activity, task_key, source_key):
     task = _owned_task(conn, profile_id, activity, task_key)
+    if activity == 'comprehension':
+        response, _, _ = _comprehension_response(conn, profile_id, task_key, source_key)
+        return response, None
     if activity == 'writing':
         attempt_id = _positive_decimal(source_key, 'writing attempt')
         attempt = conn.execute('SELECT response FROM writing_attempts WHERE id=? AND exercise_id=?',
@@ -209,6 +303,13 @@ def save_report(conn, profile_id, activity, task_key, source_key, report, *, res
             raise ValueError('Speaking evidence must match its saved audio review; independence remains unverified.')
         validate_speaking_judgements(contract, review, saved_source['duration_ms'])
         digest = saved_source['sha256']
+    elif activity == 'comprehension':
+        saved_text, saved_report, saved_support = _comprehension_response(conn, profile_id, task_key, source_key)
+        if (saved_text != response_text or report != saved_report or audio_source is not None
+                or not isinstance(support, (list, tuple)) or list(support) != saved_support):
+            raise ValueError('Comprehension evidence must match the exact saved answer, report and support.')
+        validate_judgements(contract, report, response_text=response_text)
+        digest = hashlib.sha256(response_text.encode('utf-8')).hexdigest()
     else:
         saved_text, unit = _saved_response(conn, profile_id, activity, task_key, source_key)
         if saved_text != response_text or audio_source is not None:
@@ -251,10 +352,67 @@ def reports_for_task(conn, profile_id, activity, task_key):
     return {row[0]: {'report': json.loads(row[1]), 'support': json.loads(row[2])} for row in rows}
 
 
+def _validate_comprehension_evidence(conn):
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='comprehension_tasks'").fetchone():
+        return
+    tasks = {}
+    for task_id, profile_id in conn.execute('SELECT id,profile_id FROM comprehension_tasks ORDER BY rowid').fetchall():
+        task = _comprehension_task(conn, profile_id, task_id)
+        tasks[(task_id, profile_id)] = task
+        for index, frozen in task['payload']['contracts'].items():
+            task_key = task_id + ':' + index
+            saved = load_contract(conn, profile_id, 'comprehension', task_key)
+            if saved is None or saved != frozen:
+                raise ValueError('A comprehension question is missing its original frozen contract.')
+            created_at = conn.execute('SELECT created_at FROM activity_task_contracts '
+                                      "WHERE profile_id=? AND activity='comprehension' AND task_key=?",
+                                      (profile_id, task_key)).fetchone()[0]
+            first = conn.execute('SELECT MIN(created_at) FROM comprehension_attempts WHERE task_id=?', (task_id,)).fetchone()[0]
+            if (type(created_at) is not int or created_at < task['created_at']
+                    or (first is not None and created_at > first)):
+                raise ValueError('Comprehension criteria must precede the first saved response.')
+    contract_count = conn.execute("SELECT COUNT(*) FROM activity_task_contracts WHERE activity='comprehension'").fetchone()[0]
+    if contract_count != sum(len(task['payload']['contracts']) for task in tasks.values()):
+        raise ValueError('Comprehension has criteria outside its frozen question sets.')
+    counts = {}
+    for source_key, task_id, profile_id in conn.execute(
+            'SELECT id,task_id,profile_id FROM comprehension_attempts ORDER BY rowid').fetchall():
+        task = tasks.get((task_id, profile_id))
+        if task is None:
+            raise ValueError('A comprehension attempt has no matching owned task.')
+        answers, assessment, support = _comprehension_attempt(conn, profile_id, task, source_key)
+        counts[(task_id, profile_id)] = counts.get((task_id, profile_id), 0) + 1
+        for index, contract in task['payload']['contracts'].items():
+            report = assessment['criterion_reports'][index]
+            validate_judgements(contract, report, response_text=answers[int(index)])
+            row = conn.execute('SELECT r.report_json,r.support_json,r.response_sha256 FROM activity_criterion_reports r '
+                               'JOIN activity_task_contracts c ON c.id=r.contract_id AND c.profile_id=r.profile_id '
+                               "WHERE c.profile_id=? AND c.activity='comprehension' AND c.task_key=? AND r.source_key=?",
+                               (profile_id, task_id + ':' + index, source_key)).fetchone()
+            response_digest = hashlib.sha256(answers[int(index)].encode('utf-8')).hexdigest()
+            if (row is None or json.loads(row[0]) != report or json.loads(row[1]) != support
+                    or row[2] != response_digest):
+                raise ValueError('A saved comprehension assessment is missing its matching criterion evidence.')
+    report_count = conn.execute('SELECT COUNT(*) FROM activity_criterion_reports r JOIN activity_task_contracts c '
+                                "ON c.id=r.contract_id WHERE c.activity='comprehension'").fetchone()[0]
+    if report_count != sum(count * len(tasks[key]['payload']['contracts']) for key, count in counts.items()):
+        raise ValueError('Comprehension has criterion reports outside its saved attempts.')
+    story_exposure = {}
+    for key, task in tasks.items():
+        count = counts.get(key, 0)
+        story_key = (task['story_id'], key[1])
+        if task['revision'] != count:
+            raise ValueError('Comprehension revision does not match its saved attempts.')
+        if task['payload']['prior_feedback'] != story_exposure.get(story_key, False):
+            raise ValueError('Comprehension must retain feedback exposure from earlier question sets.')
+        story_exposure[story_key] = task['payload']['prior_feedback'] or bool(count)
+
+
 def validate_saved_evidence(conn, *, audio_root=None):
     """Audit an offline import without changing contracts, reports or outcomes."""
     from services.learning_listening import validate_saved_support
     validate_saved_support(conn)
+    _validate_comprehension_evidence(conn)
     for row in conn.execute('SELECT profile_id,activity,task_key FROM activity_task_contracts').fetchall():
         load_contract(conn, row[0], row[1], row[2])
     rows = conn.execute('SELECT r.id,r.profile_id,c.activity,c.task_key,r.source_key,r.report_json,r.support_json '

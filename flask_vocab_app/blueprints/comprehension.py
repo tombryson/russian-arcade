@@ -7,10 +7,11 @@ from services.story_vocabulary import story_key
 from services.curriculum import level_options, normalize_level, topic_options
 
 from asgiref.sync import async_to_sync
-from flask import Blueprint, jsonify, render_template, render_template_string, request, session
+from flask import Blueprint, jsonify, render_template, render_template_string, request, session, make_response, redirect
 from markupsafe import escape
 
 from repositories import StoryRepository
+from repositories.comprehension_repository import ComprehensionRepository, ComprehensionConflict
 from utils.shell import render_page, is_shell_navigation
 from utils.story_display import present_story
 from utils.story_processing import process_story_words
@@ -22,6 +23,50 @@ logger = logging.getLogger(__name__)
 def create_comprehension_blueprint(db_path, comprehension_service, drive_service, user_service):
     blueprint = Blueprint("comprehension", __name__)
     story_repository = StoryRepository(db_path)
+    reading_repository = ComprehensionRepository(db_path)
+
+    def reading_error(error, status):
+        # Preserve the answer form on failure. Provider/internal errors are
+        # logged, never interpolated into the learner's page.
+        return render_template('_comprehension_check_error.html', message=str(error)), status
+
+    def check_reading_task():
+        task_id = request.form.get('task_id', '')
+        submission_id = request.form.get('submission_id', '')
+        try:
+            revision = int(request.form.get('task_revision', '-1'))
+            answers = request.form.getlist('answers[]')
+            task, saved = reading_repository.begin_check(task_id, revision, submission_id, answers)
+            if saved is None:
+                try:
+                    assessment = comprehension_service.assess_task(task['payload'], answers)
+                    saved = reading_repository.finish_check(task_id, revision, submission_id, answers, assessment,
+                                                           expected_owner=task['profile_id'], lease_token=task['check_token'])
+                except Exception:
+                    reading_repository.abandon_check(task_id, submission_id, task['check_token'])
+                    raise
+            return render_template('_comprehension_checked.html', reading_result=saved, task_id=task_id, update_form=True)
+        except LookupError:
+            return reading_error('This story is not available in the selected profile.', 404)
+        except ComprehensionConflict as error:
+            return reading_error(error, 409)
+        except ValueError:
+            return reading_error('Your answers could not be checked. They are still here; please try again.', 400)
+        except Exception:
+            logger.exception('Comprehension check failed')
+            return reading_error('Your answers could not be checked. They are still here; please try again.', 503)
+
+    def require_legacy_form():
+        """Old forms cannot overwrite a new immutable question set."""
+        raw_id = request.form.get('story_id')
+        if not raw_id:
+            try:
+                text = base64.b64decode(request.form.get('story_text', '')).decode('utf-8')
+                raw_id = story_repository.find_existing(text, request.form.get('topic', 'any'), request.form.get('difficulty', 'beginner'))
+            except (ValueError, UnicodeError):
+                pass  # The existing legacy parser reports malformed forms.
+        if raw_id and reading_repository.latest(raw_id):
+            raise ComprehensionConflict('This story uses a newer answer form. Reload it to continue.')
 
     def story_for_display(story):
         displayed = present_story(story, session.get("ui_lang", "en"))
@@ -105,6 +150,7 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
                                error=('Выберите тему и уровень из списка.' if session.get('ui_lang') == 'ru' else 'Choose a topic and level from the list.'), active_page='comprehension'), 400
 
         try:
+            expected_owner = reading_repository.owner()
             topic = str(request.form.get("topic", "any"))
             difficulty = str(request.form.get("difficulty", "beginner"))
             visibility = str(request.form.get("visibility", "revealed"))
@@ -148,6 +194,12 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
                 "difficulty": difficulty,
                 "answers": [],
             })
+            if prepared.get('reading_focus'):
+                from services.comprehension_evidence import build_contracts
+                contracts = build_contracts(prepared, topic, difficulty)
+                task_id, _ = reading_repository.create({**prepared, 'audio_url': audio_url, 'image_url': image_url},
+                    topic, difficulty, contracts, expected_owner=expected_owner)
+                story_data.update(reading_repository.display(task_id))
             try:
                 json.dumps(story_data)
             except ValueError:
@@ -168,8 +220,13 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
             logger.debug("Story data: %s", story_data)
             if request.headers.get("HX-Request") and not is_shell_navigation():
                 logger.debug("Rendering _comprehension_content.html for HTMX")
-                return render_template("_comprehension_content.html", story=story_data, visibility=visibility)
+                response = make_response(render_template("_comprehension_content.html", story=story_data, visibility=visibility))
+                if story_data.get('task_id'):
+                    response.headers['HX-Replace-Url'] = f"/comprehension/load/{story_data['id']}"
+                return response
             logger.debug("Rendering comprehension.html")
+            if story_data.get('task_id'):
+                return redirect(f"/comprehension/load/{story_data['id']}", code=303)
             return render_page(
                 "comprehension.html",
                 topics=topics,
@@ -195,6 +252,12 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
 
     @blueprint.route("/comprehension/answer", methods=["POST"])
     def answer_questions():
+        if request.form.get('task_id'):
+            return check_reading_task()
+        try:
+            require_legacy_form()
+        except ComprehensionConflict as error:
+            return reading_error(error, 409)
         logger.debug("Raw request data: %s", request.data)
         logger.debug("Form data dict: %s", request.form.to_dict())
         logger.debug("Raw form data: %s", request.form)
@@ -291,6 +354,12 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
 
     @blueprint.route("/comprehension/save", methods=["POST"])
     def save_comprehension():
+        if request.form.get('task_id'):
+            return check_reading_task()
+        try:
+            require_legacy_form()
+        except ComprehensionConflict as error:
+            return reading_error(error, 409)
         logger.debug("Raw form data: %s", request.form.to_dict())
         try:
             story_text_b64 = request.form.get("story_text", "")
@@ -360,6 +429,9 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
                     active_page="comprehension",
                 ), 404
             story = story_for_display(story)
+            task = reading_repository.latest(story_id)
+            if task:
+                story.update(reading_repository.display(task['id']))
             story["words"] = story_words(story["text"])
             session["current_story_text"] = story["text"]
             session["current_story_data"] = story
@@ -392,6 +464,39 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
 
     @blueprint.route("/comprehension/generate_more_questions", methods=["POST"])
     def generate_more_questions():
+        if request.form.get('task_id'):
+            task = None
+            try:
+                from services.comprehension_evidence import reissue_contracts
+                task = reading_repository.begin_questions(request.form['task_id'], int(request.form.get('task_revision', '-1')))
+                payload = task['payload']
+                new_questions = comprehension_service.generate_additional_questions(payload['text'], payload['topic'], payload['difficulty'], payload['questions'])
+                if not isinstance(new_questions, list) or not 1 <= len(new_questions) <= 3:
+                    raise ValueError('Invalid additional questions')
+                questions = payload['questions'] + new_questions
+                contracts = reissue_contracts(payload, questions)
+                prepared = {**payload, 'questions': questions, 'title': task['title'], 'title_en': task['title_en']}
+                task_id, _ = reading_repository.create(prepared, payload['topic'], payload['difficulty'], contracts,
+                    expected_owner=task['profile_id'], story_id=task['story_id'], parent_id=task['id'], lease_token=task['check_token'])
+                story = reading_repository.display(task_id)
+                # Keep the current draft while issuing a new question-set identity.
+                previous = request.form.getlist('answers[]')[:len(payload['questions'])]
+                story['answers'] = previous + [''] * (len(questions) - len(previous))
+                return render_template('_questions_partial.html', story=story, preserve_answers=True)
+            except LookupError:
+                return reading_error('This story is not available in the selected profile.', 404)
+            except ComprehensionConflict as error:
+                return reading_error(error, 409)
+            except Exception:
+                logger.exception('Additional reading questions failed')
+                return reading_error('More questions could not be prepared. Your existing questions are still here.', 503)
+            finally:
+                if task:
+                    reading_repository.abandon_check(task['id'], task['check_token'], task['check_token'])
+        try:
+            require_legacy_form()
+        except ComprehensionConflict as error:
+            return reading_error(error, 409)
         logger.debug("Raw form data: %s", request.form.to_dict())
         story_text_b64 = request.form.get("story_text", "")
         questions_b64 = request.form.get("questions_b64", "")

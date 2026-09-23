@@ -7,6 +7,7 @@ declare a chapter learned.
 """
 import json
 import math
+import re
 
 from services.curriculum import get_topic, normalize_level
 
@@ -37,6 +38,71 @@ def _coverage(topic, level, score, maximum, activity, assisted=False):
             'assisted': bool(assisted), 'basis': 'saved_task_assessment'}
 
 
+
+def comprehension_assessment(conn, profile_id, content_key, source_key):
+    """Read a new Comprehension receipt from its owned immutable check.
+
+    This is the existing aggregate participation/rating policy. Criterion reports
+    validate their saved answer binding but do not create proficiency evidence.
+    Award runs after inserting the attempt and before incrementing task revision.
+    """
+    if (not isinstance(profile_id, str) or not profile_id
+            or not isinstance(content_key, str) or not re.fullmatch(r'story:[1-9][0-9]*', content_key)
+            or not isinstance(source_key, str) or not re.fullmatch(r'comprehension-check:[a-f0-9]{32}', source_key)):
+        return None
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='comprehension_attempts'").fetchone():
+        return None
+    row = conn.execute('''SELECT a.rowid,a.task_id,a.submission_id,a.request_sha256,a.answers_json,
+            a.assessment_json,a.support_json,a.created_at,t.payload_json,t.revision,t.created_at,
+            s.text,s.topic,s.difficulty
+        FROM comprehension_attempts a JOIN comprehension_tasks t ON t.id=a.task_id AND t.profile_id=a.profile_id
+        JOIN saved_stories s ON s.id=t.story_id
+        WHERE a.id=? AND a.profile_id=? AND s.id=? AND COALESCE(s.owner_profile_id,'personal-learning')=?''',
+        (source_key[len('comprehension-check:'):], profile_id, int(content_key[6:]), profile_id)).fetchone()
+    if not row:
+        return None
+    try:
+        payload, answers, assessment, support = (_json(raw) for raw in (row[8], row[4], row[5], row[6]))
+        if (not isinstance(payload, dict) or (payload.get('text'), payload.get('topic'), payload.get('difficulty')) != tuple(row[11:14])
+                or type(payload.get('prior_feedback')) is not bool or not isinstance(payload.get('contracts'), dict)
+                or type(row[7]) is not int or type(row[10]) is not int or row[7] < row[10]
+                or type(row[9]) is not int or row[9] < 0):
+            return None
+        # Request hashes bind the raw answers to their task and original revision.
+        previous = conn.execute('SELECT COUNT(*) FROM comprehension_attempts WHERE task_id=? AND rowid<?',
+                                (row[1], row[0])).fetchone()[0]
+        count = conn.execute('SELECT COUNT(*) FROM comprehension_attempts WHERE task_id=?', (row[1],)).fetchone()[0]
+        expected_support = ['model_answer'] if previous or payload['prior_feedback'] else []
+        from repositories.learning_repository import payload_hash
+        expected_digest = payload_hash({'task_id': row[1], 'revision': previous, 'answers': answers})
+        if (row[9] not in (count - 1, count) or row[3] != expected_digest or support != expected_support
+                or not isinstance(row[2], str) or not re.fullmatch(r'[a-f0-9]{32}', row[2])):
+            return None
+        from repositories.comprehension_repository import validate_answers, validate_assessment
+        validate_answers(payload, answers)
+        validate_assessment(payload, answers, assessment)
+        from services.comprehension_evidence import validate_contracts
+        contracts = validate_contracts(payload)
+        topic = contracts['0']['content']['topic_id']
+        prior_story_check = conn.execute('''SELECT 1 FROM comprehension_attempts a
+            JOIN comprehension_tasks t ON t.id=a.task_id AND t.profile_id=a.profile_id
+            WHERE t.story_id=? AND a.profile_id=? AND a.rowid<? LIMIT 1''',
+            (int(content_key[6:]), profile_id, row[0])).fetchone()
+        return {'topic': topic, 'difficulty': payload['difficulty'], 'score': assessment['total_score'],
+                'question_count': len(answers), 'question_hash': payload_hash(payload['questions']),
+                'assisted': bool(support), 'first_fresh': not support and not prior_story_check}
+    except (ValueError, TypeError, KeyError, IndexError):
+        return None
+
+
+def comprehension_event_fields(saved):
+    """Replace caller claims with the bounded facts used by both projections."""
+    return {'score': saved['score'], 'score_max': 10, 'answered_questions': saved['question_count'],
+            'first_fresh_assessment': saved['first_fresh'], 'course_task_context_matches': True,
+            'course_task_questions_hash': saved['question_hash'], 'assisted': saved['assisted'],
+            'hint_used': False}
+
+
 def freeze_course_evidence(conn, profile_id, activity, content_key, source_key, evidence):
     result = dict(evidence or {})
     result.pop('_course', None)
@@ -58,6 +124,11 @@ def freeze_course_evidence(conn, profile_id, activity, content_key, source_key, 
         if row:
             coverage = _coverage(row[0], row[1], row[2], maximum, activity,
                                  result.get('assisted') or result.get('hint_used'))
+    elif activity == 'reading' and str(source_key).startswith('comprehension-check:'):
+        saved = comprehension_assessment(conn, profile_id, content_key, source_key)
+        if saved:
+            result.update(comprehension_event_fields(saved))
+            coverage = _coverage(saved['topic'], saved['difficulty'], saved['score'], 10, 'reading', saved['assisted'])
     elif activity == 'reading' and str(content_key).startswith('story:'):
         row = conn.execute('''SELECT topic,difficulty,score,questions,answers FROM saved_stories
             WHERE id=? AND COALESCE(owner_profile_id,'personal-learning')=?''',

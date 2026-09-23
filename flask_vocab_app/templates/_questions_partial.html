@@ -4,6 +4,11 @@
             hx-target="#question-feedback"
             hx-swap="innerHTML"
         >
+            {% if story.task_id %}
+            <input type="hidden" name="task_id" value="{{ story.task_id }}" />
+            <input type="hidden" id="reading-task-revision" name="task_revision" value="{{ story.revision }}" />
+            <input type="hidden" id="reading-submission-id" name="submission_id" value="{{ story.submission_id }}" />
+            {% endif %}
             <input type="hidden" name="story_title" value="{{ story.title }}" />
             <input type="hidden" name="story_title_en" value="{{ story.title_en | default('') }}" />
             <input type="hidden" name="story_id" value="{{ story.id | default('') }}" />
@@ -34,4 +39,10 @@
             {{ ui_t('comprehension.no_questions') }}
         </div>
         {% endif %}
-        <div id="question-feedback" role="status" class="question-feedback mt-2 grid-span-all"></div>
+        <div id="question-feedback" role="status" class="question-feedback mt-2 grid-span-all">
+        {% if story.assessment %}
+            {% with reading_result={'assessment': story.assessment, 'answers': story.answers}, update_form=False %}
+            {% include '_comprehension_checked.html' %}
+            {% endwith %}
+        {% endif %}
+        </div>

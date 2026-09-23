@@ -19,7 +19,8 @@ PRESERVE = ('course_checkpoint_attempts', 'course_checkpoint_requests', 'course_
             'course_enrolments', 'course_target_observations', 'course_target_practice_attempts',
             'course_target_practice_requests', 'course_target_practice_receipts',
             'course_release_switches', 'course_checkpoint_followups',
-            'activity_task_contracts', 'activity_criterion_reports', 'learning_item_support')
+            'activity_task_contracts', 'activity_criterion_reports', 'learning_item_support',
+            'comprehension_tasks', 'comprehension_attempts')
 
 
 def inventory(conn):
@@ -28,7 +29,13 @@ def inventory(conn):
               'counts': {name: conn.execute('SELECT COUNT(*) FROM ' + name).fetchone()[0] for name in PRESERVE if name in tables},
               'foreign_key_errors': len(conn.execute('PRAGMA foreign_key_check').fetchall()),
               'integrity_errors': sum(row[0] != 'ok' for row in conn.execute('PRAGMA integrity_check')),
-              'unknown_sections': 0, 'unknown_preparations': 0}
+              'unknown_sections': 0, 'unknown_preparations': 0, 'invalid_comprehension_evidence': 0}
+    if 'comprehension_tasks' in tables:
+        from services.activity_evidence import _validate_comprehension_evidence
+        try:
+            _validate_comprehension_evidence(conn)
+        except (ValueError, LookupError, TypeError, KeyError):
+            result['invalid_comprehension_evidence'] = 1
     if 'course_checkpoint_attempts' in tables:
         columns = {row[1] for row in conn.execute('PRAGMA table_info(course_checkpoint_attempts)')}
         release = 'release_id' if 'release_id' in columns else "'a1-v1'"
@@ -65,7 +72,8 @@ def main():
         raise SystemExit('Database not found.')
     with sqlite3.connect(args.db.resolve().as_uri() + '?mode=ro', uri=True) as source:
         report = inventory(source)
-        if any(report[key] for key in ('foreign_key_errors', 'integrity_errors', 'unknown_sections', 'unknown_preparations')):
+        if any(report[key] for key in ('foreign_key_errors', 'integrity_errors', 'unknown_sections', 'unknown_preparations',
+                                      'invalid_comprehension_evidence')):
             print(json.dumps(report, indent=2))
             raise SystemExit('Resolve course integrity findings before release.')
         if args.rehearse:

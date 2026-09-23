@@ -111,6 +111,11 @@ def _json_refs(value, maps):
 
 def transform(name, table, row, maps, schemas):
     result = dict(row)
+    if name == 'comprehension_tasks':
+        # Provider work belongs to the original process, never to an offline
+        # artifact. Clear only the temporary claim; retain all task evidence.
+        for column in ('checking_submission_id', 'checking_sha256', 'checking_started_at', 'checking_token'):
+            result[column] = None
     if len(table['pk']) == 1:
         key = table['pk'][0]
         result[key] = _mapped(maps, name, result[key])
@@ -127,7 +132,7 @@ def transform(name, table, row, maps, schemas):
             except ValueError:
                 continue
             changed = _json_refs(parsed, maps)
-            if (name in ('activity_task_contracts', 'activity_criterion_reports')
+            if (name in ('activity_task_contracts', 'activity_criterion_reports', 'comprehension_tasks', 'comprehension_attempts')
                     or (name == 'speaking_reviews' and isinstance(parsed, dict) and 'audio_source' in parsed)):
                 # Assessment payloads are immutable and hash-bound. Their
                 # typed routing columns can move; their original content cannot.
@@ -141,7 +146,7 @@ def transform(name, table, row, maps, schemas):
             if not re.fullmatch(r'[1-9][0-9]*', row['task_key']):
                 raise ImportConflict('Writing criterion contract has an invalid task identity.')
             result['task_key'] = str(_mapped(maps, 'writing_exercises', int(row['task_key'])))
-        elif row['activity'] not in ('curriculum_unit', 'speaking'):
+        elif row['activity'] not in ('curriculum_unit', 'speaking', 'comprehension'):
             raise ImportConflict('Activity criterion contracts need an explicit activity import adapter.')
     if name == 'activity_criterion_reports':
         contracts = {item['id']: item for item in schemas['activity_task_contracts']['rows']}
@@ -155,7 +160,7 @@ def transform(name, table, row, maps, schemas):
         elif contract['activity'] == 'speaking':
             if row['source_key'] != contract['task_key']:
                 raise ImportConflict('Speaking criterion evidence belongs to another recorded conversation.')
-        elif contract['activity'] != 'curriculum_unit':
+        elif contract['activity'] not in ('curriculum_unit', 'comprehension'):
             raise ImportConflict('Activity criterion reports need an explicit activity import adapter.')
     if name == 'progression_events' and row['activity'] in ACTIVITY_NAMES:
         target = ACTIVITY_NAMES[row['activity']]

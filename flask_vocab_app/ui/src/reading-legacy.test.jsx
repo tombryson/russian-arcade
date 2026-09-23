@@ -70,6 +70,51 @@ describe('reading draft guard', () => {
     return { root, form, detail, button: form.querySelector('button'), spinner: form.querySelector('[data-reading-spinner]') };
   }
 
+  it('ignores a delayed check from a different question set', () => {
+    workspace();
+    const form = document.getElementById('question-form');
+    form.setAttribute('hx-post', '/comprehension/answer');
+    form.insertAdjacentHTML('afterbegin', '<input name="task_id" value="original-task" />');
+    const xhr = {};
+    document.body.dispatchEvent(new CustomEvent('htmx:beforeSend', { detail: { elt: form, xhr } }));
+    expect(xhr.arcadeReadingTask).toBe('original-task');
+    form.elements.task_id.value = 'new-question-set';
+    const detail = { xhr, target: form, shouldSwap: true };
+    document.body.dispatchEvent(new CustomEvent('htmx:beforeSwap', { detail }));
+    expect(detail.shouldSwap).toBe(false);
+    expect(document.getElementById('draft').value).toBe('Мой ответ.');
+    form.dataset.saveRevision = document.querySelector('.reading-workspace').dataset.revision;
+    document.body.dispatchEvent(new CustomEvent('htmx:afterRequest', { detail: { elt: form, xhr, successful: true, target: form } }));
+    expect(document.querySelector('.reading-workspace').dataset.dirty).toBe('true');
+  });
+
+  it('keeps current-question-set error feedback visible without replacing answers', () => {
+    workspace();
+    const form = document.getElementById('question-form');
+    form.insertAdjacentHTML('afterbegin', '<input name="task_id" value="current-task" />');
+    const detail = { xhr: { status: 409, arcadeReadingTask: 'current-task', arcadeReadingForm: form }, target: form, shouldSwap: false };
+    document.body.dispatchEvent(new CustomEvent('htmx:beforeSwap', { detail }));
+    expect(detail.shouldSwap).toBe(true);
+    expect(detail.target.id).toBe('reading-action-feedback');
+    expect(document.getElementById('draft').value).toBe('Мой ответ.');
+  });
+
+  it('ignores a detached form response after reopening the same saved task', () => {
+    workspace();
+    const original = document.getElementById('question-form');
+    original.setAttribute('hx-post', '/comprehension/answer');
+    original.insertAdjacentHTML('afterbegin', '<input name="task_id" value="same-task" />');
+    original.dataset.saveRevision = document.querySelector('.reading-workspace').dataset.revision;
+    const xhr = {};
+    document.body.dispatchEvent(new CustomEvent('htmx:beforeSend', { detail: { elt: original, xhr } }));
+    original.replaceWith(original.cloneNode(true));
+    const detail = { xhr, target: original, shouldSwap: true };
+    document.body.dispatchEvent(new CustomEvent('htmx:beforeSwap', { detail }));
+    expect(detail.shouldSwap).toBe(false);
+    document.body.dispatchEvent(new CustomEvent('htmx:afterRequest', { detail: { elt: original, xhr, successful: true, target: original } }));
+    expect(document.querySelector('.reading-workspace').dataset.dirty).toBe('true');
+  });
+
   it('shows generation feedback immediately when sending and restores the button after success', () => {
     const { form, detail, button, spinner } = storyGeneration();
     document.body.dispatchEvent(new CustomEvent('htmx:beforeSend', { detail }));

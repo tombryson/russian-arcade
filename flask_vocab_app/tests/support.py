@@ -15,12 +15,12 @@ def latest_schema_version():
 
 def strip_course_progression(conn):
     """Remove course migrations and markers when a test rewinds its schema."""
-    for table in ('learning_item_support', 'activity_criterion_reports', 'activity_task_contracts', 'course_checkpoint_followups', 'course_release_switches', 'course_target_observations', 'course_target_practice_receipts',
+    for table in ('comprehension_attempts', 'comprehension_tasks', 'learning_item_support', 'activity_criterion_reports', 'activity_task_contracts', 'course_checkpoint_followups', 'course_release_switches', 'course_target_observations', 'course_target_practice_receipts',
                   'course_target_practice_requests', 'course_target_practice_attempts', 'course_continuation_entitlements', 'course_enrolments',
                   'course_checkpoint_requests', 'course_checkpoint_submissions',
                   'course_chapter_passes', 'course_evidence', 'course_checkpoint_attempts'):
         conn.execute('DROP TABLE IF EXISTS ' + table)
-    conn.execute('DELETE FROM schema_migrations WHERE version IN (44,45,46,47,48,49,50)')
+    conn.execute('DELETE FROM schema_migrations WHERE version IN (44,45,46,47,48,49,50,51)')
 
 
 def strip_progression_and_levels(conn):

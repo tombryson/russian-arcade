@@ -127,7 +127,7 @@ def award(conn, profile_id, *, activity, content_key, source_key, title, now=Non
     from services.skill_progress import freeze_evidence
     if activity == 'speaking':
         evidence = dict(evidence or {}) | {'study_day': day}
-    evidence = freeze_evidence(conn, activity, content_key, source_key, target_level, evidence)
+    evidence = freeze_evidence(conn, activity, content_key, source_key, target_level, evidence, profile_id=profile_id)
     from services.course_evidence import freeze_course_evidence
     evidence = freeze_course_evidence(conn, profile_id, activity, content_key, source_key, evidence)
     event_id = identifier()

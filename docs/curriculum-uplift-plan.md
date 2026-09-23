@@ -1,8 +1,10 @@
 # Curriculum and assessment implementation plan
 
-**Status:** implementation in progress. The first build adds the requirement crosswalk, frozen task contracts, release-scoped preparation, morphology improvements and one A1 teaching unit. Writing and selected Speaking tasks now save diagnostic criteria. See [implementation status](curriculum-implementation.md) for completed work and remaining acceptance criteria.
+**Status:** implementation in progress, reviewed 23 September 2026. This update includes the Comprehension evidence pass built on `5c569ff`.
 
-**Baseline:** `cabad03`, reviewed 23 September 2026.
+The shared contracts, release routing and first A1 teaching sequence are implemented. Generated Comprehension now retains question-level reading criteria and answer history. All new results remain diagnostic. See [implementation status](curriculum-implementation.md) and [package progress](#161-current-progress) for the completed work and remaining acceptance criteria.
+
+**Historical baseline:** `cabad03`, reviewed 23 September 2026. Section 3.1 describes that starting point, not the current implementation.
 
 **Scope:** A1–B2 teaching coverage, activity integration, assessment, progression and migration.
 
@@ -13,7 +15,7 @@ This document specifies the complete intended build. Its package descriptions ar
 Read by purpose:
 
 - [Decisions and delivery sequence](#1-decisions).
-- [Current coverage](#3-baseline-and-gaps) and [A1–B2 teaching scope](#6-teaching-scope-by-level).
+- [Historical baseline](#3-baseline-and-gaps), [current generated coverage](curriculum-coverage.md) and [A1–B2 teaching scope](#6-teaching-scope-by-level).
 - [Activity contracts](#9-activity-evidence-contracts), [assessment](#10-assessment-and-feedback) and [progression gates](#11-progression-and-gates).
 - [Data changes](#14-data-and-service-changes), [migration](#15-existing-learners-and-migration) and [build packages](#16-build-packages).
 - [Verification](#17-verification-and-assessment-validation) and [completion criteria](#20-completion-criteria).
@@ -38,7 +40,7 @@ The current four milestones remain a small A1 journey course. They are not four 
 
 ## 2. Delivery sequence
 
-The first internal build should connect a small, complete learning sequence to reliable evidence. Expanding every activity and all four levels at once would make errors difficult to isolate. Stages 1–2 are internal or diagnostic additions; they do not replace the current complete route.
+The first build connects a small learning sequence to saved evidence. Expanding every activity and all four levels at once would make errors difficult to isolate. Stages 1–2 are diagnostic additions; they do not replace the published journey. Their engineering foundations and generated reading integration are now present. Generated listening, complete support tracking and learning-quality validation remain open.
 
 | Stage | Result | Release condition |
 | --- | --- | --- |
@@ -50,13 +52,15 @@ The first internal build should connect a small, complete learning sequence to r
 | 6. A2 course | Routine transactions, connected accounts and broader grammar in a new region. | A2 teaching, assessment and variation pass the same review process. |
 | 7. B1 and B2 courses | Connected discourse, then inference, argument and register. | Each level is released separately after content and assessment validation. |
 
-Stages 1–2 are the next engineering priority. Source and lexical research can continue alongside them. Later levels must not delay fixing the evidence boundary in activities that already exist.
+Finish the remaining stage 2 adapters and validate the first sequence before scaling its content. Source and lexical research can continue alongside this work. Later levels must not delay fixing the evidence boundary in activities that already exist.
 
 ## 3. Baseline and gaps
 
-### 3.1 What exists
+### 3.1 Historical baseline at `cabad03`
 
-| Asset | Current scope | Limitation |
+The table records the starting point for this plan. The current implementation is tracked in section 16.1 and the generated coverage inventory.
+
+| Asset | Baseline scope | Limitation at the baseline |
 | --- | --- | --- |
 | Topic catalogue | 50 topics; 856 distinct starter lemmas across the catalogue, including 148 at A1. | Starter vocabulary is not a complete lexical minimum. |
 | TORFL reference | 239 original specifications across A1–B2, with source editions and locators. | This is a reference inventory, not a validated item bank or learner record. |
@@ -265,10 +269,10 @@ Homographs and ambiguous forms require the sentence. For example, the spelling `
 
 The native selector already prefers less-used words, forms and grammatical combinations. It also filters by case and form difficulty. Reuse [form_selection.py](../flask_vocab_app/services/form_selection.py); do not build a second rotation system.
 
-The remaining work is:
+Forward imports now preserve the additional morphological tags, and form selection accepts explicit constraints before the existing rarity and rotation rules. These changes do not repair historical rows or infer a grammatical function from a case tag. The full acceptance scope remains:
 
-1. Preserve adjective and participle case information, relevant animacy, past-tense gender and consistent part-of-speech tags during import.
-2. Canonicalise tag JSON and validate tag combinations before deduplication.
+1. Preserve adjective and participle case information, relevant animacy, past-tense gender and consistent part-of-speech tags during import. Implemented for new imports; review older incomplete rows separately.
+2. Canonicalise tag JSON and validate tag combinations before deduplication. Canonical tags are now retained; a reviewed audit of ambiguous or contradictory analyses remains necessary.
 3. Let a task request an explicit grammatical function and compatible form, not just “any genitive”.
 4. Retain frequency thresholds as defaults for bulk selection. Permit a reviewed, source-specific occurrence when an authored lesson needs it.
 5. Distinguish coverage of an inflected spelling from coverage of its grammatical reading.
@@ -280,7 +284,7 @@ Backfill on a copy first. Preserve existing form IDs and links. When a historica
 
 A teaching unit should be small enough to explain one useful contrast. It needs a purpose, short labelled examples, supported practice and a route into independent use.
 
-For **location and destination**, the unit could contain:
+The first **location and destination** unit now provides each of these task types. The table states their intended evidence boundary; it is not a claim that the whole source requirement has been validated.
 
 | Step | Learner sees or does | Evidence |
 | --- | --- | --- |
@@ -289,6 +293,8 @@ For **location and destination**, the unit could contain:
 | Produce | Complete a new contextual sentence without supplied endings. | Controlled production of the named form. |
 | Understand | Read or hear an arrangement and identify where someone is or is going. | Reading or listening, according to the source actually used. |
 | Use | Write a short arrangement or give an original spoken reply. | Production evidence for the criteria genuinely elicited. |
+
+The current unit has six examples, four contextual questions, three typed-form questions, three recorded messages and an original Writing task. The Speaking link opens existing A1 directions situations. Only their location-question goal has a new diagnostic contract. None of these tasks is a level assessment. See [the implementation guide](curriculum-implementation.md) for support, playback and persistence behaviour.
 
 The same example must not appear unchanged in teaching and an “independent” assessment immediately afterward. Change the people, objects or arrangement while retaining the grammatical demand.
 
@@ -578,7 +584,7 @@ Do not expose the twist in an English title. A label such as “The closed bridg
 
 Migration 045 already widened course evidence and course-level storage to A1–C2. Do not add a redundant migration based only on the older A1 constraint in migration 044. Audit the effective schema, including all subsequent migrations.
 
-The remaining A1 assumptions are concrete. The course snapshot selects the default release's band; preparation start accepts the current A1 release; the schema-2 authoring validator expects its four sections and choice-based rubric; Writing follow-ups use A1. Add version dispatch and explicit course selection. Keep existing URLs and validators working for their frozen releases.
+Release selection is now explicit in the course API and routes. Preparation records retain release, catalogue and content identities through migration `048`; reading another published release does not change enrolment. Both retained releases remain A1. The schema-2 authoring validator still expects its four sections and choice-based rubric, and course Writing follow-ups still use A1. Future courses need their own validated authoring and assessment dispatch. Keep existing URLs and handlers working for their frozen releases.
 
 ### 14.2 Static catalogues
 
@@ -593,12 +599,13 @@ Avoid manually maintaining three copies of coverage. Generate the maintainers' c
 | Task store | Integration work |
 | --- | --- |
 | Saved stories | Add a nullable versioned task contract. Freeze the checked passage, questions, answers and marking snapshot before the mutable story row can change. |
-| Writing and Translation | Add nullable contracts to existing task records; attach criterion results to the existing saved attempts. Legacy tasks without a contract remain usable and unmapped. |
+| Writing | Retain the implemented shared contracts and reports attached to owned tasks and attempts. Validate judgement quality and broaden reviewed task coverage. |
+| Translation | Add compatible shared contracts and criterion results linked to existing tasks and attempts. Legacy tasks without a contract remain usable and unmapped. |
 | Word Jumble | Extend the existing `task_json` snapshot; keep old NULL tasks on their original marking path. |
 | Fluent and Step-through Speaking | Extend the saved scenario/dialogue contracts. Changing the catalogue must not change a resumed conversation. |
 | Course preparation | Resolve target metadata by the saved catalogue and release, not today's default file. |
 
-Implementation starts in `services/comprehension_service.py`, `services/writing_service.py`, `services/sentence_service.py` and `services/word_jumble_service.py`, with their existing repositories. Speaking uses `repositories/speaking_repository.py`, `services/step_conversation.py`, `services/speaking_review.py` and `services/speaking_assessment.py`.
+Writing and narrow Fluent Speaking adapters now use `services/activity_evidence.py` and migration `049`'s shared contract/report tables. The authored unit also uses them; migration `050` records item-level listening support. Reuse these boundaries when extending `services/comprehension_service.py`, `services/sentence_service.py` and `services/word_jumble_service.py`, with their existing repositories. Step-through Speaking still needs a receptive-evidence adapter; it must not reuse the original-audio production claim.
 
 Ordinary practice can still be saved if no precise target contract is valid. It may retain topic preparation and useful feedback without an invented requirement claim. Existing Fluent diagnostic observations whose independence is unverified must retain that limitation.
 
@@ -707,13 +714,45 @@ Content authors and engineers can work in parallel once CU-01–02 establish the
 
 CU-14–17 each require a complete, reviewed course for the scope advertised, with working media, all five assessment components and an eligible retry path. An internal pilot may use incomplete material if its limited scope is explicit. A first-section prototype must not replace a learner's complete existing route.
 
-### Next implementation pass
+### 16.1 Current progress
 
-Start with CU-01–03 and the A1 location/destination sequence from section 8. Include one written and one spoken diagnostic task. This exposes the difficult evidence boundaries early without making an unvalidated production score a gate.
+The [generated inventory](curriculum-coverage.md) lists all 239 reference requirements and 110 legacy targets. The crosswalk has one equivalent, 76 partial, 17 related and 16 unmapped links. It also lists 14 authored task definitions across six A1 requirements: four choices, three typed forms, three listening questions, one Writing task and three narrow Speaking diagnostics. These counts describe tasks and definition links, not completed requirements.
 
-Deliver a generated gap report, versioned contracts, one working sequence and migration regression tests. Keep the full source inventory in scope through the report; do not confuse a successful slice with completion of the course.
+New runtime-generated A1–B2 Writing and Comprehension tasks carry diagnostic criteria. They are not counted as an authored assessment bank. The inventory still identifies 108 legacy questions or optional writing prompts without item-level target contracts. No historic grade is transferred through the crosswalk.
 
-Then expand activity adapters and A1 content. A2–B2 source review and lexical work can proceed alongside this, but their released gates depend on their own validated material.
+| Package | Implemented at this revision | Remaining acceptance work |
+| --- | --- | --- |
+| CU-01 | Complete reference/legacy inventory, versioned mapping and generated gap report. | Qualified review of the provisional mapping and source interpretation. Add new task definitions to the generated inventory as they ship. |
+| CU-02 | Strict task/report contracts; owned evidence storage; source, mode, quote and audio-interval validation. | Exercise the same rules in the remaining adapters. Structural validation does not establish a judgement's linguistic accuracy. |
+| CU-03 | Release-aware API, routes, preparation and replay for both retained A1 releases; migration/import safeguards. | Test future cross-level catalogues and component types before publication. The current implementation is not evidence that an unbuilt release will migrate correctly. |
+| CU-04 | Forward preservation of additional morphology and constrained form selection, without regenerating existing forms. | Reviewed backfill, ambiguous-analysis handling and context-aware selection for later task types. |
+| CU-05 | One unit with teaching, choice, typed-form, listening and Writing practice, plus mapped Speaking access. Sessions and support are saved. | Learner and linguistic review of the sequence, task variation and feedback. Independence is not established by opening an original-response task. |
+| CU-06 | Authored unit reading/listening support receipts. New generated A1–B2 stories freeze four reading criteria before answers, retain question versions and checks, and reuse saved feedback on retries. | Audio-first generated listening, word-translation support receipts and linguistic validation. Visible story text plus audio cannot establish independent listening. |
+| CU-07 | Three authored typed-form prompts with explicit accepted alternatives and preserved raw answers. | Translation and Word Jumble adapters, valid alternative wording, and criteria limited to the construction actually elicited. |
+| CU-08 | New A1–B2 Writing contracts and exact-response criterion reports, saved atomically with existing feedback. | Human comparison across levels, source-based task adequacy and evidence that level demands are appropriate. Two live provider calls checked integration, not marking quality. |
+| CU-09 | Three A1 Fluent directions situations carry one original-audio location-question criterion. Missing or uncertain speech can remain unscored. | Real recordings with known grammatical errors, independent acoustic/linguistic comparison and broader reviewed scenario coverage. Current tests use synthetic PCM and mocked judgements. |
+| CU-10 | Reference gaps and one authored A1 unit are visible. The existing topic and vocabulary infrastructure is retained. | Original teaching across the required A1 scope, a reviewed lexical plan and content review. Most reference requirements have no directly authored task in the new inventory. |
+| CU-11 | Individual task contracts and saved results provide reusable foundations. | A frozen five-domain assessment blueprint, component lifecycle, resumable submissions and equivalent retries. The unit is not that assessment. |
+| CU-12 | Validation limits and required pass-policy evidence are documented. | Consented evaluation material, qualified independent marking, learner pilots, adjudication and standard-setting. No new threshold is justified yet. |
+| CU-13 | The unit uses a compact task player and return links. Existing Curriculum/Journey separation and release-aware navigation are retained. | Five-domain Profile summaries, new-release switch preview and recovery flows once the assessment exists; learner testing on desktop and mobile. |
+| CU-14 | Additive migrations preserve existing releases, attempts and earned access. New diagnostic reports do not award a level. | A separately reviewed A1 release, validated gate, migration rehearsal and supported retry path. No new release or proficiency gate is enabled. |
+| CU-15 | A2 references, ordinary practice and existing Speaking situations are available; new Writing can save criteria. | A2 teaching and lexical coverage, region content, all five assessment components and their validation. |
+| CU-16 | B1 references and ordinary practice are available; new Writing can save criteria. | Reviewed B1 teaching, connected production, interpretation, authored assessment and region. |
+| CU-17 | B2 references and ordinary practice are available; new Writing can save criteria. | Reviewed B2 teaching, register and argument tasks, authored assessment and region. |
+
+Migrations `048`–`051` add release identities, shared task/report records, listening support receipts and Comprehension question/attempt history. Preservation and import checks cover these records. Existing published catalogue bytes, vocabulary, card schedules, rewards and course passes are retained. The implementation guide records the operational detail; these safeguards do not replace linguistic validation.
+
+### 16.2 Next implementation priorities
+
+1. **Complete Comprehension support and listening (CU-06).** The generated reading adapter is implemented; see [its evidence contract](curriculum-comprehension-evidence.md). Next record word-translation exposure and provide audio-first generated questions with immutable recording identity and transcript support. Reuse the authored listening player. Keep historical feedback intact and retain open practice when media fails. Playing a story beside visible text is not independent listening evidence.
+2. **Controlled production in existing activities (CU-07).** Extend Translation, then Word Jumble, through the shared contracts. Keep legitimate Russian alternatives and existing tutor-style feedback. Do not infer every grammatical feature from an overall score or treat supplied vocabulary as unaided composition.
+3. **Validate the first sequence (CU-05, CU-08, CU-09).** Check ambiguous answers, language level, natural audio and the usefulness of feedback with learners and a qualified reviewer. Compare original-audio judgements against recordings with known case and conjugation errors. Keep uncertain judgements unscored.
+4. **Expand reviewed A1 teaching (CU-10).** Use the gap inventory to prioritise possession/absence, objects/recipients and time/routine after place/destination. Reuse the same word, form and media pipelines. Each unit needs its own reviewed examples, alternatives and contextual application.
+5. **Assemble the five-domain pilot (CU-11–14).** Only after adequate content and adapter validation, add the diagnostic blueprint and component workflow. Human comparison and a documented pass policy must precede a new access gate.
+
+The generated reading pass adds tests for immutable question sets, raw response evidence, repeated checks, profile changes, concurrent submissions, atomic saves and account import. It keeps the existing provider settings and spending controls. Media leakage and complete support tracking remain acceptance work for generated listening; they are not marked complete by reading tests.
+
+A2–B2 source review and lexical work can proceed alongside these priorities. Their released courses still need their own reviewed content, assessment and retry policies.
 
 ## 17. Verification and assessment validation
 

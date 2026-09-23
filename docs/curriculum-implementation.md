@@ -45,7 +45,9 @@ Criterion reports attach to owned attempts. They must reference the saved contra
 
 An uncertain result is `insufficient_evidence` with a null score. It is not an incorrect answer. Supported attempts retain their support record. One task cannot silently become independent evidence after a hint or model answer was shown.
 
-The first adapters cover authored unit choices, controlled text, listening, Writing and the mapped Fluent Speaking situations. New A1–B2 Writing generation requests one or two explicit writing objectives and freezes their wording in the task. Older tasks keep their existing feedback path. See [Writing evidence](curriculum-writing-evidence.md) and [Speaking evidence](curriculum-speaking-evidence.md) for validation and failure behaviour.
+The adapters cover authored unit choices, controlled text, listening, generated Comprehension, Writing and the mapped Fluent Speaking situations. New A1–B2 Writing generation requests one or two explicit writing objectives and freezes their wording in the task. New A1–B2 Comprehension freezes four passage-based reading criteria before answers are submitted. Its personal-reflection question receives ordinary feedback without a reading claim. Older tasks keep their existing feedback path. See [Comprehension evidence](curriculum-comprehension-evidence.md), [Writing evidence](curriculum-writing-evidence.md) and [Speaking evidence](curriculum-speaking-evidence.md) for validation and failure behaviour.
+
+Generated Comprehension retains the open-answer workflow. Its narrowly scoped reading response is distinct from the source exam's selection format. Feedback evaluates the meaning understood from the passage, without inferring independent Writing or Listening ability. Question versions and answer history are saved. Duplicate checks reuse feedback, and additional questions cannot overwrite earlier evidence. Translation support is not yet fully tracked, so these results make no claim of independent performance.
 
 These reports are diagnostic. They do not award a TORFL level, change a course pass or convert Elo into proficiency. Exact evidence validates attribution; it does not by itself prove that an AI judgement is linguistically correct.
 
@@ -61,6 +63,8 @@ Migration `049` adds two tables:
 | `activity_criterion_reports` | Immutable criterion judgements for its saved attempts, with support and response hashes. |
 
 Migration `050` adds `learning_item_support`, keyed by session and question. It records playback, transcript and hint receipts for listening items. The existing activity attempt stores the answer. Its criterion report must agree with those receipts and the frozen audio identity. Previous choice and typed-form packs, contracts and cached responses remain unchanged.
+
+Migration `051` adds `comprehension_tasks` and `comprehension_attempts`. New stories are saved before answering; each question set and successful check is retained. Existing story rows and media are untouched by the migration. Account import validates the new history and clears only temporary in-flight check leases in its output artifact.
 
 These tables extend the existing task stores. They do not replace `words`, `forms`, activity attempts, course observations, coin events or FSRS schedules. Writing results, criterion reports and existing rewards commit together after the task revision is checked again. A failed review cannot leave a partial new grade.
 
@@ -95,7 +99,8 @@ This is a forward import and selection change. It does not rewrite personal anno
 | CU-05: first teaching sequence | Teaching, choices, typed forms, listening, Writing and mapped Speaking implemented | Learner and linguistic validation across the sequence. |
 | CU-08: Writing | Diagnostic integration implemented | Human comparison of judgement quality and level demands. |
 | CU-09: Speaking | Narrow A1 directions diagnostic implemented | Broader scenario mapping and real acoustic/linguistic validation. |
-| CU-06, CU-07 | Not complete | Comprehension and Translation/Word Jumble criterion adapters; typed unit practice is only the first production case. |
+| CU-06: Comprehension | Generated reading criteria and durable checks implemented | Audio-first generated listening; word-translation support receipts; linguistic and marking validation. |
+| CU-07: controlled production | Typed unit practice implemented | Translation and Word Jumble adapters with valid alternative answers and narrowly elicited criteria. |
 | CU-10 onward | Planned | Full authored A1 coverage, five-domain pilot, validated gates, then later levels. |
 
-The next pass should add criterion-level evidence to generated Comprehension, then validate the complete teaching sequence before expanding it. A full A1–B2 reference catalogue is already present; a complete, validated A1–B2 course is not.
+Next priorities are tracked support and audio-first generated Comprehension, Translation/Word Jumble criteria, and validation of the complete teaching sequence. Broader A1 authoring follows those checks. A full A1–B2 reference catalogue is already present; a complete, validated A1–B2 course is not.

@@ -17,7 +17,7 @@ from services.vocabulary_topics import TOPICS
 
 CONTRACT_VERSION = 'curriculum-task-v1'
 RESPONSE_MODES = {'contextual_selection', 'reading_selection', 'listening_selection',
-                  'controlled_text', 'independent_writing', 'independent_speaking'}
+                  'controlled_text', 'reading_response', 'independent_writing', 'independent_speaking'}
 SUPPORT_TYPES = {'hint', 'translation', 'transcript', 'model_answer', 'audio_replay'}
 _KEY = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}')
 _SPEC_FIELDS = {'schema_version', 'contract_version', 'reference_version', 'task_id',
@@ -123,8 +123,12 @@ def _validate_spec(spec):
             if (mode != 'controlled_text' or ref['domain'] != 'language_use'
                     or criterion['target_id'] == rid):
                 raise ValueError('Controlled production needs a distinct application target and a language-use reference.')
+        elif scope == 'reading_comprehension':
+            if (mode != 'reading_response' or ref['domain'] != 'reading'
+                    or ref['response_mode'] != 'reading_selection' or criterion['target_id'] == rid):
+                raise ValueError('Open reading responses need a distinct application target and a reading reference.')
         else:
-            raise ValueError('Use reference or explicitly scoped controlled-production evidence.')
+            raise ValueError('Use reference or an explicitly scoped application evidence mode.')
         _text(criterion['expectation'], 'Observable criterion')
         _number(criterion['max_score'], 'Maximum score')
         if not 0 < criterion['max_score'] <= 100:
@@ -134,7 +138,7 @@ def _validate_spec(spec):
         if mode == 'listening_selection':
             if 'transcript' in support['allowed'] and 'transcript' not in support['independence_breakers']:
                 raise ValueError('Listening with a transcript cannot be independent listening evidence.')
-        if mode in ('reading_selection', 'listening_selection', 'independent_writing', 'independent_speaking'):
+        if mode in ('reading_selection', 'reading_response', 'listening_selection', 'independent_writing', 'independent_speaking'):
             if 'translation' in support['allowed'] and 'translation' not in support['independence_breakers']:
                 raise ValueError('Answer-supporting translation must change the independence condition.')
         ids.add(criterion['id'])
