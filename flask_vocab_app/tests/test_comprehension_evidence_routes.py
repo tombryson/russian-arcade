@@ -114,7 +114,7 @@ class ComprehensionEvidenceRouteTests(unittest.TestCase):
         tasks = self.rows('comprehension_tasks')
         self.assertEqual(len(tasks), 1)
         payload = json.loads(tasks[0]['payload_json'])
-        self.assertEqual(payload['contracts'], build_contracts(self.prepared, 'places', 'A1'))
+        self.assertEqual(payload['contracts'], build_contracts(self.prepared, 'places', 'A1', track_support=True))
         self.assertEqual(payload['questions'], QUESTIONS)
         self.assertEqual(payload['text'], PASSAGE)
         self.assertEqual(len(self.rows('activity_task_contracts')), 4)

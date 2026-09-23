@@ -7,6 +7,7 @@ check also has its own immutable-by-convention attempt record.
 from .trial_provider import config_snapshot, openai_client
 from .ai_trial_budget import TrialDenied
 import json
+from copy import deepcopy
 import random
 import re
 import sqlite3
@@ -21,6 +22,8 @@ from models.database import connect_db
 from utils.lazy import LazyService
 from utils.activity_owner import activity_profile_id
 from services.curriculum import LEVELS as CURRICULUM_LEVELS, generation_context, get_topic, normalize_level, topic_options
+from services.production_evidence import jumble_contract, production_report, attempt_support, REPORT_INSTRUCTION
+from services.writing_service import _criterion_report_schema
 
 
 TASK_INSTRUCTIONS = {
@@ -113,6 +116,8 @@ class WordJumbleService:
             raise ValueError('Invalid practice settings')
         topic = topic.strip() or 'any'
         count = self.WORD_COUNTS[difficulty]
+        with connect_db(self.db_path) as conn:
+            owner = activity_profile_id(conn)
         words = self.get_words(topic, difficulty, count)
         if len(words) < count:
             words += self._additional_words(topic, difficulty, words, count - len(words))
@@ -137,10 +142,17 @@ class WordJumbleService:
                 'curriculum': curriculum,
             }
         game_id = str(uuid.uuid4())
+        contract = jumble_contract({'words': words, 'topic': topic, 'difficulty': difficulty, 'task_contract': task})
         with connect_db(self.db_path) as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            if activity_profile_id(conn) != owner:
+                raise DraftConflict('The selected profile changed during preparation.')
             conn.execute('INSERT INTO word_jumble_games(id,topic,difficulty,words,created_at,owner_profile_id,task_json) VALUES (?,?,?,?,?,?,?)',
-                         (game_id, topic, difficulty, json.dumps(words, ensure_ascii=False), now(), activity_profile_id(conn),
+                         (game_id, topic, difficulty, json.dumps(words, ensure_ascii=False), now(), owner,
                           json.dumps(task, ensure_ascii=False) if task else None))
+            if contract is not None:
+                from services.activity_evidence import save_contract
+                save_contract(conn, owner, 'word_jumble', game_id, contract)
         return self.get_game(game_id)
 
     @staticmethod
@@ -217,7 +229,14 @@ For topic 'any', choose a coherent everyday theme.''' + repair},
             game = self._decode(row)
             game['attempts'] = [dict(row) for row in conn.execute(
                 'SELECT * FROM word_jumble_attempts WHERE game_id=? ORDER BY id DESC', (game_id,))]
+            from services.activity_evidence import load_contract, reports_for_task
+            owner = activity_profile_id(conn)
+            game['curriculum_contract'] = load_contract(conn, owner, 'word_jumble', game_id)
+            reports = reports_for_task(conn, owner, 'word_jumble', game_id)
             for attempt in game['attempts']:
+                if str(attempt['id']) in reports:
+                    attempt['criterion_report'] = reports[str(attempt['id'])]['report']
+                    attempt['criterion_support'] = reports[str(attempt['id'])]['support']
                 try:
                     details = json.loads(attempt.get('tutor_feedback') or 'null')
                     if details is not None:
@@ -271,6 +290,7 @@ For topic 'any', choose a coherent everyday theme.''' + repair},
         self.validate_response(user_response, checking=True)
         with connect_db(self.db_path) as conn:
             self._assert_revision(conn, game_id, revision)
+            owner = activity_profile_id(conn)
         game = self.get_game(game_id)
         language = 'ru' if language == 'ru' else 'en'
         evaluation = self._assess(game, user_response, language)
@@ -279,13 +299,31 @@ For topic 'any', choose a coherent everyday theme.''' + repair},
             conn.execute('BEGIN IMMEDIATE')
             # The network request runs outside the transaction; recheck after it.
             self._assert_revision(conn, game_id, revision)
+            if activity_profile_id(conn) != owner:
+                raise DraftConflict('The selected profile changed during assessment.')
+            from services.activity_evidence import load_contract, save_report
+            from contracts.curriculum import validate_judgements
+            contract = load_contract(conn, owner, 'word_jumble', game_id)
+            report = evaluation.get('criterion_report')
+            if contract is not None:
+                validate_judgements(contract, report, response_text=user_response)
+            elif report is not None:
+                raise ValueError('A legacy task cannot acquire criteria during assessment.')
+            support = attempt_support(conn, 'word_jumble', game_id) if contract is not None else None
+            tutor = {key: value for key, value in evaluation.items() if key != 'criterion_report'}
+            validate_feedback(tutor, user_response, language)
             self._write_draft(conn, game_id, user_response, revision)
-            feedback = readable_feedback(evaluation)
+            feedback = readable_feedback(tutor)
             attempt = conn.execute('''INSERT INTO word_jumble_attempts
-                (game_id,response,score,score_max,feedback,tutor_feedback,ui_language,created_at,source)
-                VALUES (?,?,?,4,?,?,?,?,'sentence-v1')''',
+                (game_id,response,score,score_max,feedback,tutor_feedback,ui_language,created_at,source,criterion_report_json,criterion_support_json)
+                VALUES (?,?,?,4,?,?,?,?,'sentence-v1',?,?)''',
                 (game_id, user_response, evaluation['score'], feedback,
-                 json.dumps(evaluation, ensure_ascii=False), language, now()))
+                 json.dumps(tutor, ensure_ascii=False), language, now(),
+                 json.dumps(report, ensure_ascii=False) if report is not None else None,
+                 json.dumps(support) if support is not None else None))
+            if contract is not None:
+                save_report(conn, owner, 'word_jumble', game_id, str(attempt.lastrowid), report,
+                            response_text=user_response, support=support)
             conn.execute('UPDATE word_jumble_games SET user_response=?,score=?,feedback=? WHERE id=?',
                          (user_response, evaluation['score'], feedback, game_id))
             from services.progression import award, legacy_profile
@@ -310,6 +348,11 @@ For topic 'any', choose a coherent everyday theme.''' + repair},
 
     def _request_feedback(self, game, user_response, language, repair=''):
         task = game.get('task_contract')
+        contract = game.get('curriculum_contract')
+        schema = deepcopy(FEEDBACK_SCHEMA)
+        if contract is not None:
+            schema['properties']['criterion_report'] = _criterion_report_schema(contract)
+            schema['required'].append('criterion_report')
         task_criterion = 'fulfilling the displayed task' if task else 'a complete thought'
         task_policy = (
             'The saved task_contract contains the exact instructions shown to the learner. '
@@ -368,19 +411,29 @@ use читает." The optional fields stay empty. Adapt this warmth to the actu
 Use plain text, no Markdown or HTML. Do not claim to save work or award coins.
 All commentary, explanations and optional advice must be in {'Russian' if language == 'ru' else 'English'}.
 Before returning, shorten any explanation that sounds like a grammar textbook. A small spelling slip needs
-just the corrected spelling, not a claim about nominative or accusative forms.''' + repair},
+just the corrected spelling, not a claim about nominative or accusative forms.''' + ('\n' + REPORT_INSTRUCTION if contract is not None else '') + repair},
                        {'role': 'user', 'content': json.dumps({'words': game['words'], 'topic': game['topic'],
                            'level': game['difficulty'],
                            'target_level': normalize_level(game['difficulty'], legacy='word_jumble'),
                            'curriculum': task['curriculum'] if task else None,
                            'task_contract': task,
+                           **({'curriculum_contract': contract} if contract is not None else {}),
                            'response': user_response, 'feedback_language': language}, ensure_ascii=False)}],
-                text={'format': {'type': 'json_schema', 'name': 'sentence_tutor_feedback', 'schema': FEEDBACK_SCHEMA, 'strict': True}})
+                text={'format': {'type': 'json_schema', 'name': 'sentence_tutor_feedback', 'schema': schema, 'strict': True}})
             if result.status != 'completed':
                 raise ValueError('Incomplete assessment')
             evaluation = json.loads(result.output_text)
+            if not isinstance(evaluation, dict):
+                raise ValueError('Invalid sentence feedback')
+            report = evaluation.pop('criterion_report', None)
+            if contract is not None:
+                report = production_report(contract, report, user_response)
+            elif report is not None:
+                raise ValueError('An unscoped task cannot acquire diagnostic criteria.')
             validate_feedback(evaluation, user_response, language)
             evaluation = tidy_corrections(evaluation, user_response)
+            if contract is not None:
+                evaluation['criterion_report'] = report
             return evaluation
         except TrialDenied:
             raise

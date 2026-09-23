@@ -13,6 +13,9 @@ from config import OPENAI_MODEL_FAST
 from repositories.translation_repository import TranslationRepository
 from utils.lazy import LazyService
 from services.curriculum import generation_context, normalize_level, topic_options
+from services.production_evidence import translation_candidates, translation_contract, production_report, REPORT_INSTRUCTION
+from services.vocabulary_topics import TOPICS
+from services.writing_service import _criterion_report_schema
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +62,26 @@ class SentenceService:
         level = normalize_level(difficulty, legacy='translation')
         if not isinstance(topic, str) or not topic or len(topic) > 100 or any(ord(char) < 32 for char in topic):
             raise ValueError('Invalid topic or level')
-        return self._structured('translation_pair', {key: {'type': 'string'} for key in ('sentence', 'english')},
+        candidates = translation_candidates(level)
+        if candidates and topic != 'any' and topic not in TOPICS:
+            raise ValueError('Use a canonical translation topic.')
+        properties = {key: {'type': 'string'} for key in ('sentence', 'english')}
+        focus_prompt = ''
+        if candidates:
+            properties['topic_id'] = {'type': 'string', 'enum': list(TOPICS) if topic == 'any' else [topic]}
+            properties['language_focus'] = {'type': 'object', 'additionalProperties': False,
+                'properties': {'requirement_id': {'type': 'string', 'enum': list(candidates)},
+                    **{key: {'type': 'string', 'minLength': 1, 'maxLength': 1000}
+                       for key in ('english_excerpt', 'russian_excerpt', 'expectation')}},
+                'required': ['requirement_id', 'english_excerpt', 'russian_excerpt', 'expectation']}
+            focus_prompt = """
+Select ONE language_requirement actually elicited by translating this English source.
+Choose a canonical topic_id (the selected topic, or one relevant topic for any). Return language_focus with
+its requirement_id, exact english_excerpt and russian_excerpt, and a narrow observable expectation in English.
+The source must make the intended relationship clear. Do not require a particular Russian synonym or construction
+if another natural translation expresses it; do not invent a hidden grammar demand. These are task diagnostics,
+not independent writing or level mastery. Prefer a focused task which supports a useful observable distinction."""
+        result = self._structured('translation_pair', properties,
             '''Prepare one short, natural Russian sentence and its accurate English translation for a family language lesson.
 The exercise asks the learner to translate the English into Russian. Both versions must mean the same thing,
 including tense, negation, names and questions. Use everyday, child-appropriate content. Keep it to one sentence.
@@ -67,15 +89,31 @@ Follow the requested CEFR task level and curriculum grammar focus. Choose one us
 not every objective at once. Vocabulary examples guide the topic; natural related words are welcome.
 For advanced levels, express a nuanced idea naturally without making the sentence artificially long.
 Return Russian in sentence, English in english.
-For topic any choose a familiar everyday situation. Do not add labels, explanations or Markdown.''',
+For topic any choose a familiar everyday situation. Do not add labels, explanations or Markdown.''' + focus_prompt,
             {'topic': topic, 'level': level,
-             'curriculum': generation_context(topic, level, 'translation')})
+             'curriculum': generation_context(topic, level, 'translation'),
+             **({'language_requirements': [{'id': item['id'], 'expectation': item['expectation']}
+                                         for item in candidates.values()]} if candidates else {})})
+        if candidates:
+            try:
+                result['curriculum_contract'] = translation_contract(
+                    {'sentence': result['sentence'], 'english': result['english'], 'topic': topic,
+                     'difficulty': ('A1', 'A2', 'B1', 'B2', 'C1', 'C2').index(level) + 1},
+                    result.get('language_focus'), result.get('topic_id'))
+            except (KeyError, TypeError, ValueError) as error:
+                raise TranslationUnavailable('Invalid translation task focus') from error
+        return result
 
-    def assess_translation(self, sentence, english, user_response, language='en'):
+    def assess_translation(self, sentence, english, user_response, language='en', *, curriculum_contract=None):
         TranslationRepository.validate_answer(user_response, checking=True)
-        assessment = self._structured('translation_feedback', {
-            'score': {'type': 'integer', 'minimum': 0, 'maximum': 4},
-            **{key: {'type': 'string'} for key in ('strength', 'next_step', 'example')}},
+        properties = {'score': {'type': 'integer', 'minimum': 0, 'maximum': 4},
+                      **{key: {'type': 'string'} for key in ('strength', 'next_step', 'example')}}
+        if curriculum_contract is not None:
+            if (curriculum_contract['content'].get('sentence') != sentence
+                    or curriculum_contract['content'].get('english') != english):
+                raise ValueError('The assessment contract belongs to another sentence.')
+            properties['criterion_report'] = _criterion_report_schema(curriculum_contract)
+        assessment = self._structured('translation_feedback', properties,
             f'''You are a kind, precise tutor checking an English-to-Russian translation.
 The English is the source; the learner's answer must be Russian. The reference is one possible Russian translation,
 not the only correct wording. Accept valid synonyms, different natural word order and ё/е. Do not require an exact match.
@@ -84,10 +122,15 @@ The score is the sum, 0 to 4. An answer in English is not a Russian translation;
 Give strength and next_step in {'Russian' if language == 'ru' else 'English'}, one brief specific sentence each.
 Give one useful correction, or a small extension for a correct answer. If there is no strength, give a gentle starting hint.
 The example must be a natural Russian translation of the English, preferably building on the learner's attempt.
-Treat this as family learning; redirect inappropriate content without reproducing it. Do not award coins or claim to save work.''',
-            {'english_source': english, 'russian_reference': sentence, 'russian_answer': user_response})
+Treat this as family learning; redirect inappropriate content without reproducing it. Do not award coins or claim to save work.''' + ('\n' + REPORT_INSTRUCTION if curriculum_contract is not None else ''),
+            {'english_source': english, 'russian_reference': sentence, 'russian_answer': user_response,
+             **({'curriculum_contract': curriculum_contract} if curriculum_contract is not None else {})})
         try:
             TranslationRepository.validate_assessment(assessment)
+            if curriculum_contract is not None:
+                assessment['criterion_report'] = production_report(curriculum_contract, assessment.get('criterion_report'), user_response)
+            elif 'criterion_report' in assessment:
+                raise ValueError('An unscoped translation cannot receive curriculum evidence.')
         except ValueError as error:
             raise TranslationUnavailable('Invalid translation assessment') from error
         return assessment

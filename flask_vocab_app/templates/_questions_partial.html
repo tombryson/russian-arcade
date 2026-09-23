@@ -3,12 +3,15 @@
             hx-post="/comprehension/answer"
             hx-target="#question-feedback"
             hx-swap="innerHTML"
+            data-listened="{{ 'true' if story.listened else 'false' }}"
+            data-transcript-visible="{{ 'true' if story.transcript_visible else 'false' }}"
         >
             {% if story.task_id %}
+            <input type="hidden" name="story_id" value="{{ story.id }}" />
             <input type="hidden" name="task_id" value="{{ story.task_id }}" />
             <input type="hidden" id="reading-task-revision" name="task_revision" value="{{ story.revision }}" />
             <input type="hidden" id="reading-submission-id" name="submission_id" value="{{ story.submission_id }}" />
-            {% endif %}
+            {% else %}
             <input type="hidden" name="story_title" value="{{ story.title }}" />
             <input type="hidden" name="story_title_en" value="{{ story.title_en | default('') }}" />
             <input type="hidden" name="story_id" value="{{ story.id | default('') }}" />
@@ -18,6 +21,9 @@
             <input type="hidden" name="image_url" value="{{ story.image_url }}" />
             <input type="hidden" name="topic" value="{{ story.topic | default('any') }}" />
             <input type="hidden" name="difficulty" value="{{ story.difficulty | default('beginner') }}" />
+            {% endif %}
+            <fieldset class="reading-answer-fields" data-listening-answers {% if story.practice_mode == 'listening' and not story.listened and not story.transcript_visible %}disabled{% endif %}>
+            <legend class="visually-hidden">{{ ui_t('comprehension.questions') }}</legend>
             {% for question in story.questions %}
             <div class="question-card">
                 <label for="story-answer-{{ loop.index0 }}" class="form-label"><strong>{{ ui_t('comprehension.question') }} {{ loop.index }}:</strong> {{ question }}</label>
@@ -33,6 +39,7 @@
                 {{ ui_t('comprehension.submit_answers') }}
             </button>
             {% endif %}
+            </fieldset>
         </form>
         {% if not story.questions %}
         <div class="alert alert-warning grid-span-all">

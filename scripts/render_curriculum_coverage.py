@@ -7,6 +7,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'flask_vocab_app'))
 from services.curriculum_requirement_map import coverage_report
+from services.curriculum_units import UNIT_IDS, LISTENING_IDS, get_unit, listening_content
 from services.torfl_requirements import LEVELS
 
 OUTPUT = ROOT / 'docs' / 'curriculum-coverage.md'
@@ -35,10 +36,23 @@ def render():
               'They do not mean the full requirement is taught or assessed. Related-only links contribute no item counts.', '',
               f"Shipped target-linked items: {data['shipped_item_counts']}. "
               f"A further {len(data['unattributed_items'])} legacy questions or optional writing prompts have no item-level target contract in this inventory.", '',
-              'Runtime-generated activities, source editions beyond those inspected, complete lexical minima, and human assessment validation remain unaudited. '
+              'Runtime-generated tasks are not part of this static count. Source editions beyond those inspected, complete lexical minima, and human assessment validation remain unaudited. '
               'Independent production and whole-level assessment coverage must be established separately. '
               'Authored unit contracts are listed separately below; they remain practice/diagnostic tasks, not validated level assessments. '
               'A task count is never a release-readiness claim.', '',
+              '## Authored teaching units', '',
+              '| Unit | Contextual choices | Typed forms | Prepared listening items |',
+              '| --- | ---: | ---: | ---: |']
+    for unit_id in UNIT_IDS:
+        unit = get_unit(unit_id)
+        listening_count = len(listening_content(unit_id)['items']) if unit_id in LISTENING_IDS else 0
+        lines.append(f"| {unit['title']} (`{unit_id}`) | {len(unit['questions'])} | {len(unit['forms']['questions'])} | {listening_count} |")
+    lines += ['', 'Each unit also opens its own Writing task. A zero listening count means that no listening activity is offered for that unit. '
+              'Speaking links to existing scenarios do not automatically add a unit-specific Speaking criterion. '
+              'See [the validation record and reviewer workflow](curriculum-validation.md) for the pending language and learner review.', '',
+              f"There are {len(data['direct_task_contracts'])} directly authored task definitions linked to "
+              f"{len({item['requirement_id'] for item in data['direct_task_contracts']})} reference requirements. "
+              'These counts include the narrow mapped Speaking diagnostics listed below.', '',
               '## Authored reference tasks', '',
               '| Task | Requirement | Kind |', '| --- | --- | --- |']
     for item in data['direct_task_contracts']:

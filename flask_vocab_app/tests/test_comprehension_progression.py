@@ -6,6 +6,7 @@ import sqlite3
 import tempfile
 import unittest
 from uuid import uuid4
+from unittest.mock import patch
 
 from migrations import upgrade_database
 from repositories.comprehension_repository import ComprehensionRepository
@@ -37,6 +38,10 @@ class ComprehensionProgressionTests(unittest.TestCase):
         lease, _ = self.repo.begin_check(task_id, revision, submission, answers)
         result = assessment(task['payload'], answers)
         result.update(scores=[score] * len(answers), total_score=score)
+        if task['payload'].get('practice_mode') == 'listening' and task['payload'].get('audio') is None:
+            for report in result['criterion_reports'].values():
+                for judgement in report['judgements']:
+                    judgement.update(outcome='insufficient_evidence', score=None, evidence=[])
         return self.repo.finish_check(task_id, revision, submission, answers, result, expected_owner=self.pid, lease_token=lease['check_token'])
 
     def receipt(self, attempt_id):
@@ -159,3 +164,77 @@ class ComprehensionProgressionTests(unittest.TestCase):
         self.assertEqual(self.conn.execute('SELECT COUNT(*) FROM course_evidence').fetchone()[0], 6)
         self.assertEqual(self.conn.execute('SELECT SUM(amount) FROM progression_entries WHERE category="activity"').fetchone()[0], 12)
         self.assertEqual(self.skill()['observations'], 6)
+
+    def create_listening(self, *, audio=True):
+        prepared = prepared_story(topic='family')
+        prepared['listening_focus'] = prepared.pop('reading_focus')
+        for focus in prepared['listening_focus']:
+            focus['requirement_id'] = 'a1.listening.short-message'
+        recording = {'url': '/static/media/projection-fixture.mp3', 'sha256': 'a' * 64, 'size_bytes': 10} if audio else None
+        prepared['audio_url'] = recording['url'] if recording else ''
+        contracts = build_contracts(prepared, 'family', 'A1', practice_mode='listening', audio=recording, track_support=True)
+        return self.repo.create(prepared, 'family', 'A1', contracts, expected_owner=self.pid,
+                                practice_mode='listening', audio=recording, track_support=True)
+
+    def test_audio_first_check_rates_listening_only_and_replays_without_reading_credit(self):
+        task_id, _ = self.create_listening()
+        # Byte validation has its own route/storage tests. This test examines
+        # the receipt's scoring projection without a provider or media writes.
+        with patch('repositories.comprehension_repository.verify_audio', return_value=Path('/fixture.mp3')):
+            self.repo.record_support(task_id, 0, uuid4().hex, 'listened')
+            result = self.check(task_id)
+        saved = self.receipt(result['id'])
+        self.assertEqual(saved['_skill']['scores'], {'listening': .8})
+        self.assertEqual(saved['_skill']['comprehension_mode'], 'listening')
+        self.assertEqual(saved['comprehension_mode'], 'listening')
+        self.assertTrue(saved['listened'])
+        self.assertFalse(saved['_course']['assisted'])
+        self.assertEqual(self.skill('listening')['observations'], 1)
+        self.assertEqual(self.skill('reading')['observations'], 0)
+        self.assertEqual(self.skill('listening')['observations'], 1)
+        self.assertEqual(self.conn.execute('SELECT COUNT(*) FROM course_chapter_passes').fetchone()[0], 0)
+
+    def test_listening_transcript_and_missing_audio_keep_participation_without_rating(self):
+        for audio in (True, False):
+            with self.subTest(audio=audio):
+                task_id, _ = self.create_listening(audio=audio)
+                self.repo.record_support(task_id, 0, uuid4().hex, 'transcript')
+                result = self.check(task_id)
+                saved = self.receipt(result['id'])
+                self.assertTrue(saved['_course']['assisted'])
+                self.assertNotIn('_skill', saved)
+                self.assertFalse(saved['first_fresh_assessment'])
+        self.assertEqual(self.skill('listening')['observations'], 0)
+        self.assertEqual(self.skill('reading')['observations'], 0)
+        self.assertEqual(self.conn.execute('SELECT SUM(amount) FROM progression_entries').fetchone()[0], 6)
+
+    def test_missing_or_forged_playback_receipt_cannot_become_reading_or_listening_rating(self):
+        task_id, story_id = self.create_listening()
+        with patch('repositories.comprehension_repository.verify_audio', return_value=Path('/fixture.mp3')):
+            self.repo.record_support(task_id, 0, uuid4().hex, 'listened')
+            result = self.check(task_id)
+        source, key = 'comprehension-check:' + result['id'], f'story:{story_id}'
+        self.conn.execute('SAVEPOINT no_receipt')
+        self.conn.execute("UPDATE comprehension_attempts SET support_receipts_json='[]' WHERE id=?", (result['id'],))
+        self.assertIsNone(comprehension_assessment(self.conn, self.pid, key, source))
+        self.assertNotIn('_skill', freeze_evidence(self.conn, 'reading', key, source, None,
+            {'listened': True, 'comprehension_mode': 'reading', 'score': 10, 'first_fresh_assessment': True}, profile_id=self.pid))
+        self.conn.execute('ROLLBACK TO no_receipt'); self.conn.execute('RELEASE no_receipt')
+        self.conn.execute('SAVEPOINT wrong_audio')
+        self.conn.execute('UPDATE comprehension_support_receipts SET detail_json=? WHERE task_id=?',
+                          (json.dumps({'audio_sha256': 'b' * 64}), task_id))
+        self.assertIsNone(comprehension_assessment(self.conn, self.pid, key, source))
+        self.conn.execute('ROLLBACK TO wrong_audio'); self.conn.execute('RELEASE wrong_audio')
+
+    def test_reading_word_support_counts_preparation_without_independent_reading_rating(self):
+        prepared = prepared_story(topic='family')
+        task_id, _ = self.repo.create(prepared, 'family', 'A1',
+            build_contracts(prepared, 'family', 'A1', track_support=True), expected_owner=self.pid,
+            practice_mode='reading', track_support=True)
+        self.repo.record_support(task_id, 0, uuid4().hex, 'translation', word='Нина')
+        result = self.check(task_id)
+        saved = self.receipt(result['id'])
+        self.assertTrue(saved['_course']['assisted'])
+        self.assertNotIn('_skill', saved)
+        self.assertEqual(self.skill('reading')['observations'], 0)
+        self.assertEqual(self.conn.execute('SELECT COUNT(*) FROM course_evidence').fetchone()[0], 1)

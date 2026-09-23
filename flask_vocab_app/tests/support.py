@@ -15,12 +15,17 @@ def latest_schema_version():
 
 def strip_course_progression(conn):
     """Remove course migrations and markers when a test rewinds its schema."""
-    for table in ('comprehension_attempts', 'comprehension_tasks', 'learning_item_support', 'activity_criterion_reports', 'activity_task_contracts', 'course_checkpoint_followups', 'course_release_switches', 'course_target_observations', 'course_target_practice_receipts',
+    for table in ('translation_reference_views', 'comprehension_support_receipts', 'comprehension_attempts', 'comprehension_tasks', 'learning_item_support', 'activity_criterion_reports', 'activity_task_contracts', 'course_checkpoint_followups', 'course_release_switches', 'course_target_observations', 'course_target_practice_receipts',
                   'course_target_practice_requests', 'course_target_practice_attempts', 'course_continuation_entitlements', 'course_enrolments',
                   'course_checkpoint_requests', 'course_checkpoint_submissions',
                   'course_chapter_passes', 'course_evidence', 'course_checkpoint_attempts'):
         conn.execute('DROP TABLE IF EXISTS ' + table)
-    conn.execute('DELETE FROM schema_migrations WHERE version IN (44,45,46,47,48,49,50,51)')
+    for table in ('translation_attempts', 'word_jumble_attempts'):
+        columns = {row[1] for row in conn.execute('PRAGMA table_info(' + table + ')')}
+        for column in ('criterion_report_json', 'criterion_support_json'):
+            if column in columns:
+                conn.execute('ALTER TABLE ' + table + ' DROP COLUMN ' + column)
+    conn.execute('DELETE FROM schema_migrations WHERE version IN (44,45,46,47,48,49,50,51,52,53)')
 
 
 def strip_progression_and_levels(conn):

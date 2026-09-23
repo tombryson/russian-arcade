@@ -77,8 +77,11 @@ export function StoryText({ words, initialVisibility, source = {} }) {
             setModalPosition({ x, y });
             let wordData;
             try {
-                const params = new URLSearchParams(source);
-                const response = await fetch(`/word-details/${encodeURIComponent(word.word)}?${params}`);
+                const url = `/word-details/${encodeURIComponent(word.word)}`;
+                const response = source.task_id
+                    ? await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || ''}, body: JSON.stringify(source)})
+                    : await fetch(`${url}?${new URLSearchParams(source)}`);
                 const result = await response.json().catch(() => null);
                 if (!response.ok || !result?.word) throw new Error(result?.error?.message || uiText('error_load_word'));
                 wordData = result;

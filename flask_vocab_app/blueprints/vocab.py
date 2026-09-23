@@ -535,12 +535,18 @@ def create_vocab_blueprint(db_path, drive_service, sync_service=None):
             return jsonify(error='This word was not found.'), 404
         return jsonify(result)
 
-    @blueprint.route("/word-details/<word>")
+    @blueprint.route("/word-details/<word>", methods=['GET', 'POST'])
     def word_details(word):
+        from contracts.learning import fields
         from repositories.learning_repository import LearningError
         from services.story_vocabulary import lookup_story_word
         try:
-            return jsonify(lookup_story_word(db_path, word, request.args))
+            source = request.get_json(silent=True) if request.method == 'POST' else request.args
+            if not isinstance(source, dict) and request.method == 'POST':
+                raise LearningError('json_required', 'Reopen this story before choosing a word.', 415)
+            if request.method == 'POST':
+                source = fields(source, {'story_key'}, {'story_id', 'task_id'})
+            return jsonify(lookup_story_word(db_path, word, source))
         except LearningError as error:
             return jsonify(error={'code': error.code, 'message': str(error), **error.details}), error.status
 
@@ -552,7 +558,7 @@ def create_vocab_blueprint(db_path, drive_service, sync_service=None):
         try:
             if not request.is_json:
                 raise LearningError('json_required', 'Reopen this story before adding a word.', 415)
-            data = fields(request.get_json(silent=True), {'word', 'pos', 'story_key'}, {'story_id'})
+            data = fields(request.get_json(silent=True), {'word', 'pos', 'story_key'}, {'story_id', 'task_id'})
             return jsonify(capture_story_word(db_path, data['word'], lemma, data['pos'], data))
         except LearningError as error:
             return jsonify(error={'code': error.code, 'message': str(error), **error.details}), error.status

@@ -1,13 +1,15 @@
 import base64
 import json
 import logging
+import io
+import hashlib
 
 from services.onboarding import onboarding_state
 from services.story_vocabulary import story_key
 from services.curriculum import level_options, normalize_level, topic_options
 
 from asgiref.sync import async_to_sync
-from flask import Blueprint, jsonify, render_template, render_template_string, request, session, make_response, redirect
+from flask import Blueprint, jsonify, render_template, render_template_string, request, session, make_response, redirect, send_file
 from markupsafe import escape
 
 from repositories import StoryRepository
@@ -58,6 +60,8 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
 
     def require_legacy_form():
         """Old forms cannot overwrite a new immutable question set."""
+        if 'task_revision' in request.form or 'submission_id' in request.form:
+            raise ComprehensionConflict('This story uses a newer answer form. Reload it to continue.')
         raw_id = request.form.get('story_id')
         if not raw_id:
             try:
@@ -75,7 +79,58 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
         return displayed
 
     def topics_and_stories():
-        return topic_options(session.get("ui_lang", "en")), [story_for_display(story) for story in story_repository.list_saved()]
+        stories = []
+        for story in story_repository.list_saved():
+            task = reading_repository.latest(story['id'])
+            if task and task['payload'].get('practice_mode') == 'listening':
+                displayed = reading_repository.display(task['id'])
+                story.update(title=displayed['title'], title_en=displayed['title_en'])
+            stories.append(story_for_display(story))
+        return topic_options(session.get("ui_lang", "en")), stories
+
+    @blueprint.route('/comprehension/tasks/<task_id>/audio', methods=['GET'])
+    def comprehension_audio(task_id):
+        try:
+            task = reading_repository.load(task_id)
+            path = reading_repository.audio_path(task_id)
+            data = path.read_bytes()
+            identity = task['payload']['audio']
+            if len(data) != identity['size_bytes'] or hashlib.sha256(data).hexdigest() != identity['sha256']:
+                raise ValueError('The original recording is unavailable.')
+            response = send_file(io.BytesIO(data), mimetype='audio/mpeg', conditional=True,
+                                 download_name=f'{task_id}.mp3')
+            response.headers['Cache-Control'] = 'private, no-store'
+            return response
+        except LookupError:
+            return jsonify(error='Recording not found for this profile.'), 404
+        except (ValueError, OSError):
+            return jsonify(error='This recording is unavailable. You can read the transcript instead.'), 409
+
+    @blueprint.route('/comprehension/tasks/<task_id>/support', methods=['POST'])
+    def comprehension_support(task_id):
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify(error='Send a support request as JSON.'), 400
+        try:
+            revision = data.get('task_revision', data.get('revision'))
+            if 'task_revision' in data and 'revision' in data and data['task_revision'] != data['revision']:
+                raise ValueError('This support request has conflicting revisions.')
+            state = reading_repository.record_support(task_id, revision, data.get('request_key'), data.get('operation'), word=data.get('word'))
+            story = reading_repository.display(task_id)
+            result = {'task_id': task_id, 'revision': story['revision'], **state,
+                      'audio_unavailable': story.get('practice_mode') == 'listening' and not story.get('audio_available')}
+            if data.get('operation') == 'transcript':
+                displayed = story_for_display(story)
+                words = story_words(displayed['text'])
+                result.update(text=displayed['text'], words=words, capture_key=displayed.get('capture_key', ''),
+                              title=displayed['title'], title_en=displayed.get('title_en', ''), image_url=displayed.get('image_url', ''))
+            return jsonify(result)
+        except LookupError:
+            return jsonify(error='This story is not available in the selected profile.'), 404
+        except ComprehensionConflict as error:
+            return jsonify(error=str(error)), 409
+        except ValueError as error:
+            return jsonify(error=str(error)), 400
 
     @blueprint.context_processor
     def curriculum_form_context():
@@ -143,6 +198,13 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
 
         try:
             normalize_level(request.form.get("difficulty", "beginner"), legacy='reading')
+            practice_mode = request.form.get('practice_mode', 'reading')
+            if practice_mode not in ('reading', 'listening'):
+                raise ValueError('Invalid practice mode')
+            if practice_mode == 'listening':
+                from services.comprehension_evidence import listening_candidates
+                if not listening_candidates(request.form.get('difficulty', 'beginner')):
+                    raise ValueError('Listening practice is available at A1–B2.')
             if request.form.get('topic', 'any') not in {'any', *(item['value'] for item in topics)}:
                 raise ValueError('Invalid topic')
         except ValueError:
@@ -163,24 +225,29 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
                 custom_story[:100],
             )
 
+            generation_options = {'practice_mode': 'listening'} if practice_mode == 'listening' else {}
             if custom_story:
-                prepared = async_to_sync(comprehension_service.prepare_story_from_text)(custom_story, topic, difficulty)
+                prepared = async_to_sync(comprehension_service.prepare_story_from_text)(custom_story, topic, difficulty, **generation_options)
             else:
-                prepared = async_to_sync(comprehension_service.generate_story)(topic, difficulty)
+                prepared = async_to_sync(comprehension_service.generate_story)(topic, difficulty, **generation_options)
             title = validate_story_title(prepared.get("title"))
             title_en = validate_story_title(prepared.get("title_en"))
             story_text = prepared["text"]
             questions = prepared["questions"]
             image_url = prepared.get("image_url", "")
 
-            if not image_url:
+            if not image_url and practice_mode != 'listening':
                 image_url = comprehension_service.generate_image(story_text)
             logger.debug("Image URL: %s", image_url)
 
-            audio_url = comprehension_service.generate_audio(story_text)
+            try:
+                audio_url = comprehension_service.generate_audio(story_text)
+            except Exception:
+                logger.exception('Story prepared, but its recording could not be generated')
+                audio_url = ''
             logger.debug("Audio URL: %s", audio_url)
 
-            words = story_words(story_text)
+            words = [] if practice_mode == 'listening' and not custom_story else story_words(story_text)
             logger.debug("Words data: %s", words[:5])
             story_data = story_for_display({
                 "title": title,
@@ -194,12 +261,15 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
                 "difficulty": difficulty,
                 "answers": [],
             })
-            if prepared.get('reading_focus'):
-                from services.comprehension_evidence import build_contracts
-                contracts = build_contracts(prepared, topic, difficulty)
+            if practice_mode == 'listening' or prepared.get('reading_focus'):
+                from services.comprehension_evidence import build_contracts, freeze_audio
+                audio = freeze_audio(audio_url) if practice_mode == 'listening' else None
+                contracts = build_contracts(prepared, topic, difficulty, practice_mode=practice_mode, audio=audio, track_support=True)
                 task_id, _ = reading_repository.create({**prepared, 'audio_url': audio_url, 'image_url': image_url},
-                    topic, difficulty, contracts, expected_owner=expected_owner)
-                story_data.update(reading_repository.display(task_id))
+                    topic, difficulty, contracts, expected_owner=expected_owner, practice_mode=practice_mode,
+                    track_support=True, initial_transcript=bool(custom_story), audio=audio)
+                story_data = story_for_display(reading_repository.display(task_id))
+                story_data['words'] = story_words(story_data['text'])
             try:
                 json.dumps(story_data)
             except ValueError:
@@ -211,10 +281,10 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
                     error="Invalid story data format",
                     active_page="comprehension",
                 ), 500
-            session["current_story_text"] = story_text
+            session["current_story_text"] = story_data['text']
             session["current_story_data"] = story_data
             # Only provider-created URLs can authorize an unsaved media preview.
-            session["generated_story_media"] = [audio_url, image_url]
+            session["generated_story_media"] = [audio_url] if practice_mode == 'listening' else [audio_url, image_url]
             session['reading_rating_context'] = {key: story_data[key] for key in ('text', 'topic', 'difficulty', 'questions')}
             session["visibility"] = visibility
             logger.debug("Story data: %s", story_data)
@@ -428,10 +498,10 @@ def create_comprehension_blueprint(db_path, comprehension_service, drive_service
                     error="История не найдена",
                     active_page="comprehension",
                 ), 404
-            story = story_for_display(story)
             task = reading_repository.latest(story_id)
             if task:
-                story.update(reading_repository.display(task['id']))
+                story = reading_repository.display(task['id'])
+            story = story_for_display(story)
             story["words"] = story_words(story["text"])
             session["current_story_text"] = story["text"]
             session["current_story_data"] = story

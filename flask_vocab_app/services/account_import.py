@@ -109,6 +109,18 @@ def _json_refs(value, maps):
     return value
 
 
+def _activity_key(value, maps):
+    """Map only known routing keys, including the activity-prefixed claim key."""
+    if not isinstance(value, str):
+        return value
+    match = re.fullmatch(r'((?:(?:reading|writing|translation|sentence):)?(?:story|reading|writing|translation|sentence)):([1-9][0-9]*)', value)
+    if not match:
+        return value
+    prefix = match[1]
+    table = {'story': 'saved_stories', **ACTIVITY_NAMES}[prefix.rsplit(':', 1)[-1]]
+    return prefix + ':' + str(_mapped(maps, table, int(match[2])))
+
+
 def transform(name, table, row, maps, schemas):
     result = dict(row)
     if name == 'comprehension_tasks':
@@ -126,13 +138,19 @@ def transform(name, table, row, maps, schemas):
     # IDs embedded in typed JSON are references. Do not replace arbitrary
     # numbers, Russian text, dates, answers or model output with matching digits.
     for column, value in row.items():
+        if name in ('sentences', 'translation_drafts', 'word_jumble_drafts') or (name in ('translation_attempts', 'word_jumble_attempts')
+                and column not in ('criterion_report_json', 'criterion_support_json')):
+            # Sentence wording, raw answers and tutor prose can themselves look
+            # like JSON. They are text, never a bag of typed foreign keys.
+            continue
         if isinstance(value, str) and value.lstrip().startswith(('{', '[')):
             try:
                 parsed = json.loads(value)
             except ValueError:
                 continue
             changed = _json_refs(parsed, maps)
-            if (name in ('activity_task_contracts', 'activity_criterion_reports', 'comprehension_tasks', 'comprehension_attempts')
+            if (name in ('activity_task_contracts', 'activity_criterion_reports', 'comprehension_tasks', 'comprehension_attempts', 'comprehension_support_receipts')
+                    or (name in ('translation_attempts', 'word_jumble_attempts') and column in ('criterion_report_json', 'criterion_support_json'))
                     or (name == 'speaking_reviews' and isinstance(parsed, dict) and 'audio_source' in parsed)):
                 # Assessment payloads are immutable and hash-bound. Their
                 # typed routing columns can move; their original content cannot.
@@ -142,21 +160,23 @@ def transform(name, table, row, maps, schemas):
             if changed != parsed:
                 result[column] = encode(changed)
     if name == 'activity_task_contracts':
-        if row['activity'] == 'writing':
+        if row['activity'] in ('writing', 'translation'):
             if not re.fullmatch(r'[1-9][0-9]*', row['task_key']):
-                raise ImportConflict('Writing criterion contract has an invalid task identity.')
-            result['task_key'] = str(_mapped(maps, 'writing_exercises', int(row['task_key'])))
-        elif row['activity'] not in ('curriculum_unit', 'speaking', 'comprehension'):
+                raise ImportConflict('Criterion contract has an invalid task identity.')
+            table_name = 'writing_exercises' if row['activity'] == 'writing' else 'sentences'
+            result['task_key'] = str(_mapped(maps, table_name, int(row['task_key'])))
+        elif row['activity'] not in ('curriculum_unit', 'speaking', 'comprehension', 'word_jumble'):
             raise ImportConflict('Activity criterion contracts need an explicit activity import adapter.')
     if name == 'activity_criterion_reports':
         contracts = {item['id']: item for item in schemas['activity_task_contracts']['rows']}
         contract = contracts.get(row['contract_id'])
         if contract is None or contract['profile_id'] != row['profile_id']:
             raise ImportConflict('Criterion report has no matching owned contract.')
-        if contract['activity'] == 'writing':
+        if contract['activity'] in ('writing', 'translation', 'word_jumble'):
             if not re.fullmatch(r'[1-9][0-9]*', row['source_key']):
-                raise ImportConflict('Writing criterion report has an invalid attempt identity.')
-            result['source_key'] = str(_mapped(maps, 'writing_attempts', int(row['source_key'])))
+                raise ImportConflict('Criterion report has an invalid attempt identity.')
+            table_name = {'writing': 'writing_attempts', 'translation': 'translation_attempts', 'word_jumble': 'word_jumble_attempts'}[contract['activity']]
+            result['source_key'] = str(_mapped(maps, table_name, int(row['source_key'])))
         elif contract['activity'] == 'speaking':
             if row['source_key'] != contract['task_key']:
                 raise ImportConflict('Speaking criterion evidence belongs to another recorded conversation.')
@@ -167,11 +187,16 @@ def transform(name, table, row, maps, schemas):
         value = row['content_key']
         if value.isdigit():
             result['content_key'] = str(_mapped(maps, target, int(value)))
+        else:
+            result['content_key'] = _activity_key(value, maps)
+    if name == 'progression_events':
+        source = re.fullmatch(r'(writing|translation|word-jumble)-attempt:([1-9][0-9]*)', row['source_key'])
+        if source:
+            table_name = {'writing': 'writing_attempts', 'translation': 'translation_attempts', 'word-jumble': 'word_jumble_attempts'}[source[1]]
+            result['source_key'] = source[1] + '-attempt:' + str(_mapped(maps, table_name, int(source[2])))
     if name in ('progression_claims', 'reward_events'):
         column = 'content_key' if name == 'progression_claims' else 'reward_key'
-        match = re.fullmatch(r'(reading|writing|translation|sentence):(\d+)', row[column])
-        if match:
-            result[column] = match[1] + ':' + str(_mapped(maps, ACTIVITY_NAMES[match[1]], int(match[2])))
+        result[column] = _activity_key(row[column], maps)
     return result
 
 
@@ -349,7 +374,9 @@ def build_account_import(local_path, hosted_path, output_path, *, local_audio_ro
 
     Inputs must be offline snapshots. Speaking criterion reports additionally
     require local_audio_root so original recording bytes can be verified. Media
-    copying remains separate. The returned report contains counts and ID
+    copying remains separate. Generated Comprehension audio retains its frozen
+    hash and URL; this artifact does not copy or attest to those media bytes.
+    The returned report contains counts and ID
     mappings, not lesson content or credentials. Metadata alternatives are
     archived inside the private output database.
     """

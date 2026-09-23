@@ -26,6 +26,7 @@
   </div>
   {% if attempt.example %}<details class="sentence-suggestion"><summary>{{ ui_t('word_jumble.suggestion') }}</summary><p lang="ru">{{ attempt.example }}</p></details>{% endif %}
   {% else %}<p class="sentence-old-feedback">{{ attempt.feedback }}</p>{% endif %}
+  {% include '_sentence_criterion_feedback.html' %}
 {% endmacro %}
 {% if game.attempts %}
 {% set latest = game.attempts[0] %}
