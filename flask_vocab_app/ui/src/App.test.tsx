@@ -19,7 +19,7 @@ describe('Russian Arcade activity home', () => {
     const fetch=vi.fn((url:string)=>response(url==='/api/v1/course' ? course : {profile_id:'personal',balance:0,course,skill:{status:'not_calibrated'}}));
     vi.stubGlobal('fetch',fetch);render(<App initialProfile={{id:'personal',display_name:'Learner'}} initialOnboarding={{profile_id:'personal',coins_introduced:false,progress_introduced:false}}/>);
     expect(await screen.findByRole('heading',{name:'The little post office',level:1})).toBeTruthy();
-    expect(screen.getByRole('button',{name:'Test out of this chapter →'})).toBeTruthy();
+    expect(screen.getByRole('button',{name:'Test out of this milestone →'})).toBeTruthy();
     expect(screen.queryByRole('heading',{name:'Your first delivery'})).toBeNull();
     expect(fetch.mock.calls.some(([url])=>url==='/api/v1/course')).toBe(true);
     expect(fetch.mock.calls.some(([url])=>url.startsWith('/api/v1/journey'))).toBe(false);

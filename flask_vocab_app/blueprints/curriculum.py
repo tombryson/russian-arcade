@@ -2,7 +2,9 @@
 from flask import Blueprint, session
 
 from services.curriculum import band_summaries
+from services.course_progression import course_catalogue
 from services.speaking_curriculum import scenario_for_topic
+from utils.course_context import selected_course_progress
 from utils.household_access import access_policy
 from utils.shell import render_page
 
@@ -14,8 +16,18 @@ def create_curriculum_blueprint():
     @access_policy('public')
     def index():
         language = 'ru' if session.get('ui_lang') == 'ru' else 'en'
+        progress = selected_course_progress()
+        bands = band_summaries(language)
+        chapters = progress['chapters'] if progress else course_catalogue()['chapters']
+        topics = {topic['id']: topic for band in bands for topic in band['topics']}
+        milestones = []
+        for chapter in chapters:
+            topic_ids = ([topic['id'] for topic in chapter['topics']]
+                         if progress else chapter['topic_ids'])
+            milestones.append({**chapter, 'curriculum_topics': [topics[topic_id] for topic_id in topic_ids]})
         return render_page('curriculum.html', active_page='curriculum',
-                           bands=band_summaries(language), language=language,
+                           bands=bands, language=language, milestones=milestones,
+                           course_progress=progress,
                            speaking_scenario=scenario_for_topic)
 
     return blueprint

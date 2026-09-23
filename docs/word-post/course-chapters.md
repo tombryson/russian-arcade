@@ -1,6 +1,6 @@
 # Guided A1 chapters
 
-Status: **shipped course version 1**. The [journey and milestones build plan](journey-milestones-build-plan.md) specifies the next revision: a home-first route, letters received by Barsik and a cumulative A1 ending. That plan has not yet changed the behaviour documented here.
+Status: **published course release `a1-v1`**. The [journey and milestones build plan](journey-milestones-build-plan.md) specifies the next revision: a home-first route, letters received by Barsik and a cumulative A1 ending. Its release foundation is implemented; the revised story remains an unpublished draft. The content and assessment rules documented here are unchanged.
 
 The guided course has four authored A1 chapters. It uses the existing [curriculum](../curriculum.md) and preserves free practice, Lingocoins, game ownership, historical skill ratings and FSRS schedules. These course rules supersede the earlier coin-gated campaign and skill-rating header proposals where they describe the main guided route.
 
@@ -49,3 +49,15 @@ Variant IDs are `<chapter-id>-v1`, `-v2` and `-v3`, using chapter IDs `a1-post-o
 ## Separate systems
 
 Coins continue to reward eligible participation under the existing limits. The game shop retains its permanent purchases and prices. Course chapter readiness and passes neither spend coins nor depend on the wallet. Historical journey receipts remain saved; they do not establish chapter comprehension. FSRS still schedules vocabulary reviews, and provisional skill histories remain separate evidence.
+
+## Release persistence
+
+Migration 045 assigns existing learners and assessments to `a1-v1`. Passes are keyed by profile, release and chapter. Existing A1 completion creates a durable A2 access record, so a later course revision cannot remove that earned access.
+
+The published release registry checks the original content hash. Saved assessment content, answer receipts and rubric versions are preserved. Old requests that did not send a release ID still support retries without creating another attempt or award. New requests include the intended release and reject a stale enrolment.
+
+Assessment responses identify the saved attempt's release separately from the learner's current course. The interface refreshes an old receipt before updating the current journey. Merely viewing Curriculum, Journey or Profile does not enrol a learner in a new release.
+
+Deploy schema 045 with the release-aware application code. Older server code writes the previous pass-table layout and is not compatible with this schema. Rollback should change course routing within a compatible build. Preserve all new learner work before considering a database restore; see the [migration and rollback procedure](journey-milestones-build-plan.md#11-migration-of-existing-learners).
+
+The offline account importer accepts automatic v1 enrolment records from an unused hosted workspace. It retains the local enrolment and archives differences. Conflicting releases, hosted assessments or earned continuation rights still require a separate merge policy; they are never silently discarded or combined.

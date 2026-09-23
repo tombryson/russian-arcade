@@ -1,10 +1,24 @@
 # Journey and curriculum milestones: build plan
 
-Status: **implementation plan, 22 September 2026**. The narrative direction comes from the product discussion. Technical designs, assessment counts and rollout choices below are proposed implementation defaults. They are not changes already running in the application.
+Status: **implementation started, 23 September 2026**. The release foundation and milestone views are implemented on `codex/journey-milestones`. The revised story is an internal draft. The published A1 course remains `a1-v1`; this branch has not been deployed.
 
 Baseline reviewed: public repository commit `8c98e12`, schema 044. The [chapter specification](course-chapters.md) describes that shipped version. This document governs the next journey revision where the two differ. The [curriculum](../curriculum.md) remains the authority for topics, language targets and activity levels.
 
 Key sections: [A1 sequence](#4-revised-a1-sequence) · [Assessment](#6-received-letter-assessments) · [Interface](#7-learner-facing-structure) · [Technical design](#9-data-and-service-design) · [Migration](#11-migration-of-existing-learners) · [Build phases](#12-implementation-sequence).
+
+## Implementation status
+
+| Area | Implemented in the first pass | Still needed |
+| --- | --- | --- |
+| Course releases | Schema 045 adds release-specific enrolment, attempts and passes. Earned A2 access is retained. Existing content and saved answer receipts are unchanged. | A reviewed switch to the complete new release; no learner is moved to the draft. |
+| Curriculum targets | 110 stable A1 target IDs cover the existing objectives and grammar. Targets distinguish understanding, selected responses, writing and speaking. | Activity adapters that record evidence from individual responses. Intended generation targets are not proof of success. |
+| Milestone views | Curriculum groups A1 topics by the learner's current course. Journey and Profile show permanent milestone counts separately from preparation. | Revised route artwork and the full received-letter presentation. |
+| Home pilot | Three internal assessment variants, teaching examples and a target map. Offline validation checks question contracts, coverage, support and media requirements. | Narrative and language review, recordings and a playable internal pilot. |
+| Remaining sections | Ordered section definitions and a 16-question cumulative blueprint covering all ten topics. | Post office, Market and Leaving town teaching, three variants each, recordings and review. |
+
+The new draft is not registered as a playable course. Validation rejects publication while sections, recordings or editorial review are incomplete. These checks verify the content structure; they do not establish that the Russian or story is suitable for learners.
+
+Next, add response-level evidence to existing activities and finish the Home pilot with reviewed content and audio. Then author the remaining sections. Publish only when the complete route and the migration checks pass. Coins, game purchases, vocabulary processing and flashcard schedules remain separate.
 
 ## 1. Product direction
 
@@ -536,6 +550,9 @@ These do not block writing the specification or starting versioning work. Resolv
 - [Curriculum catalogue](../../flask_vocab_app/data/curriculum.json) and [curriculum service](../../flask_vocab_app/services/curriculum.py).
 - [Shipped chapter content](../../flask_vocab_app/data/course_chapters.json) and [current chapter contract](course-chapters.md).
 - [Course progression](../../flask_vocab_app/services/course_progression.py), [course evidence](../../flask_vocab_app/services/course_evidence.py) and [schema 044](../../flask_vocab_app/migrations/044_course_progression.sql).
+- [Published release registry](../../flask_vocab_app/services/course_releases.py) and [release migration 045](../../flask_vocab_app/migrations/045_course_releases.sql).
+- [A1 target catalogue](../../flask_vocab_app/data/curriculum_targets.json) and [target validation](../../flask_vocab_app/services/curriculum_targets.py).
+- [Internal revised-course draft](../../flask_vocab_app/data/course_drafts/a1-journey-v2.json), [authoring validation](../../flask_vocab_app/services/course_authoring.py) and [content tests](../../flask_vocab_app/tests/test_course_authoring.py).
 - [Progression API](../../flask_vocab_app/blueprints/progression.py) and [shared reward service](../../flask_vocab_app/services/progression.py).
 - [Curriculum page](../../flask_vocab_app/templates/curriculum.html), [Journey UI](../../flask_vocab_app/ui/src/CourseJourney.tsx) and [header progress](../../flask_vocab_app/ui/src/SkillProgress.tsx).
 - [Introductory practice bridge](../../flask_vocab_app/services/first_steps_practice.py) and [story vocabulary](../../flask_vocab_app/services/story_vocabulary.py).

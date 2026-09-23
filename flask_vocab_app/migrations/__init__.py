@@ -49,7 +49,7 @@ def upgrade_database(db_path, backup=True):
                 snapshot.execute('PRAGMA journal_mode=DELETE')
         # SQLite's supported table-rebuild procedure changes FK enforcement
         # before BEGIN, then checks all references before the atomic commit.
-        rebuild = any(p.name in ('009_native_flashcards.sql', '012_four_review_ratings.sql', '017_lesson_word_selection.sql', '032_journey_game_library.sql') for p in pending)
+        rebuild = any(p.name in ('009_native_flashcards.sql', '012_four_review_ratings.sql', '017_lesson_word_selection.sql', '032_journey_game_library.sql', '045_course_releases.sql') for p in pending)
         conn.execute('PRAGMA foreign_keys=' + ('OFF' if rebuild else 'ON'))
         try:
             conn.execute('BEGIN IMMEDIATE')

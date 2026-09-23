@@ -35,7 +35,7 @@
       const preview=new URLSearchParams(window.location.search).get('progress-preview')==='50';
       const progress=preview ? .5 : chapter && Number.isFinite(chapter.progress) ? Math.max(0,Math.min(1,chapter.progress)) : 0;
       const previous=railStates.get(rail);
-      const key=chapter ? `${data.profile_id}:${course.version}:${chapter.id}` : '';
+      const key=chapter ? `${data.profile_id}:${course.release_id ?? course.version}:${chapter.id}` : '';
       const moving=!!(!preview && chapter && previous?.key===key && progress>previous.progress);
       if (previous?.timer) clearTimeout(previous.timer);
       rail.classList.toggle('is-moving',moving);

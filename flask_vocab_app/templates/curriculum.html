@@ -15,42 +15,22 @@
         <h2 id="heading-{{ band.id }}">{{ band.id|replace('-', '–') }} <span>{{ band.label }}</span></h2>
         <p>{{ band.summary }}</p>
       </header>
-      <div class="curriculum-topic-list">
-        {% for topic in band.topics %}
-        <details class="curriculum-topic" id="topic-{{ topic.id }}">
-          <summary><span class="curriculum-order">{{ '%02d'|format(topic.order) }}</span><h3>{{ topic.title_ru if russian else topic.title_en }}</h3><span class="curriculum-expand" aria-hidden="true">+</span></summary>
-          <div class="curriculum-topic-content">
-            <div class="curriculum-objectives" lang="en">
-              <h4>{{ 'Learning objectives' }}</h4>
-              <ul>{% for objective in topic.objectives %}<li>{{ objective }}</li>{% endfor %}</ul>
-              <h4>Grammar</h4>
-              <ul>{% for item in topic.grammar_focus %}<li>{{ item }}</li>{% endfor %}</ul>
-            </div>
-            <div class="curriculum-vocabulary">
-              <h4>{{ 'Лексика' if russian else 'Vocabulary' }}</h4>
-              <p lang="ru">{{ topic.lemmas|join(' · ') }}</p>
-              {% if topic.phrases %}<h4>{{ 'Выражения' if russian else 'Useful expressions' }}</h4><p lang="ru">{{ topic.phrases|join(' · ') }}</p>{% endif %}
-              <details class="curriculum-speaking-brief"><summary>{{ 'Задание для разговора (на английском)' if russian else 'Speaking task' }}</summary><p lang="en">{{ topic.practice.speaking }}</p></details>
-            </div>
-            <div class="curriculum-practice">
-              <h4>{{ 'Практика' if russian else 'Practise this topic' }}</h4>
-              {% set levels = ['C1', 'C2'] if band.id == 'C1-C2' else [band.id] %}
-              {% for level in levels %}
-              <div class="curriculum-practice-links">
-                {% if levels|length > 1 %}<strong>{{ level }}</strong>{% endif %}
-                <a href="/comprehension?topic={{ topic.id }}&amp;level={{ level }}" hx-boost="false">{{ 'Чтение' if russian else 'Reading' }}</a>
-                <a href="/writing?topic={{ topic.id }}&amp;level={{ level }}" hx-boost="false">{{ 'Письмо' if russian else 'Writing' }}</a>
-                <a href="/sentences?topic={{ topic.id }}&amp;level={{ level }}" hx-boost="false">{{ 'Перевод' if russian else 'Translation' }}</a>
-                <a href="/word_jumble?topic={{ topic.id }}&amp;level={{ level }}" hx-boost="false">{{ 'Составь предложение' if russian else 'Word Jumble' }}</a>
-                {% set scenario = speaking_scenario(topic.id, level) %}
-                {% if scenario %}<a href="/#speaking/scenario/{{ scenario }}?level={{ level }}" hx-boost="false">{{ 'Разговорная практика' if russian else 'Speaking' }}</a>{% endif %}
-              </div>
-              {% endfor %}
-            </div>
+      {% if band.id == 'A1' %}
+      {% if course_progress %}<p class="curriculum-milestone-count" data-profile-id="{{ course_progress.profile_id }}">{{ band.id }} · {% if russian %}Пройдено этапов: {{ course_progress.completed_milestones }} из {{ milestones|length }}{% else %}{{ course_progress.completed_milestones }} of {{ milestones|length }} milestones complete{% endif %}</p>{% endif %}
+      <div class="curriculum-milestones">
+        {% for milestone in milestones %}
+        <details class="curriculum-milestone" id="milestone-{{ milestone.id }}"{% if course_progress and course_progress.current_chapter_id == milestone.id %} open{% endif %}>
+          <summary><span class="curriculum-milestone-number" aria-hidden="true">{{ '✓' if milestone.status|default('') == 'passed' else milestone.number }}</span><h3>{{ milestone.title_ru if russian else milestone.title }}</h3>{% if course_progress %}<span class="curriculum-milestone-status">{% if milestone.status == 'passed' %}{{ 'Пройдено' if russian else 'Passed' }}{% elif milestone.status == 'ready' %}{{ 'Письмо готово' if russian else 'Letter ready' }}{% elif milestone.status == 'locked' %}{{ 'Впереди' if russian else 'Coming next' }}{% else %}{{ 'Практика' if russian else 'In practice' }}{% endif %}</span>{% endif %}<span class="curriculum-expand" aria-hidden="true">+</span></summary>
+          <div class="curriculum-milestone-content">
+            <div class="curriculum-milestone-intro"><p>{{ milestone.intro_ru if russian else milestone.intro }}</p><a href="/#journey/chapter/{{ milestone.id }}" hx-boost="false">{{ 'Открыть этап' if russian else 'Open milestone' }} →</a></div>
+            <div class="curriculum-topic-list">{% for topic in milestone.curriculum_topics %}{% include '_curriculum_topic.html' %}{% endfor %}</div>
           </div>
         </details>
         {% endfor %}
       </div>
+      {% else %}
+      <div class="curriculum-topic-list">{% for topic in band.topics %}{% include '_curriculum_topic.html' %}{% endfor %}</div>
+      {% endif %}
     </section>
     {% endfor %}
   </div>

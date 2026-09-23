@@ -62,7 +62,17 @@ The vocabulary database keeps its lemma/form relationships and numeric difficult
 
 The [guided A1 course](word-post/course-chapters.md) groups the ten A1 topics into four chapters and records successful practice coverage separately from independent checkpoint passes. Readiness needs two distinct tasks per topic at 70% or higher and two activity families across the chapter; supported practice is allowed. A checkpoint requires 80% or higher, both essential details, listening playback and no revealed hints or transcript. Learners may challenge the current chapter early. These are application pilot rules, not a CEFR placement examination or certification. All four passes unlock the A2 guided level; authored A2 chapters remain future content and higher-level free practice stays available.
 
-The [journey and milestones build plan](word-post/journey-milestones-build-plan.md) describes the next course revision. It groups A1 into Home, Post office, Market and Leaving town, adds stable objective-level evidence, and defines a cumulative received-letter assessment. These are planned changes; the shipped chapter rules above remain in effect.
+The [journey and milestones build plan](word-post/journey-milestones-build-plan.md) describes the next course revision: Home, Post office, Market and Leaving town, followed by a cumulative received-letter assessment. The revised content is an internal draft. The published chapter rules above remain in effect.
+
+The implementation now groups the Curriculum page by milestones in the learner's enrolled course. It shows preparation and permanent passes without creating an account for a public visitor. Journey and Profile read the same saved progress. This means existing learners continue to see their original route, rather than progress assigned to renamed sections.
+
+### A1 assessment targets
+
+[`curriculum_targets.json`](../flask_vocab_app/data/curriculum_targets.json) assigns stable IDs to 110 A1 targets drawn from the existing 20 objectives and 30 grammar focuses. Separate targets describe reading, listening, selecting a response, writing and speaking. They do not add new topics or change word difficulty.
+
+The target service validates those references against the canonical curriculum. A1 activity prompts receive the relevant intended targets. A selected response cannot establish independent writing or speaking, and an overall activity score cannot establish every target named in its prompt.
+
+Response-level evidence storage and assessment adapters are the next implementation step. Historical scores continue to count under the published topic-preparation rules. They have not been converted into objective-level mastery.
 
 ## Topic reference
 

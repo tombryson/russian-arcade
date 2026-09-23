@@ -26,13 +26,13 @@ export function SkillProgress({progression,language='en',introductory=false}:{pr
   const label=preview ? t('50% layout preview; saved progress unchanged','Предпросмотр 50%; сохранённый прогресс не изменён') : chapter ? `${chapterLabel} · ${Math.round(progress*100)}% ${t('complete','пройдено')}` : unavailable ? t('Chapter progress unavailable','Прогресс главы недоступен') : !data && !introductory ? t('Loading chapter progress…','Загружаем прогресс главы…') : '';
   const linkLabel=[label,t('Open your journey','Открыть путешествие')].filter(Boolean).join('. ');
   useLayoutEffect(()=>{
-    const key=data && course && chapter ? `${data.profile_id}:${course.version}:${chapter.id}` : '';
+    const key=data && course && chapter ? `${data.profile_id}:${course.release_id ?? course.version}:${chapter.id}` : '';
     const last=previous.current;
     const shouldMove=!!(!preview && chapter && last && last.key===key && progress>last.progress);
     previous.current=chapter ? {key,progress} : undefined;
     setMoving(shouldMove);
     if (shouldMove) {const timer=setTimeout(()=>setMoving(false),800);return ()=>clearTimeout(timer);}
-  },[preview,data?.profile_id,course?.version,chapter?.id,progress]);
+  },[preview,data?.profile_id,course?.version,course?.release_id,chapter?.id,progress]);
   return <div class={`skill-rail${moving ? ' is-moving' : ''}${!data && !preview && !introductory ? ' is-unavailable' : ''}`} style={{'--skill-progress':progress}}>
     <a class="skill-rail-link" href="/#journey" aria-label={linkLabel}>
       <span class="skill-rail-track" aria-hidden="true"><span class="skill-rail-fill" /></span>

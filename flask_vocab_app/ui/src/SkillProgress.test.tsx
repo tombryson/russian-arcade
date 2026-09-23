@@ -39,6 +39,14 @@ describe('Header chapter progress',()=>{
     const next=data(.9,'another');next.course!.version='a1-v2';next.course!.current_chapter_id='chapter-2';next.course!.chapters[1].progress=.2;
     rerender(<SkillProgress progression={source(next)}/>);expect(moving()).toBe(false);
   });
+  it('does not animate a release change as newly earned progress',()=>{
+    const first=data(.1);first.course!.release_id='a1-v1';
+    const {container,rerender}=render(<SkillProgress progression={source(first)}/>);
+    const next=data(.8);next.course!.release_id='a1-journey-v2';
+    rerender(<SkillProgress progression={source(next)}/>);
+    expect(container.querySelector('.skill-rail')!.classList.contains('is-moving')).toBe(false);
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('80');
+  });
   it.each([[1.3,'100'],[-.2,'0'],[Number.NaN,'0']])('bounds progress %s and retains saved data during temporary errors', (progress,expected)=>{
     render(<SkillProgress progression={source(data(progress),'Offline')}/>);expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe(expected);
   });

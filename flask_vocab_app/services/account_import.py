@@ -42,6 +42,9 @@ HOSTED_OVERLAY_TABLES = CATALOGUE_TABLES | AUTH_TABLES | {
     'live_conversation_recordings', 'live_conversation_sessions',
     'speaking_reviews', 'step_conversation_answers', 'step_conversation_sessions',
     'writing_details', 'writing_exercises', 'writing_drafts',
+    # Only unused schema-044 default enrolments pass the explicit check below.
+    # Course attempts, evidence, passes and continuation rights remain guarded.
+    'course_enrolments',
 }
 
 
@@ -178,6 +181,11 @@ def _merge_duplicate(name, local, hosted):
             values = [value for value in (local[field], hosted[field]) if value is not None]
             merged[field] = min(values) if values else None
         return merged, 'Keep completed introductions from either workspace.'
+    if name == 'course_enrolments':
+        if (not _baseline_course_enrolment(hosted)
+                or any(local[field] != hosted[field] for field in ('profile_id', 'band', 'release_id'))):
+            raise ImportConflict('Conflicting course_enrolments record; course release choices require a specific mapping.')
+        return local, 'Keep the local course enrolment; archive the hosted automatic schema-044 default.'
     if name == 'users' and hosted['lingocoins'] == 0 and hosted['elo_rating'] == 1000:
         return local, 'Keep the existing local legacy balance; hosted legacy user is unused.'
     if name in ('words', 'forms'):
@@ -191,6 +199,23 @@ def _merge_duplicate(name, local, hosted):
                 merged[field] = hosted[field]
         return merged, 'Keep enriched local vocabulary; retain alternate metadata in import archive.'
     raise ImportConflict(f'Conflicting {name} record; no automatic merge policy exists.')
+
+
+def _baseline_course_enrolment(row):
+    """Recognise migration metadata, never an explicit course choice or pass."""
+    return (row['band'] == 'A1' and row['release_id'] == 'a1-v1'
+            and row['migration_source'] == 'schema-044')
+
+
+def _assert_baseline_course_enrolments(tables):
+    # Migration045 creates these rows even for an entirely unused workspace.
+    # Timestamps differ between snapshots, so preserve the local enrolment and
+    # archive that metadata difference. Unsupported hosted history is still
+    # rejected by the ordinary table gate, including earned continuation rights.
+    profiles = {row['id'] for row in tables.get('learning_profiles', {}).get('rows', [])}
+    for row in tables.get('course_enrolments', {}).get('rows', []):
+        if not _baseline_course_enrolment(row) or row['profile_id'] not in profiles:
+            raise ImportConflict('Hosted history needs an additional merge policy: course_enrolments')
 
 
 def _repair_card_projections(merged):
@@ -250,6 +275,7 @@ def build_account_import(local_path, hosted_path, output_path):
             local, hosted = inspect(left), inspect(right)
             _assert_inactive_jobs(local)
             _assert_inactive_jobs(hosted)
+            _assert_baseline_course_enrolments(hosted)
             unsupported = [name for name, table in hosted.items() if table['rows'] and name not in HOSTED_OVERLAY_TABLES]
             if unsupported:
                 raise ImportConflict('Hosted history needs an additional merge policy: ' + ', '.join(sorted(unsupported)))

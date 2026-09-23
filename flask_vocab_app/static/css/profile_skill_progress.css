@@ -1,3 +1,6 @@
+.profile-course-progress { display:flex; align-items:baseline; justify-content:space-between; gap:12px 24px; flex-wrap:wrap; margin:24px 0; font-size:15px; }
+.profile-course-progress p { margin:0; }
+.profile-course-progress a { color:inherit; text-underline-offset:4px; }
 .profile-skill-progress {
   margin:36px 0;
   padding:28px 30px 22px;

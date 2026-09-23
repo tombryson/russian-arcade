@@ -7,6 +7,7 @@ import unittest
 from contracts.flashcards import objective
 from migrations import upgrade_database
 from services.account_import import ImportConflict, _allocate, build_account_import, digest
+from services import course_progression as course
 
 
 class AccountImportTests(unittest.TestCase):
@@ -83,6 +84,87 @@ class AccountImportTests(unittest.TestCase):
             local, hosted = conn.execute("SELECT local_row_json,hosted_row_json FROM account_import_archive WHERE table_name='words'").fetchone()
             self.assertEqual(json.loads(local)['mnemonic'], 'local letter')
             self.assertEqual(json.loads(hosted)['mnemonic'], 'hosted letter')
+
+    def test_automatic_course_enrolments_keep_local_identity_and_archive_timestamps(self):
+        with sqlite3.connect(self.local) as conn:
+            conn.execute("UPDATE course_enrolments SET started_at=100 WHERE profile_id='personal-learning'")
+        with sqlite3.connect(self.hosted) as conn:
+            conn.execute("UPDATE course_enrolments SET started_at=200 WHERE profile_id='personal-learning'")
+        before = (digest(self.local), digest(self.hosted))
+        report = build_account_import(self.local, self.hosted, self.output)
+        self.assertEqual(before, (digest(self.local), digest(self.hosted)))
+        self.assertEqual(report['metadata_conflicts_archived']['course_enrolments'], 1)
+        with sqlite3.connect(self.output) as conn:
+            self.assertEqual(conn.execute("SELECT release_id,band,started_at,migration_source FROM course_enrolments WHERE profile_id='personal-learning'").fetchone(),
+                             ('a1-v1', 'A1', 100, 'schema-044'))
+            local, hosted = conn.execute("SELECT local_row_json,hosted_row_json FROM account_import_archive WHERE table_name='course_enrolments'").fetchone()
+            self.assertEqual(json.loads(local)['started_at'], 100)
+            self.assertEqual(json.loads(hosted)['started_at'], 200)
+            self.assertEqual(report['counts']['course_enrolments']['merged'], report['counts']['course_enrolments']['local'])
+
+    def test_local_course_history_and_earned_access_survive_baseline_hosted_overlay(self):
+        with sqlite3.connect(self.local) as conn:
+            conn.execute('PRAGMA foreign_keys=ON')
+            # A local learner's explicitly started course is authoritative over
+            # an unused hosted migration default for the same release.
+            conn.execute("UPDATE course_enrolments SET started_at=100,migration_source=NULL WHERE profile_id='personal-learning'")
+            for chapter in course.course_catalogue()['chapters']:
+                attempt = course.checkpoint_start(conn, 'personal-learning', chapter['id'], 'start-' + chapter['id'], True)
+                frozen = json.loads(conn.execute('SELECT frozen_json FROM course_checkpoint_attempts WHERE id=?', (attempt['id'],)).fetchone()[0])
+                answers = {question['id']: question['answer'] for question in frozen['variant']['questions']}
+                course.checkpoint_listened(conn, 'personal-learning', attempt['id'])
+                course.checkpoint_answer(conn, 'personal-learning', attempt['id'], answers, 'answer-' + chapter['id'])
+            tables = [row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'course_%'")]
+            saved = {table: sorted(conn.execute('SELECT * FROM ' + table).fetchall(), key=repr) for table in tables}
+        before = (digest(self.local), digest(self.hosted))
+        build_account_import(self.local, self.hosted, self.output)
+        self.assertEqual(before, (digest(self.local), digest(self.hosted)))
+        with sqlite3.connect(self.output) as conn:
+            for table in tables:
+                with self.subTest(table=table):
+                    self.assertEqual(sorted(conn.execute('SELECT * FROM ' + table).fetchall(), key=repr), saved[table])
+            state = course.course_snapshot(conn, 'personal-learning')
+            self.assertEqual(state['completed_milestones'], 4)
+            self.assertEqual(state['unlocked_levels'], ['A1', 'A2'])
+            self.assertEqual(conn.execute('PRAGMA foreign_key_check').fetchall(), [])
+
+    def test_conflicting_local_course_release_is_never_rebound_to_hosted_default(self):
+        with sqlite3.connect(self.local) as conn:
+            conn.execute("UPDATE course_enrolments SET release_id='a1-next',migration_source='a1-v1' WHERE profile_id='personal-learning'")
+        before = (digest(self.local), digest(self.hosted))
+        with self.assertRaisesRegex(ImportConflict, 'Conflicting course_enrolments record'):
+            build_account_import(self.local, self.hosted, self.output)
+        self.assertFalse(self.output.exists())
+        self.assertEqual(before, (digest(self.local), digest(self.hosted)))
+
+    def test_nonbaseline_hosted_enrolments_require_an_explicit_policy_even_if_identical(self):
+        for release_id, source in [('a1-v1', None), ('a1-next', 'a1-v1'), ('a1-v1', 'operator-migration')]:
+            with self.subTest(release_id=release_id, source=source):
+                for path in (self.local, self.hosted):
+                    with sqlite3.connect(path) as conn:
+                        conn.execute("UPDATE course_enrolments SET release_id=?,migration_source=? WHERE profile_id='personal-learning'", (release_id, source))
+                before = (digest(self.local), digest(self.hosted))
+                with self.assertRaisesRegex(ImportConflict, 'additional merge policy: course_enrolments'):
+                    build_account_import(self.local, self.hosted, self.output)
+                self.assertFalse(self.output.exists())
+                self.assertEqual(before, (digest(self.local), digest(self.hosted)))
+
+    def test_hosted_course_attempts_remain_unsupported(self):
+        with sqlite3.connect(self.hosted) as conn:
+            chapter = course.course_catalogue()['chapters'][0]['id']
+            course.checkpoint_start(conn, 'personal-learning', chapter, 'hosted-start', True)
+        with self.assertRaisesRegex(ImportConflict, 'additional merge policy: .*course_checkpoint_attempts'):
+            build_account_import(self.local, self.hosted, self.output)
+        self.assertFalse(self.output.exists())
+
+    def test_hosted_earned_access_requires_a_policy_even_without_attempt_history(self):
+        with sqlite3.connect(self.hosted) as conn:
+            conn.execute("INSERT INTO course_continuation_entitlements VALUES ('personal-learning','A2','a1-v1','legacy-course-completion',100)")
+        before = (digest(self.local), digest(self.hosted))
+        with self.assertRaisesRegex(ImportConflict, 'additional merge policy: course_continuation_entitlements'):
+            build_account_import(self.local, self.hosted, self.output)
+        self.assertFalse(self.output.exists())
+        self.assertEqual(before, (digest(self.local), digest(self.hosted)))
 
     def test_unsupported_hosted_progress_aborts_without_output(self):
         with sqlite3.connect(self.hosted) as conn:

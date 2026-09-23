@@ -2,8 +2,8 @@ import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {fireEvent,render,screen,waitFor} from '@testing-library/preact';
 import {CourseJourney,type CourseData,type CourseAttempt} from './CourseJourney';
 import type {ProgressionData} from './Progression';
-const course=(patch:Partial<CourseData>={}):CourseData=>({version:1,profile_id:'learner',band:'A1',unlocked_levels:['A1'],current_chapter_id:'first',progress:.2,completed:false,chapters:Array.from({length:4},(_,index)=>({id:index===0 ? 'first' : `chapter-${index+1}`,number:index+1,title:['A small message','The market','A new address','Your original letter'][index],title_ru:'Короткое сообщение',intro:index===0 ? 'Meet Barsik’s helpers. Your original letter stays sealed.' : 'The next part of your journey.',intro_ru:'Познакомьтесь с помощниками Барсика.',status:index===0 ? 'practice' : 'locked',progress:index===0 ? .2 : 0,activity_count:0,required_activity_count:2,last_attempt_id:null,objectives:[{en:'Understand a short greeting.',ru:'Понять короткое приветствие.'}],preparation:[{topic_id:'greetings',title:'Say hello',title_ru:'Приветствия',explanation:'Use this phrase to introduce yourself.',explanation_ru:'Так можно представиться.',examples:[{ru:'Меня зовут Анна.',en:'My name is Anna.'}]}],topics:[{id:'greetings',title:'Greetings',title_ru:'Приветствия',completed:false,successful_tasks:1,required_tasks:2,links:[{activity:'reading',label:'Read a greeting',label_ru:'Читать приветствие',href:'/reading?topic=greetings&difficulty=A1'}]}]})),...patch});
-const attempt=(patch:Partial<CourseAttempt>={}):CourseAttempt=>({id:'attempt-1',chapter_id:'first',chapter_number:1,title:'A small message',title_ru:'Короткое сообщение',letter:'Привет, Барсик! Меня зовут Анна.',letter_title:'A note for Barsik',letter_title_ru:'Записка для Барсика',glossary:[{ru:'привет',en:'hello'}],listening:{audio_url:'/static/audio/course/first.mp3'},questions:[{id:'read',kind:'reading',prompt:'Who wrote this message?',prompt_ru:'Кто написал сообщение?',choices:[{id:'anna',text:'Анна'},{id:'misha',text:'Миша'}]},{id:'listen',kind:'listening',prompt:'When is the meeting?',prompt_ru:'Когда встреча?',choices:[{id:'three',text:'В три часа'},{id:'four',text:'В четыре часа'}]},{id:'reply',kind:'response',prompt:'Choose your reply.',prompt_ru:'Выберите ответ.',choices:[{id:'yes',text:'Хорошо, спасибо!'},{id:'no',text:'До свидания!'}]}],status:'active',support_used:false,listened:false,course:course(),...patch});
+const course=(patch:Partial<CourseData>={}):CourseData=>({version:1,release_id:'a1-v1',chapter_count:4,completed_milestones:0,profile_id:'learner',band:'A1',unlocked_levels:['A1'],current_chapter_id:'first',progress:.2,completed:false,chapters:Array.from({length:4},(_,index)=>({id:index===0 ? 'first' : `chapter-${index+1}`,number:index+1,title:['A small message','The market','A new address','Your original letter'][index],title_ru:'Короткое сообщение',intro:index===0 ? 'Meet Barsik’s helpers. Your original letter stays sealed.' : 'The next part of your journey.',intro_ru:'Познакомьтесь с помощниками Барсика.',status:index===0 ? 'practice' : 'locked',progress:index===0 ? .2 : 0,activity_count:0,required_activity_count:2,last_attempt_id:null,objectives:[{en:'Understand a short greeting.',ru:'Понять короткое приветствие.'}],preparation:[{topic_id:'greetings',title:'Say hello',title_ru:'Приветствия',explanation:'Use this phrase to introduce yourself.',explanation_ru:'Так можно представиться.',examples:[{ru:'Меня зовут Анна.',en:'My name is Anna.'}]}],topics:[{id:'greetings',title:'Greetings',title_ru:'Приветствия',completed:false,successful_tasks:1,required_tasks:2,links:[{activity:'reading',label:'Read a greeting',label_ru:'Читать приветствие',href:'/reading?topic=greetings&difficulty=A1'}]}]})),...patch});
+const attempt=(patch:Partial<CourseAttempt>={}):CourseAttempt=>({release_id:'a1-v1',band:'A1',chapter_count:4,id:'attempt-1',chapter_id:'first',chapter_number:1,title:'A small message',title_ru:'Короткое сообщение',letter:'Привет, Барсик! Меня зовут Анна.',letter_title:'A note for Barsik',letter_title_ru:'Записка для Барсика',glossary:[{ru:'привет',en:'hello'}],listening:{audio_url:'/static/audio/course/first.mp3'},questions:[{id:'read',kind:'reading',prompt:'Who wrote this message?',prompt_ru:'Кто написал сообщение?',choices:[{id:'anna',text:'Анна'},{id:'misha',text:'Миша'}]},{id:'listen',kind:'listening',prompt:'When is the meeting?',prompt_ru:'Когда встреча?',choices:[{id:'three',text:'В три часа'},{id:'four',text:'В четыре часа'}]},{id:'reply',kind:'response',prompt:'Choose your reply.',prompt_ru:'Выберите ответ.',choices:[{id:'yes',text:'Хорошо, спасибо!'},{id:'no',text:'До свидания!'}]}],status:'active',support_used:false,listened:false,course:course(),...patch});
 const progression=(profile='learner')=>({data:{profile_id:profile,course:course({profile_id:profile})} as ProgressionData,error:'',loading:false,refresh:vi.fn()});
 const result=(passed=true):CourseAttempt=>attempt({status:passed ? 'passed' : 'retry',listened:true,result:{score:passed ? 3 : 2,total:3,passed,feedback:[{question_id:'read',correct:true,answer:'anna',explanation:'Anna signs the message.',explanation_ru:'Анна подписала сообщение.'},{question_id:'listen',correct:passed,answer:'four',explanation:'The recording changes the meeting to four.',explanation_ru:'В записи встреча перенесена на четыре.'},{question_id:'reply',correct:true,answer:'yes',explanation:'Thank the helper.',explanation_ru:'Поблагодарите помощника.'}]}});
 function respond(value:unknown,ok=true) {return {ok,json:async()=>value};}
@@ -16,35 +16,55 @@ function mockServer(handler:(url:string,body:Record<string,unknown>|undefined)=>
 async function selectAnswers() {
   fireEvent.click(await screen.findByRole('radio',{name:'Анна'}));fireEvent.click(screen.getByRole('radio',{name:'В четыре часа'}));fireEvent.click(screen.getByRole('radio',{name:'Хорошо, спасибо!'}));
 }
-beforeEach(()=>sessionStorage.clear());afterEach(()=>vi.unstubAllGlobals());
+beforeEach(()=>{sessionStorage.clear();window.location.hash='';});afterEach(()=>vi.unstubAllGlobals());
 describe('Guided chapter journey',()=>{
   it('shows four chapters, honest locks and easy practice entry without opening the original letter',async()=>{
     mockServer();render(<CourseJourney progression={progression()}/>);
-    await screen.findByRole('heading',{name:'A letter to discover'});
-    expect(screen.getAllByText('Chapter 1 of 4 · In practice')).toHaveLength(2);
+    await screen.findByRole('heading',{name:'Your journey'});
+    expect(screen.getAllByText('Milestone 1 of 4 · In practice')).toHaveLength(2);
     expect(screen.getAllByText(/Coming next/)).toHaveLength(3);
-    expect(screen.getByRole('link',{name:'Continue chapter →'}).getAttribute('href')).toBe('#journey/chapter/first');
+    expect(screen.getByRole('link',{name:'Continue milestone →'}).getAttribute('href')).toBe('#journey/chapter/first');
     expect(screen.getByRole('link',{name:'Choose practice level'}).getAttribute('href')).toBe('/curriculum');
     expect(screen.getByRole('link',{name:'Browse all practice activities →'})).toBeTruthy();
     expect(screen.queryByText('Привет, Барсик! Меня зовут Анна.')).toBeNull();
   });
   it('teaches the topic and offers explicit early test-out with a stable request ID on retry',async()=>{
-    let fail=true;const fetch=mockServer((url)=>{if (url.endsWith('/checkpoint')) {if(fail) throw new Error('Connection lost');return attempt();}return course();});
+    let fail=true;const fetch=mockServer((url)=>{if (url.endsWith('/checkpoint')) {if(fail) throw new Error('Connection lost');return attempt();}if(url==='/api/v1/course/checkpoints/attempt-1') return attempt();return course();});
     render(<CourseJourney chapterId="first" progression={progression()}/>);
     expect(await screen.findByText('Use this phrase to introduce yourself.')).toBeTruthy();
     expect(screen.getByText('Меня зовут Анна.')).toBeTruthy();expect(screen.getByRole('link',{name:'Read a greeting →'}).getAttribute('href')).toContain('topic=greetings');
-    fireEvent.click(screen.getByRole('button',{name:'Test out of this chapter →'}));await screen.findByRole('alert');
-    fail=false;fireEvent.click(screen.getByRole('button',{name:'Test out of this chapter →'}));
+    fireEvent.click(screen.getByRole('button',{name:'Test out of this milestone →'}));await screen.findByRole('alert');
+    fail=false;fireEvent.click(screen.getByRole('button',{name:'Test out of this milestone →'}));
     await waitFor(()=>expect(window.location.hash).toBe('#journey/checkpoint/attempt-1'));
     const writes=fetch.mock.calls.filter(([,options])=>options?.method==='POST');expect(writes).toHaveLength(2);
-    const first=JSON.parse(String(writes[0][1]?.body));expect(first.challenge).toBe(true);expect(JSON.parse(String(writes[1][1]?.body))).toEqual(first);
+    const first=JSON.parse(String(writes[0][1]?.body));expect(first.challenge).toBe(true);expect(first.release_id).toBe('a1-v1');expect(JSON.parse(String(writes[1][1]?.body))).toEqual(first);
+    expect(fetch.mock.calls.filter(([url])=>url==='/api/v1/course/checkpoints/attempt-1')).toHaveLength(1);
+  });
+  it('reads the current enrolment after replaying a start receipt from an equally stale page',async()=>{
+    const receipt=attempt();
+    const canonical=attempt({course:course({release_id:'a1-journey-v2'})});
+    let saved=false;
+    const fetch=mockServer(url=>{
+      if(url.endsWith('/checkpoint')) {if(!saved){saved=true;throw new Error('Connection lost after saving');}return receipt;}
+      if(url==='/api/v1/course/checkpoints/attempt-1') return canonical;
+      return course();
+    });
+    render(<CourseJourney chapterId="first" progression={progression()}/>);
+    fireEvent.click(await screen.findByRole('button',{name:'Test out of this milestone →'}));
+    await screen.findByRole('alert');
+    fireEvent.click(screen.getByRole('button',{name:'Test out of this milestone →'}));
+    await waitFor(()=>expect(fetch.mock.calls.filter(([url])=>url==='/api/v1/course/checkpoints/attempt-1')).toHaveLength(1));
+    await waitFor(()=>expect(window.location.hash).toBe('#journey/checkpoint/attempt-1'));
+    const writes=fetch.mock.calls.filter(([,options])=>options?.method==='POST');
+    expect(writes).toHaveLength(2);expect(writes[0][1]?.body).toBe(writes[1][1]?.body);
+    expect(JSON.parse(String(writes[1][1]?.body)).release_id).toBe('a1-v1');
   });
   it('offers a normal checkpoint once ready and stops checkpoint entry for a locked chapter',async()=>{
     const ready=course();ready.chapters[0].status='ready';mockServer(()=>ready);
     const {rerender}=render(<CourseJourney chapterId="first" progression={progression()}/>);
     expect(await screen.findByRole('button',{name:'Start checkpoint →'})).toBeTruthy();expect(screen.queryByRole('button',{name:/Test out/})).toBeNull();
     rerender(<CourseJourney chapterId="chapter-2" progression={progression()}/>);
-    await screen.findByText('Pass the previous chapter’s checkpoint to continue. You can practise any time.');expect(screen.queryByRole('button',{name:'Start checkpoint →'})).toBeNull();
+    await screen.findByText('Pass the previous milestone to continue. You can practise any time.');expect(screen.queryByRole('button',{name:'Start checkpoint →'})).toBeNull();
   });
 
   it('explains when completed topic work still needs a second activity',async()=>{
@@ -55,11 +75,85 @@ describe('Guided chapter journey',()=>{
     expect(screen.getByText(/Try another activity, such as Writing or Speaking/)).toBeTruthy();
   });
   it('shows honest A1 completion and available A2 practice',async()=>{
-    mockServer(()=>course({completed:true,unlocked_levels:['A1','A2']}));render(<CourseJourney progression={progression()}/>);
-    await screen.findByRole('heading',{name:'Your letter has arrived'});expect(screen.getByText(/A2 practice is now available/)).toBeTruthy();expect(screen.queryByText(/A2 journey/)).toBeNull();expect(screen.getByRole('link',{name:'Explore A2 practice →'}).getAttribute('href')).toBe('/curriculum#level-A2');
+    mockServer(()=>course({completed:true,completed_milestones:4,unlocked_levels:['A1','A2']}));render(<CourseJourney progression={progression()}/>);
+    await screen.findByRole('heading',{name:'A1 course complete'});expect(screen.getByText('A1 · 4 of 4 milestones complete')).toBeTruthy();expect(screen.queryByText(/A2 journey/)).toBeNull();expect(screen.getByRole('link',{name:'Explore A2 practice →'}).getAttribute('href')).toBe('/curriculum#level-A2');
   });
 });
 describe('Chapter checkpoints',()=>{
+  it('refreshes an answer receipt when both the page and receipt still show the previous enrolment',async()=>{
+    const receipt=result();
+    const canonical={...result(),course:course({release_id:'a1-journey-v2'})};
+    let checked=false;
+    const fetch=mockServer(url=>{
+      if(url.endsWith('/answer')) {checked=true;return receipt;}
+      return checked ? canonical : attempt({listened:true});
+    });
+    render(<CourseJourney attemptId="attempt-1" progression={progression()}/>);
+    await selectAnswers();
+    expect(screen.queryByText(/This saved assessment belongs to an earlier course/)).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'Check my answers'}));
+    await screen.findByRole('heading',{name:'Milestone passed'});
+    expect(screen.getByText(/This saved assessment belongs to an earlier course/)).toBeTruthy();
+    expect(screen.queryByRole('link',{name:'Practise this milestone'})).toBeNull();
+    expect(screen.getByRole('link',{name:'← Your journey'}).getAttribute('href')).toBe('#journey');
+    expect(fetch.mock.calls.filter(([url])=>url==='/api/v1/course/checkpoints/attempt-1')).toHaveLength(2);
+  });
+  it('refreshes older completion state even when the receipt and current course share a release',async()=>{
+    const completed=course({completed:true,completed_milestones:4,current_chapter_id:null,unlocked_levels:['A1','A2']});
+    completed.chapters=completed.chapters.map(chapter=>({...chapter,status:'passed',progress:1}));
+    let checked=false;
+    const fetch=mockServer(url=>{
+      if(url.endsWith('/answer')) {checked=true;return result();}
+      return checked ? {...result(),course:completed} : attempt({listened:true});
+    });
+    render(<CourseJourney attemptId="attempt-1" progression={progression()}/>);
+    await selectAnswers();fireEvent.click(screen.getByRole('button',{name:'Check my answers'}));
+    await screen.findByRole('heading',{name:'Milestone passed'});
+    expect(screen.getByRole('link',{name:'Explore A2 practice →'}).getAttribute('href')).toBe('/curriculum#level-A2');
+    expect(screen.queryByRole('link',{name:'Continue the journey →'})).toBeNull();
+    expect(screen.queryByText(/This saved assessment belongs to an earlier course/)).toBeNull();
+    expect(fetch.mock.calls.filter(([url])=>url==='/api/v1/course/checkpoints/attempt-1')).toHaveLength(2);
+  });
+  it('rejects another learner returned by the canonical read after a valid answer receipt',async()=>{
+    let checked=false;
+    mockServer(url=>{
+      if(url.endsWith('/answer')) {checked=true;return result();}
+      return checked ? {...result(),course:course({profile_id:'another'})} : attempt({listened:true});
+    });
+    render(<CourseJourney attemptId="attempt-1" progression={progression()}/>);
+    await selectAnswers();fireEvent.click(screen.getByRole('button',{name:'Check my answers'}));
+    expect((await screen.findByRole('alert')).textContent).toBe('The learner changed. Reload your journey.');
+    expect(screen.queryByText('Привет, Барсик! Меня зовут Анна.')).toBeNull();
+    expect(screen.queryByRole('heading',{name:'Milestone passed'})).toBeNull();
+    expect(sessionStorage.length).toBe(0);
+  });
+  it.each(['legacy','versioned'])('rehydrates a %s answer receipt instead of restoring an earlier journey',async receiptType=>{
+    const currentCourse=course({release_id:'a1-journey-v2'});
+    const historical={...result(),course:currentCourse};
+    const receipt={...result()};
+    if(receiptType==='legacy'){delete receipt.release_id;delete receipt.course.release_id;}
+    let checked=false;
+    const fetch=mockServer(url=>{
+      if (url.endsWith('/answer')) {checked=true;return receipt;}
+      return checked ? historical : attempt({listened:true,course:currentCourse});
+    });
+    render(<CourseJourney attemptId="attempt-1" progression={progression()}/>);
+    await selectAnswers();fireEvent.click(screen.getByRole('button',{name:'Check my answers'}));
+    await screen.findByRole('heading',{name:'Milestone passed'});
+    expect(screen.getByText(/This saved assessment belongs to an earlier course/)).toBeTruthy();
+    expect(screen.queryByRole('link',{name:'Practise this milestone'})).toBeNull();
+    expect(fetch.mock.calls.filter(([url])=>url==='/api/v1/course/checkpoints/attempt-1')).toHaveLength(2);
+  });
+  it('keeps a saved assessment tied to its own milestone count after the learner changes edition',async()=>{
+    const saved={...result(false),chapter_number:4,course:course({release_id:'a1-journey-v2',chapter_count:6})};
+    mockServer(()=>saved);render(<CourseJourney attemptId="attempt-1" progression={progression()}/>);
+    expect(await screen.findByText('A1 · Milestone 4 of 4 · Checkpoint')).toBeTruthy();
+    expect(screen.getByText(/This saved assessment belongs to an earlier course/)).toBeTruthy();
+    expect(screen.queryByRole('button',{name:'Try a different checkpoint →'})).toBeNull();
+    expect(screen.queryByRole('link',{name:'Practise this milestone'})).toBeNull();
+    expect(screen.getByRole('link',{name:'← Your journey'}).getAttribute('href')).toBe('#journey');
+  });
+
   it('shows the passage before questions, accessible choices and bundled audio without listening credit on load',async()=>{
     let current=attempt();const fetch=mockServer((url)=>{if(url.endsWith('/listened')) current={...current,listened:true};return current;});
     const {container}=render(<CourseJourney attemptId="attempt-1" progression={progression()}/>);
@@ -94,7 +188,7 @@ describe('Chapter checkpoints',()=>{
     expect(bodies).toEqual([{kind:'hint',question_id:'read'},{kind:'transcript'}]);
   });
   it('submits all choices once and freezes the saved response with useful corrections and retry',async()=>{
-    const fetch=mockServer(url=>url.endsWith('/answer') ? result(false) : attempt({listened:true}));
+    let current=attempt({listened:true});const fetch=mockServer(url=>{if(url.endsWith('/answer')) current=result(false);return current;});
     render(<CourseJourney attemptId="attempt-1" progression={progression()}/>);await selectAnswers();
     const submit=screen.getByRole('button',{name:'Check my answers'});fireEvent.click(submit);fireEvent.click(submit);
     await screen.findByRole('heading',{name:'A little more practice'});expect(screen.getByText('The recording changes the meeting to four.')).toBeTruthy();
@@ -131,10 +225,10 @@ describe('Chapter checkpoints',()=>{
     expect(screen.getByText('The recording changes the meeting to four.')).toBeTruthy();
   });
   it('holds submitted answers after an uncertain save and retries the identical submission',async()=>{
-    let fail=true;const fetch=mockServer(url=>{if(url.endsWith('/answer')) {if(fail) throw new Error('Offline');return result();}return attempt({listened:true});});
+    let fail=true;let current=attempt({listened:true});const fetch=mockServer(url=>{if(url.endsWith('/answer')) {current=result();if(fail) throw new Error('Offline');}return current;});
     render(<CourseJourney attemptId="attempt-1" progression={progression()}/>);await selectAnswers();fireEvent.click(screen.getByRole('button',{name:'Check my answers'}));
     await screen.findByRole('alert');expect((screen.getByRole('radio',{name:'Миша'}) as HTMLInputElement).closest('fieldset')?.disabled).toBe(true);
-    fail=false;fireEvent.click(screen.getByRole('button',{name:'Retry saving answers'}));await screen.findByRole('heading',{name:'Chapter passed'});
+    fail=false;fireEvent.click(screen.getByRole('button',{name:'Retry saving answers'}));await screen.findByRole('heading',{name:'Milestone passed'});
     const writes=fetch.mock.calls.filter(([url])=>String(url).endsWith('/answer'));expect(writes).toHaveLength(2);expect(writes[0][1]?.body).toBe(writes[1][1]?.body);
   });
   it('restores the learner’s draft on return and removes it when another learner takes over',async()=>{
@@ -146,6 +240,6 @@ describe('Chapter checkpoints',()=>{
   });
   it('does not show another profile’s course and offers retry after a load error',async()=>{
     mockServer(()=>course({profile_id:'another'}));render(<CourseJourney progression={progression()}/>);
-    expect(await screen.findByRole('alert')).toBeTruthy();expect(screen.queryByRole('heading',{name:'A letter to discover'})).toBeNull();expect(screen.getByRole('button',{name:'Try again'})).toBeTruthy();
+    expect(await screen.findByRole('alert')).toBeTruthy();expect(screen.queryByRole('heading',{name:'Your journey'})).toBeNull();expect(screen.getByRole('button',{name:'Try again'})).toBeTruthy();
   });
 });

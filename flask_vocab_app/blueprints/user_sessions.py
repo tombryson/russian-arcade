@@ -9,6 +9,7 @@ from services.personal_learning import PersonalSessions
 from services.skill_progress import snapshot as skill_snapshot
 from utils.household_access import access_id, access_policy, csrf_token, user_session_scope
 from utils.navigation import browser_navigation_layout
+from utils.course_context import selected_course_progress
 
 
 def personal_sessions():
@@ -115,6 +116,7 @@ def create_user_sessions_blueprint():
         except BuildUnavailable:
             assets = {'styles': []}
         return render_template('user_sessions.html', state=state(), assets=assets,
+                               profile_course_progress=selected_course_progress(),
                                profile_skill_progress=selected_skill_progress(), **context)
 
     @bp.get('/post/profiles')

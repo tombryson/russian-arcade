@@ -16,6 +16,7 @@ from urllib.parse import urlencode
 from contracts.learning import key
 from repositories.learning_repository import LearningError, encoded, identifier, payload_hash, timestamp
 from services.curriculum import curriculum
+from services.course_releases import DEFAULT_RELEASE_ID, load_release, release_metadata
 from services.speaking_curriculum import scenario_for_topic
 
 DATA_FILE = Path(__file__).resolve().parents[1] / 'data' / 'course_chapters.json'
@@ -42,19 +43,23 @@ def _content_key(value):
     return isinstance(value, str) and bool(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}', value))
 
 
-def validate_course(data):
+def validate_course(data, release=None):
     """Reject incomplete teaching content before it can become an assessment."""
     def require(condition, message):
         if not condition:
             raise ValueError(message)
 
-    require(isinstance(data, dict) and type(data.get('version')) is int and data['version'] == 1,
-            'Course content must use version 1.')
-    require(data.get('band') == 'A1' and _nonempty(data.get('rubric_version')),
-            'Course content needs its A1 band and rubric version.')
+    release = release or release_metadata()
+    band = release['band']
+    require(isinstance(data, dict) and type(data.get('version')) is int and data['version'] == release['schema_version'],
+            'Course content must use its release schema version.')
+    require(data.get('band') == band and _nonempty(data.get('rubric_version')),
+            'Course content needs its release band and rubric version.')
     chapters = data.get('chapters')
-    require(isinstance(chapters, list) and len(chapters) == 4, 'A1 requires four ordered chapters.')
-    expected_topics = {topic['id'] for topic in curriculum()['topics'] if topic['band'] == 'A1'}
+    require(isinstance(chapters, list) and len(chapters) == release['chapter_count'] and len(chapters) > 0,
+            'The complete release needs all its ordered chapters.')
+    topic_band = 'C1-C2' if band in ('C1', 'C2') else band
+    expected_topics = {topic['id'] for topic in curriculum()['topics'] if topic['band'] == topic_band}
     seen_topics, chapter_ids, variant_ids = [], set(), set()
     for number, chapter in enumerate(chapters, 1):
         require(isinstance(chapter, dict) and _content_key(chapter.get('id')),
@@ -66,7 +71,7 @@ def validate_course(data):
             require(_nonempty(chapter.get(field)), 'Every chapter needs nonempty bilingual titles and introductions.')
         topics = chapter.get('topic_ids')
         require(isinstance(topics, list) and topics and all(isinstance(t, str) and t in expected_topics for t in topics),
-                'Chapters must use known A1 curriculum topics.')
+                'Chapters must use known curriculum topics for their band.')
         seen_topics.extend(topics)
         objectives = chapter.get('objectives', [])
         require(isinstance(objectives, list) and all(isinstance(item, dict) and _nonempty(item.get('en'))
@@ -129,21 +134,23 @@ def validate_course(data):
         require(all(shape == variant_shapes[0] for shape in variant_shapes),
                 'Equivalent variants must cover the same question kinds and essential decision count.')
     require(len(seen_topics) == len(set(seen_topics)) and set(seen_topics) == expected_topics,
-            'The four chapters must cover each existing A1 topic exactly once.')
+            'A complete release must cover each curriculum topic in its band exactly once.')
     return data
 
 
-@lru_cache(maxsize=1)
-def _catalogue():
-    return validate_course(json.loads(DATA_FILE.read_text(encoding='utf-8')))
+@lru_cache(maxsize=16)
+def _catalogue(release_id=DEFAULT_RELEASE_ID):
+    return validate_course(load_release(release_id), release_metadata(release_id))
 
 
-def course_catalogue():
-    return deepcopy(_catalogue())
+def course_catalogue(release_id=None):
+    release = release_metadata(DEFAULT_RELEASE_ID if release_id is None else release_id)
+    return deepcopy(_catalogue(release['release_id'])) | {
+        name: release[name] for name in ('release_id', 'chapter_count', 'requirement_version')}
 
 
-def _chapter(chapter_id):
-    chapter = next((item for item in _catalogue()['chapters'] if item['id'] == chapter_id), None)
+def _chapter(chapter_id, release_id):
+    chapter = next((item for item in _catalogue(release_id)['chapters'] if item['id'] == chapter_id), None)
     if chapter is None:
         raise LearningError('chapter_not_found', 'That course chapter does not exist.', 404)
     return chapter
@@ -180,8 +187,8 @@ def record_evidence(conn, profile_id, event_id, activity, content_key, target_le
     return cursor.rowcount == 1
 
 
-def _links(topic_id):
-    query = urlencode({'topic': topic_id, 'level': 'A1'})
+def _links(topic_id, band='A1'):
+    query = urlencode({'topic': topic_id, 'level': band})
     result = [
         {'activity': activity, 'label': label, 'label_ru': label_ru, 'href': path + '?' + query}
         for activity, label, label_ru, path in (
@@ -189,24 +196,30 @@ def _links(topic_id):
             ('writing', 'Writing', 'Письмо', '/writing'),
             ('translation', 'Translation', 'Перевод', '/sentences'),
             ('word_jumble', 'Word Jumble', 'Составь предложение', '/word_jumble'))]
-    scenario = scenario_for_topic(topic_id, 'A1')
+    scenario = scenario_for_topic(topic_id, band)
     if scenario:
         result.append({'activity': 'speaking', 'label': 'Speaking', 'label_ru': 'Разговорная практика',
-                       'href': '/#speaking/scenario/' + scenario + '?level=A1'})
+                       'href': '/#speaking/scenario/' + scenario + '?' + urlencode({'level': band})})
     return result
 
 
 def course_snapshot(conn, profile_id):
     """Project current preparation and permanent passes without writing state."""
-    if not _execute(conn, "SELECT 1 FROM sqlite_master WHERE type='table' AND name='course_evidence'").fetchone():
+    if not _execute(conn, "SELECT 1 FROM sqlite_master WHERE type='table' AND name='course_enrolments'").fetchone():
         return None
-    catalogue = _catalogue()
+    # A read never creates enrolment. New learners receive the complete default
+    # edition on their first checkpoint command; migration pins existing ones.
+    enrolment = _execute(conn, 'SELECT release_id FROM course_enrolments WHERE profile_id=? AND band=?',
+                         (profile_id, release_metadata()['band'])).fetchone()
+    release = release_metadata(enrolment['release_id'] if enrolment else DEFAULT_RELEASE_ID)
+    release_id, band = release['release_id'], release['band']
+    catalogue = _catalogue(release_id)
     topics = {topic['id']: topic for topic in curriculum()['topics']}
-    passed = {row['chapter_id'] for row in _execute(conn, 'SELECT chapter_id FROM course_chapter_passes WHERE profile_id=?', (profile_id,))}
+    passed = {row['chapter_id'] for row in _execute(conn, 'SELECT chapter_id FROM course_chapter_passes WHERE profile_id=? AND release_id=?', (profile_id, release_id))}
     evidence = _execute(conn,
         'SELECT DISTINCT c.topic_id,c.activity,c.content_key FROM course_evidence c '
         'JOIN progression_events e ON e.id=c.event_id AND e.profile_id=c.profile_id '
-        'WHERE c.profile_id=? AND e.reversed_at IS NULL', (profile_id,)).fetchall()
+        'WHERE c.profile_id=? AND c.target_level=? AND e.reversed_at IS NULL', (profile_id, band)).fetchall()
     chapters, current_id = [], None
     for chapter in catalogue['chapters']:
         rows = [row for row in evidence if row['topic_id'] in chapter['topic_ids']]
@@ -216,7 +229,7 @@ def course_snapshot(conn, profile_id):
             count = sum(row['topic_id'] == topic_id for row in rows)
             projected_topics.append({'id': topic_id, 'title': topic['title_en'], 'title_ru': topic['title_ru'],
                                      'objectives': topic['objectives'], 'completed': count >= REQUIRED_TASKS,
-                                     'successful_tasks': count, 'required_tasks': REQUIRED_TASKS, 'links': _links(topic_id)})
+                                     'successful_tasks': count, 'required_tasks': REQUIRED_TASKS, 'links': _links(topic_id, band)})
         activity_count = len({row['activity'] for row in rows})
         task_fraction = sum(min(item['successful_tasks'], REQUIRED_TASKS) for item in projected_topics) / (len(projected_topics) * REQUIRED_TASKS)
         preparation = min(task_fraction, activity_count / REQUIRED_ACTIVITIES, 1.0)
@@ -227,16 +240,22 @@ def course_snapshot(conn, profile_id):
             status, progress = ('ready' if preparation == 1 else 'practice'), preparation
         else:
             status, progress = 'locked', preparation
-        last = _execute(conn, 'SELECT id FROM course_checkpoint_attempts WHERE profile_id=? AND chapter_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1',
-                            (profile_id, chapter['id'])).fetchone()
+        last = _execute(conn, 'SELECT id FROM course_checkpoint_attempts WHERE profile_id=? AND release_id=? AND chapter_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1',
+                            (profile_id, release_id, chapter['id'])).fetchone()
         chapters.append({name: chapter[name] for name in ('id', 'number', 'title', 'title_ru', 'intro', 'intro_ru')} | {
             'status': status, 'progress': progress, 'topics': projected_topics, 'activity_count': activity_count,
+            'release_id': release_id, 'preparation_progress': preparation,
+            'assessment_ready': status == 'ready', 'milestone_passed': status == 'passed',
             'required_activity_count': REQUIRED_ACTIVITIES, 'last_attempt_id': last['id'] if last else None,
             'objectives': deepcopy(chapter.get('objectives', [])), 'preparation': deepcopy(chapter.get('preparation', []))})
     completed = all(chapter['status'] == 'passed' for chapter in chapters)
     active_progress = next((chapter['progress'] for chapter in chapters if chapter['id'] == current_id), 0)
-    return {'version': catalogue['version'], 'profile_id': profile_id, 'band': 'A1',
-            'unlocked_levels': ['A1', 'A2'] if completed else ['A1'], 'current_chapter_id': current_id,
+    entitled = {row['target_level'] for row in _execute(conn,
+        'SELECT target_level FROM course_continuation_entitlements WHERE profile_id=?', (profile_id,))}
+    return {'version': catalogue['version'], 'profile_id': profile_id, 'band': band, 'release_id': release_id,
+            'chapter_count': len(chapters), 'completed_milestones': sum(chapter['status'] == 'passed' for chapter in chapters),
+            'unlocked_levels': [level for level in ('A1', 'A2', 'B1', 'B2', 'C1', 'C2') if level == 'A1' or level in entitled],
+            'current_chapter_id': current_id,
             'progress': 1.0 if completed else active_progress,
             'completed': completed, 'chapters': chapters}
 
@@ -264,6 +283,11 @@ def _public_attempt(conn, profile_id, row):
             item.update(hint=question['hint'], hint_ru=question['hint_ru'])
         questions.append(item)
     result = {field: frozen[field] for field in ('chapter_id', 'chapter_number', 'title', 'title_ru')}
+    # Old frozen JSON remains untouched. Its added row identity supplies the
+    # missing metadata without confusing the saved letter with today's route.
+    release = release_metadata(row['release_id'])
+    result.update(release_id=row['release_id'], band=row['band'],
+                  chapter_count=frozen.get('chapter_count', release['chapter_count']))
     result.update(id=row['id'], letter=variant['letter'], letter_title=variant['letter_title'],
                   letter_title_ru=variant['letter_title_ru'], glossary=deepcopy(variant.get('glossary', [])),
                   listening=listening, questions=questions, status=row['status'], support_used=bool(support),
@@ -280,45 +304,62 @@ def checkpoint_read(conn, profile_id, attempt_id):
     return _public_attempt(conn, profile_id, _attempt(conn, profile_id, attempt_id))
 
 
-def checkpoint_start(conn, profile_id, chapter_id, request_id, challenge=False, now=None):
+def checkpoint_start(conn, profile_id, chapter_id, request_id, challenge=False, now=None, *, release_id=None):
     key(request_id, 'Request ID')
     if type(challenge) is not bool:
         raise LearningError('invalid_input', 'Challenge must be true or false.')
-    fingerprint = payload_hash({'chapter_id': chapter_id, 'challenge': challenge})
+    choices = {'chapter_id': chapter_id, 'challenge': challenge}
+    if release_id is not None:
+        # Omitted identity deliberately keeps the exact schema-044 fingerprint.
+        # Never rebind a saved request to the learner's later enrolment.
+        release_metadata(release_id)
+        choices['release_id'] = release_id
+    fingerprint = payload_hash(choices)
     previous = _execute(conn, 'SELECT payload_hash,response_json FROM course_checkpoint_requests WHERE profile_id=? AND request_id=?',
                             (profile_id, request_id)).fetchone()
     if previous:
         if previous['payload_hash'] != fingerprint:
             raise LearningError('idempotency_conflict', 'This request ID was already used for different checkpoint choices.', 409)
         return json.loads(previous['response_json'])
-    chapter = _chapter(chapter_id)
     state = course_snapshot(conn, profile_id)
+    if state is None:
+        raise LearningError('course_unavailable', 'The course is temporarily unavailable.', 503)
+    if release_id is not None and release_id != state['release_id']:
+        raise LearningError('course_release_mismatch', 'This learner is enrolled in a different course release.', 409)
+    release_id = state['release_id']
+    release = release_metadata(release_id)
+    catalogue = _catalogue(release_id)
+    chapter = _chapter(chapter_id, release_id)
     projected = next(item for item in state['chapters'] if item['id'] == chapter_id)
     if projected['status'] == 'locked':
         raise LearningError('chapter_locked', 'Complete the previous chapter checkpoint first.', 403)
     if projected['status'] == 'passed':
         raise LearningError('chapter_passed', 'This chapter is already complete. Continue to the next chapter.', 409)
-    active = _execute(conn, "SELECT * FROM course_checkpoint_attempts WHERE profile_id=? AND chapter_id=? AND status='active'", (profile_id, chapter_id)).fetchone()
+    active = _execute(conn, "SELECT * FROM course_checkpoint_attempts WHERE profile_id=? AND release_id=? AND chapter_id=? AND status='active'", (profile_id, release_id, chapter_id)).fetchone()
+    now = timestamp() if now is None else now
+    if not active and projected['status'] != 'ready' and not challenge:
+        raise LearningError('practice_required', 'Complete this chapter’s practice or choose to test out.', 403)
+    _execute(conn, 'INSERT OR IGNORE INTO course_enrolments(profile_id,band,release_id,started_at) VALUES (?,?,?,?)',
+             (profile_id, release['band'], release_id, now))
     if active:
         result = _public_attempt(conn, profile_id, active)
     else:
-        if projected['status'] != 'ready' and not challenge:
-            raise LearningError('practice_required', 'Complete this chapter’s practice or choose to test out.', 403)
         previous_variants = [row['variant_id'] for row in _execute(conn,
-            'SELECT variant_id FROM course_checkpoint_attempts WHERE profile_id=? AND chapter_id=? ORDER BY created_at,rowid', (profile_id, chapter_id))]
+            'SELECT variant_id FROM course_checkpoint_attempts WHERE profile_id=? AND release_id=? AND chapter_id=? ORDER BY created_at,rowid', (profile_id, release_id, chapter_id))]
         variants = chapter['variants']
         # Prefer unseen parallel forms, then rotate without repeating the last.
         variant = next((item for item in variants if item['id'] not in previous_variants), None)
         if variant is None:
             last_index = next((index for index, item in enumerate(variants) if item['id'] == previous_variants[-1]), -1)
             variant = variants[(last_index + 1) % len(variants)]
-        now = timestamp() if now is None else now
         attempt_id = identifier()
         frozen = {'chapter_id': chapter_id, 'chapter_number': chapter['number'], 'title': chapter['title'],
-                  'title_ru': chapter['title_ru'], 'variant': variant, 'rubric': deepcopy(RUBRIC)}
-        _execute(conn, 'INSERT INTO course_checkpoint_attempts(id,profile_id,chapter_id,chapter_number,variant_id,content_version,rubric_version,frozen_json,status,created_at) '
-                     "VALUES (?,?,?,?,?,?,?,?,'active',?)", (attempt_id, profile_id, chapter_id, chapter['number'], variant['id'],
-                      _catalogue()['version'], _catalogue()['rubric_version'], encoded(frozen), now))
+                  'title_ru': chapter['title_ru'], 'variant': variant, 'rubric': deepcopy(RUBRIC),
+                  'release_id': release_id, 'band': release['band'], 'chapter_count': len(catalogue['chapters']),
+                  'requirement_version': release['requirement_version']}
+        _execute(conn, 'INSERT INTO course_checkpoint_attempts(id,profile_id,chapter_id,chapter_number,variant_id,content_version,rubric_version,frozen_json,status,created_at,release_id,band) '
+                     "VALUES (?,?,?,?,?,?,?,?,'active',?,?,?)", (attempt_id, profile_id, chapter_id, chapter['number'], variant['id'],
+                      catalogue['version'], catalogue['rubric_version'], encoded(frozen), now, release_id, release['band']))
         result = checkpoint_read(conn, profile_id, attempt_id)
     _execute(conn, 'INSERT INTO course_checkpoint_requests VALUES (?,?,?,?,?)',
                  (profile_id, request_id, fingerprint, result['id'], encoded(result)))
@@ -362,11 +403,27 @@ def checkpoint_answer(conn, profile_id, attempt_id, answers, submission_id, now=
     _execute(conn, 'UPDATE course_checkpoint_attempts SET status=?,answers_json=?,result_json=?,completed_at=? WHERE id=?',
                  ('passed' if passed else 'retry', encoded(answers), encoded(result), now, attempt_id))
     if passed:
-        _execute(conn, 'INSERT OR IGNORE INTO course_chapter_passes VALUES (?,?,?,?)', (profile_id, row['chapter_id'], attempt_id, now))
+        _execute(conn, 'INSERT OR IGNORE INTO course_chapter_passes(profile_id,chapter_id,attempt_id,passed_at,release_id,requirement_version) VALUES (?,?,?,?,?,?)',
+                 (profile_id, row['chapter_id'], attempt_id, now, row['release_id'], frozen.get('requirement_version', row['rubric_version'])))
+        _grant_continuation(conn, profile_id, row['release_id'], now)
     response = checkpoint_read(conn, profile_id, attempt_id)
     _execute(conn, 'INSERT INTO course_checkpoint_submissions VALUES (?,?,?,?,?)',
                  (profile_id, submission_id, fingerprint, attempt_id, encoded(response)))
     return response
+
+
+def _grant_continuation(conn, profile_id, release_id, now):
+    """Award access from the completed attempt's edition, never current routing."""
+    release = release_metadata(release_id)
+    continuation = release.get('continuation_level')
+    if not continuation:
+        return
+    required = {chapter['id'] for chapter in _catalogue(release_id)['chapters']}
+    passed = {row['chapter_id'] for row in _execute(conn,
+        'SELECT chapter_id FROM course_chapter_passes WHERE profile_id=? AND release_id=?', (profile_id, release_id))}
+    if required and required <= passed:
+        _execute(conn, 'INSERT OR IGNORE INTO course_continuation_entitlements(profile_id,target_level,source_release_id,source,earned_at) VALUES (?,?,?,?,?)',
+                 (profile_id, continuation, release_id, 'course-completion', now))
 
 
 def checkpoint_support(conn, profile_id, attempt_id, kind, question_id=None):

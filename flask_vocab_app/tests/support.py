@@ -14,11 +14,12 @@ def latest_schema_version():
 
 
 def strip_course_progression(conn):
-    """Remove migration 044's tables and marker when a test rewinds its schema."""
-    for table in ('course_checkpoint_requests', 'course_checkpoint_submissions',
+    """Remove course migrations and markers when a test rewinds its schema."""
+    for table in ('course_continuation_entitlements', 'course_enrolments',
+                  'course_checkpoint_requests', 'course_checkpoint_submissions',
                   'course_chapter_passes', 'course_evidence', 'course_checkpoint_attempts'):
         conn.execute('DROP TABLE IF EXISTS ' + table)
-    conn.execute('DELETE FROM schema_migrations WHERE version=44')
+    conn.execute('DELETE FROM schema_migrations WHERE version IN (44,45)')
 
 
 def strip_progression_and_levels(conn):

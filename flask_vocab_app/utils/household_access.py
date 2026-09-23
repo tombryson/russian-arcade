@@ -129,7 +129,7 @@ def install_household_policy(app):
         # must not accept another profile's data or write as that profile even
         # if a background response has refreshed its CSRF token.
         page_profile = request.headers.get('X-Profile-ID')
-        if page_profile is not None and (unsafe or role != 'public' or request.endpoint in {'learning.asset', 'onboarding.practice_read', 'first_steps.chapter', 'first_steps.lesson', 'journey_games.catalogue', 'journey_games.read', 'journey_game_media.status', 'journey_game_media.asset'}):
+        if page_profile is not None and (unsafe or role != 'public' or request.endpoint in {'learning.asset', 'onboarding.practice_read', 'first_steps.chapter', 'first_steps.lesson', 'journey_games.catalogue', 'journey_games.read', 'journey_game_media.status', 'journey_game_media.asset', 'curriculum.index'}):
             with transaction(app.config['DB_PATH']) as conn:
                 selected = conn.execute(
                     'SELECT p.id FROM household_access a JOIN learning_profiles p ON p.id=a.profile_id '

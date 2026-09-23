@@ -20,7 +20,7 @@ def create_progression_blueprint(db_path):
 
     def course_profile(conn):
         profile = require_access(conn, access_id(), timestamp())
-        if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='course_evidence'").fetchone():
+        if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='course_enrolments'").fetchone():
             raise LearningError('course_unavailable', 'The course is temporarily unavailable.', 503)
         return profile
 
@@ -67,10 +67,13 @@ def create_progression_blueprint(db_path):
     @bp.post('/course/chapters/<chapter_id>/checkpoint')
     @access_policy('child')
     def start_checkpoint(chapter_id):
-        data = body({'request_id'}, {'challenge'})
+        data = body({'request_id'}, {'challenge', 'release_id'})
+        if 'release_id' in data and not isinstance(data['release_id'], str):
+            raise LearningError('invalid_input', 'Course release must be a saved release ID.')
         with transaction(db_path, write=True) as conn:
             profile = course_profile(conn)
-            return jsonify(checkpoint_start(conn, profile['id'], chapter_id, data['request_id'], data.get('challenge', False)))
+            return jsonify(checkpoint_start(conn, profile['id'], chapter_id, data['request_id'],
+                                            data.get('challenge', False), release_id=data.get('release_id')))
 
     @bp.get('/course/checkpoints/<attempt_id>')
     @access_policy('child')
