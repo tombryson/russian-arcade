@@ -746,7 +746,7 @@ Migrations `048`–`054` add release identities, shared evidence, listening supp
 
 ### 16.2 Next implementation priorities
 
-1. **Finish pending recordings (CU-05, CU-11).** Four of 20 new clips were prepared before ElevenLabs exhausted its allowance. Renew the allowance, resume the bounded preparation command and verify the remaining 16 clips. Complete packs appear automatically after their manifests verify. No paid retry loop or new learner gate is needed.
+1. **Finish pending recordings (CU-05, CU-11).** Four of 20 new clips were prepared before ElevenLabs exhausted its allowance. Renew the allowance, resume the bounded preparation command and verify the remaining 16 clips. Register each completed unit pack in `LISTENING_IDS` and update the coverage inventory. The pilot checks its two recordings when starting a session. No paid retry loop or new learner gate is needed.
 2. **Evaluate the pilot (CU-08–12).** Run real, consented written and spoken responses through the complete save/review/retry flow. Include known case and conjugation mistakes. Check that original audio, pauses and uncertainty survive assessment. Keep results diagnostic while evaluating accuracy.
 3. **Expand A1 teaching (CU-10).** Prioritise sounds/stress, numbers and quantities, social exchanges and the remaining case/aspect uses from the gap inventory. Continue using existing vocabulary, form and media pipelines. New illustrative examples are not a complete lexical plan.
 4. **Improve marking quality (CU-06–12).** Use internal checks and optional external review to resolve ambiguity and accept natural alternatives. Compare provider judgements against independently marked samples when available. Track false passes, false failures, invalid reports and abstentions separately.
