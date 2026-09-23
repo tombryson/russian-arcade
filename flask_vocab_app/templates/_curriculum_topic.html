@@ -1,20 +1,18 @@
-<details class="curriculum-topic" id="topic-{{ topic.id }}">
-  <summary><span class="curriculum-order">{{ '%02d'|format(topic.order) }}</span><h3>{{ topic.title_ru if russian else topic.title_en }}</h3><span class="curriculum-expand" aria-hidden="true">+</span></summary>
   <div class="curriculum-topic-content">
     <div class="curriculum-objectives" lang="en">
-      <h4>{{ 'Learning objectives' }}</h4>
+      <h2>Learning outcomes</h2>
       <ul>{% for objective in topic.objectives %}<li>{{ objective }}</li>{% endfor %}</ul>
-      <h4>Grammar</h4>
+      <h2>Grammar</h2>
       <ul>{% for item in topic.grammar_focus %}<li>{{ item }}</li>{% endfor %}</ul>
     </div>
     <div class="curriculum-vocabulary">
-      <h4>{{ 'Лексика' if russian else 'Vocabulary' }}</h4>
+      <h2>{{ 'Лексика' if russian else 'Vocabulary' }}</h2>
       <p lang="ru">{{ topic.lemmas|join(' · ') }}</p>
-      {% if topic.phrases %}<h4>{{ 'Выражения' if russian else 'Useful expressions' }}</h4><p lang="ru">{{ topic.phrases|join(' · ') }}</p>{% endif %}
-      <details class="curriculum-speaking-brief"><summary>{{ 'Задание для разговора (на английском)' if russian else 'Speaking task' }}</summary><p lang="en">{{ topic.practice.speaking }}</p></details>
+      {% if topic.phrases %}<h2>{{ 'Выражения' if russian else 'Useful expressions' }}</h2><p lang="ru">{{ topic.phrases|join(' · ') }}</p>{% endif %}
+      <h2>{{ 'Задание для разговора (на английском)' if russian else 'Speaking task' }}</h2><p lang="en">{{ topic.practice.speaking }}</p>
     </div>
     <div class="curriculum-practice">
-      <h4>{{ 'Практика' if russian else 'Practise this topic' }}</h4>
+      <h2>{{ 'Практика' if russian else 'Practise this topic' }}</h2>
       {% for unit in units|default([]) if unit.topic_id == topic.id and unit.level == band.id %}<p><a href="/curriculum/units/{{ unit.id }}" hx-boost="false">{{ unit.title_ru if russian else unit.title }} →</a></p>{% endfor %}
       {% set levels = ['C1', 'C2'] if band.id == 'C1-C2' else [band.id] %}
       {% for level in levels %}
@@ -30,4 +28,3 @@
       {% endfor %}
     </div>
   </div>
-</details>
