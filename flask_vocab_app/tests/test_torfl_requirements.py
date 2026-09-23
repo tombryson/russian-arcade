@@ -226,44 +226,57 @@ class TorflCurriculumPageTests(unittest.TestCase):
         with sqlite3.connect(self.app.config['DB_PATH']) as conn:
             return tuple(conn.iterdump())
 
-    def test_curriculum_keeps_four_closed_references_and_fifty_topics_without_writes(self):
+    def test_curriculum_links_to_readable_outcomes_and_fifty_topics_without_writes(self):
         before = self.database_snapshot()
         with patch('utils.lazy.LazyService._get', side_effect=AssertionError('Curriculum resolved a provider')):
             response = self.client.get('/curriculum')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self.database_snapshot(), before)
         html = response.text
-        disclosures = re.findall(r'<details\b[^>]*class="curriculum-requirements"[^>]*>', html)
-        self.assertEqual(len(disclosures), 4)
-        self.assertTrue(all(not re.search(r'\bopen(?:\s|=|>)', tag) for tag in disclosures))
-        domains = re.findall(r'<details\b[^>]*class="curriculum-requirement-domain"[^>]*>', html)
-        self.assertEqual(len(domains), 20)
-        self.assertTrue(all(not re.search(r'\bopen(?:\s|=|>)', tag) for tag in domains))
-        for label, _ in torfl.CASE_LABELS.values():
-            self.assertEqual(html.count(f'<h4>{label}</h4>'), 4)
+        self.assertNotIn('<details class="curriculum-', html)
+        self.assertNotIn('Level requirements', html)
         for level in ('A1', 'A2', 'B1', 'B2'):
+            self.assertIn(f'href="/curriculum/levels/{level}"', html)
+            page = self.client.get(f'/curriculum/levels/{level}')
+            self.assertEqual(page.status_code, 200)
+            self.assertIn('Learning outcomes', page.text)
+            self.assertNotIn('<details class="curriculum-', page.text)
             for domain in ('language_use', 'reading', 'listening', 'writing', 'speaking'):
-                self.assertIn(f'id="requirements-{level}-{domain}"', html)
+                self.assertIn(f'id="{domain}"', page.text)
+            for label, _ in torfl.CASE_LABELS.values():
+                self.assertIn(f'<h3>{label}</h3>', page.text)
             for item in torfl.reference_for_level(level)['requirements']:
-                self.assertIn(f'<li>{escape(item["label_en"])}</li>', html)
+                self.assertIn(f'<li>{escape(item["label_en"])}</li>', page.text)
+        self.assertEqual(self.database_snapshot(), before)
         for level in ('C1', 'C2', 'C1-C2'):
-            self.assertNotIn(f'id="requirements-{level}-', html)
+            self.assertNotIn(f'href="/curriculum/levels/{level}"', html)
+            self.assertEqual(self.client.get(f'/curriculum/levels/{level}').status_code, 404)
         topic_ids = re.findall(r'id="topic-([a-z_]+)"', html)
         self.assertEqual(len(topic_ids), 50)
         self.assertEqual(set(topic_ids), {topic['id'] for topic in curriculum()['topics']})
         self.assertEqual(set(topic_ids), set(TOPICS) - {'grammar'})
 
-    def test_reference_disclosures_use_the_selected_ui_language(self):
+    def test_outcomes_preserve_language_and_prior_level_navigation(self):
         with self.client.session_transaction() as session:
             session['ui_lang'] = 'ru'
-        response = self.client.get('/curriculum', headers={'HX-Target': 'mainContent'})
+        page = self.client.get('/curriculum/levels/A2', headers={'HX-Target': 'mainContent'})
+        self.assertEqual(page.status_code, 200)
+        self.assertNotIn('<!DOCTYPE', page.text)
+        self.assertIn('Результаты обучения', page.text)
+        self.assertIn('href="/curriculum/levels/A1"', page.text)
+        self.assertIn('href="/curriculum#level-A2"', page.text)
+
+    def test_outcome_content_uses_the_selected_ui_language(self):
+        with self.client.session_transaction() as session:
+            session['ui_lang'] = 'ru'
+        response = self.client.get('/curriculum/levels/B1', headers={'HX-Target': 'mainContent'})
         self.assertEqual(response.status_code, 200)
         self.assertNotIn('<!DOCTYPE', response.text)
-        self.assertEqual(response.text.count('<summary>Требования уровня</summary>'), 4)
+        self.assertIn('Результаты обучения', response.text)
         for _, label in torfl.CASE_LABELS.values():
-            self.assertEqual(response.text.count(f'<h4>{label}</h4>'), 4)
+            self.assertEqual(response.text.count(f'<h3>{label}</h3>'), 1)
         for group in torfl.requirement_groups('B1', 'ru')['groups']:
-            self.assertIn(f'>{group["label"]}</h3>', response.text)
+            self.assertIn(f'>{group["label"]}</h2>', response.text)
             self.assertIn(group['items'][0]['label_ru'], response.text)
 
 

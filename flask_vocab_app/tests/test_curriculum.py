@@ -97,9 +97,14 @@ class CurriculumPageTests(unittest.TestCase):
         self.assertEqual(html.count('class="curriculum-topic"'), 50)
         for topic in curriculum()['topics']:
             self.assertIn(f'id="topic-{topic["id"]}"', html)
-            self.assertIn(f'/comprehension?topic={topic["id"]}&amp;level=', html)
+            self.assertIn(f'href="/curriculum/topics/{topic["id"]}"', html)
+            page = self.client.get(f'/curriculum/topics/{topic["id"]}')
+            self.assertEqual(page.status_code, 200)
+            self.assertIn(f'/comprehension?topic={topic["id"]}&amp;level=', page.text)
+            self.assertNotIn('<details class="curriculum-', page.text)
+        advanced = self.client.get('/curriculum/topics/law').text
         for level in ('C1', 'C2'):
-            self.assertIn(f'/writing?topic=law&amp;level={level}', html)
+            self.assertIn(f'/writing?topic=law&amp;level={level}', advanced)
         with sqlite3.connect(self.app.config['DB_PATH']) as conn:
             self.assertEqual(conn.execute('SELECT COUNT(*) FROM words').fetchone()[0], before)
 
@@ -112,7 +117,6 @@ class CurriculumPageTests(unittest.TestCase):
         self.assertIn(get_topic('greetings')['title_ru'], response.text)
 
     def test_speaking_links_open_implemented_topics_at_the_curriculum_level(self):
-        html = self.client.get('/curriculum').text
         expected = {
             'greetings': ('meet-someone', 'A1'),
             'food': ('cafe', 'A1'),
@@ -124,13 +128,22 @@ class CurriculumPageTests(unittest.TestCase):
             'hobbies': ('meet-someone', 'A2'),
         }
         for topic in curriculum()['topics']:
-            section = html.split(f'id="topic-{topic["id"]}"', 1)[1].split('class="curriculum-topic"', 1)[0]
+            section = self.client.get(f'/curriculum/topics/{topic["id"]}').text
             with self.subTest(topic=topic['id']):
                 if topic['id'] in expected:
                     scenario, level = expected[topic['id']]
                     self.assertIn(f'/#speaking/scenario/{scenario}?level={level}', section)
                 else:
                     self.assertNotIn('/#speaking/scenario/', section)
+
+    def test_unknown_topic_does_not_fall_back_to_another_topic(self):
+        self.assertEqual(self.client.get('/curriculum/topics/unlisted').status_code, 404)
+
+    def test_reading_pages_are_available_in_public_demo(self):
+        self.app.config['PUBLIC_DEMO'] = True
+        for path in ('/curriculum', '/curriculum/topics/places', '/curriculum/levels/A1'):
+            with self.subTest(path=path):
+                self.assertEqual(self.client.get(path).status_code, 200)
 
 
 if __name__ == '__main__':
